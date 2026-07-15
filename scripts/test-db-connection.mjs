@@ -1,18 +1,28 @@
 import { Pool } from "@neondatabase/serverless";
 
-if (!process.env.DATABASE_URL) {
-  console.error("❌ DATABASE_URL is not set. Did you run with --env-file=.env ?");
-  process.exit(1);
+async function testConnection(label, envVarName) {
+  const connectionString = process.env[envVarName];
+  if (!connectionString) {
+    console.error(`❌ ${label}: ${envVarName} is not set in .env`);
+    return false;
+  }
+
+  const pool = new Pool({ connectionString });
+  try {
+    const result = await pool.query("SELECT NOW() AS current_time");
+    console.log(`✅ ${label}: Connected! Database says the time is:`, result.rows[0].current_time);
+    return true;
+  } catch (error) {
+    console.error(`❌ ${label}: Connection failed:`, error.message);
+    return false;
+  } finally {
+    await pool.end();
+  }
 }
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pooledOk = await testConnection("DATABASE_URL (pooled)", "DATABASE_URL");
+const directOk = await testConnection("DIRECT_DATABASE_URL (direct, used by migrations)", "DIRECT_DATABASE_URL");
 
-try {
-  const result = await pool.query("SELECT NOW() AS current_time");
-  console.log("✅ Connected! Database says the time is:", result.rows[0].current_time);
-} catch (error) {
-  console.error("❌ Connection failed:", error.message);
+if (!pooledOk || !directOk) {
   process.exit(1);
-} finally {
-  await pool.end();
 }
