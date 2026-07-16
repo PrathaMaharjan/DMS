@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowUpRight, Menu, X } from "lucide-react";
 
@@ -14,6 +15,7 @@ const NAV_LINKS = [
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -22,11 +24,16 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Only the landing page gets the transparent-over-hero, white-text treatment
+  // before scrolling. Every other page is always dark-on-light.
+  const isLanding = pathname === "/";
+  const light = isLanding && !scrolled;
+
   return (
     <header
       className={[
         "fixed top-0 z-50 w-full transition-all duration-300",
-        scrolled
+        scrolled || !isLanding
           ? "bg-white/70 backdrop-blur-md border-b border-slate-900/5 shadow-[0_1px_0_0_rgba(15,23,42,0.04)]"
           : "bg-transparent border-b border-transparent",
       ].join(" ")}
@@ -37,7 +44,7 @@ export default function Navbar() {
           href="/"
           className={[
             "text-[1.2rem] font-semibold tracking-tight transition-colors",
-            scrolled ? "text-slate-900" : "text-white",
+            light ? "text-white" : "text-slate-900",
           ].join(" ")}
         >
           Chitwan Dental Clinic
@@ -51,9 +58,9 @@ export default function Navbar() {
                 href={link.href}
                 className={[
                   "relative text-[1rem] font-medium transition-colors after:absolute after:left-0 after:-bottom-1 after:h-[2px] after:w-0 after:bg-current after:transition-all after:duration-300 hover:after:w-full",
-                  scrolled
-                    ? "text-slate-600 hover:text-slate-900"
-                    : "text-white/85 hover:text-white",
+                  light
+                    ? "text-white/85 hover:text-white"
+                    : "text-slate-600 hover:text-slate-900",
                 ].join(" ")}
               >
                 {link.label}
@@ -62,21 +69,18 @@ export default function Navbar() {
           ))}
         </ul>
 
-        {/* Contact Button */}
         <Link
           href="/booking"
           className={[
             "group relative hidden h-12 overflow-hidden rounded-md border md:inline-flex",
-            scrolled ? "border-slate-300" : "border-white/60",
+            light ? "border-white/60" : "border-slate-300",
           ].join(" ")}
         >
-          {/* Normal State */}
+       
           <div
             className={[
               "inline-flex h-12 items-center justify-center gap-2 px-6 transition-transform duration-300 group-hover:-translate-y-[150%]",
-              scrolled
-                ? "bg-white text-slate-900"
-                : "bg-transparent text-white",
+              light ? "bg-transparent text-white" : "bg-white text-slate-900",
             ].join(" ")}
           >
             Contact
@@ -87,9 +91,7 @@ export default function Navbar() {
           <div
             className={[
               "absolute inset-0 inline-flex h-12 w-full translate-y-full items-center justify-center gap-2 transition-transform duration-300 group-hover:translate-y-0",
-              scrolled
-                ? "bg-[#9fc5d4] text-white"
-                : "bg-white text-slate-900",
+              light ? "bg-white text-slate-900" : "bg-[#7da3b3] text-white",
             ].join(" ")}
           >
             Contact
@@ -105,7 +107,7 @@ export default function Navbar() {
           onClick={() => setMobileOpen((v) => !v)}
           className={[
             "flex h-9 w-9 items-center justify-center rounded-full transition-colors md:hidden",
-            scrolled ? "text-slate-900" : "text-white",
+            light ? "text-white" : "text-slate-900",
           ].join(" ")}
         >
           {mobileOpen ? (
@@ -140,7 +142,7 @@ export default function Navbar() {
             <Link
               href="/booking"
               onClick={() => setMobileOpen(false)}
-              className="inline-flex items-center gap-2 rounded-md bg-[#9fc5d4] px-5 py-3 text-white"
+              className="inline-flex items-center gap-2 rounded-md bg-[#7da3b3] px-5 py-3 text-white"
             >
               Contact
               <ArrowUpRight className="h-4 w-4" />

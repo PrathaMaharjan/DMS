@@ -28,7 +28,7 @@ export default function Hero() {
           </p>
 
           <div className="mt-10 flex flex-wrap items-center gap-5">
-            {/* Book Appointment Button */}
+
           <Link
   href="/book"
   className="group relative inline-flex h-14 items-center overflow-hidden rounded-full bg-white pl-7 pr-16 text-slate-900 shadow-lg"
@@ -39,7 +39,7 @@ export default function Hero() {
   </span>
 
  
-  <span className="absolute right-1 top-1 h-12 w-12 rounded-full bg-[#b6d2dd] transition-all duration-500 ease-out group-hover:w-[calc(100%-8px)]" />
+  <span className="absolute right-1 top-1 h-12 w-12 rounded-full bg-[#7da3b3] transition-all duration-500 ease-out group-hover:w-[calc(100%-8px)]" />
 
 
   <span className="absolute right-4 z-10 flex h-5 w-5 items-center justify-center">

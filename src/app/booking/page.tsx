@@ -67,7 +67,7 @@ export default function BookingPage() {
 
       <div className="relative mx-auto max-w-3xl px-6 pb-24 pt-32 lg:px-8 lg:pt-40">
     <div className="text-center">
-  <p className="text-sm font-medium uppercase tracking-[0.25em] text-sky-500">
+  <p className="text-sm font-medium uppercase tracking-[0.25em] text-sky-300">
     Book an Appointment
   </p>
 
@@ -119,7 +119,7 @@ export default function BookingPage() {
                     type="text"
                     value={form.name}
                     onChange={(e) => update("name", e.target.value)}
-                    placeholder="Sita Rai"
+                    placeholder="Pratha Maharjan"
                     className={inputClass}
                   />
                 </label>
@@ -134,7 +134,7 @@ export default function BookingPage() {
                     type="tel"
                     value={form.phone}
                     onChange={(e) => update("phone", e.target.value)}
-                    placeholder="98XXXXXXXX"
+                    placeholder="9XXXXXXXXX"
                     className={inputClass}
                   />
                 </label>
@@ -149,7 +149,7 @@ export default function BookingPage() {
                     type="email"
                     value={form.email}
                     onChange={(e) => update("email", e.target.value)}
-                    placeholder="you@example.com"
+                    placeholder="demo@gamil.com"
                     className={inputClass}
                   />
                 </label>
@@ -233,7 +233,7 @@ export default function BookingPage() {
   className="group relative mt-8 h-12 w-full overflow-hidden rounded-full border border-[#a5c5d1] sm:w-auto"
 >
 
-  <div className="inline-flex h-12 w-full items-center justify-center bg-[#a5c5d1] px-10 text-[0.95rem] font-medium text-white transition-transform duration-300 group-hover:-translate-y-full">
+  <div className="inline-flex h-12 w-full items-center justify-center bg-[#7da3b3] px-10 text-[0.95rem] font-medium text-white transition-transform duration-300 group-hover:-translate-y-full">
     Confirm Appointment
   </div>
 
@@ -250,7 +250,7 @@ export default function BookingPage() {
   );
 }
 
-/* --- Decorative illustrations --- */
+
 
 function ToothOutline({ className }: { className?: string }) {
   return (

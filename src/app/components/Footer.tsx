@@ -38,7 +38,7 @@ const SOCIAL_LINKS = [
 
 export default function Footer() {
   return (
-    <footer className="bg-[#b6d2dd]">
+    <footer className="bg-[#7da3b3]">
       <div className="mx-auto max-w-6xl px-6 lg:px-8">
         <div className="grid grid-cols-2 gap-x-8 gap-y-12 border-t border-white/20 py-14 sm:grid-cols-4">
           {FOOTER_COLUMNS.map((col) => (
