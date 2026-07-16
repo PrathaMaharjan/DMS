@@ -2,18 +2,68 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import axios from "axios";
+import { Mail, Phone, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react";
+import { loginSchema } from "@/lib/validators/auth";
+
+type FieldErrors = Partial<Record<"identifier" | "password", string>>;
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
+  const router = useRouter();
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
-  function handleSubmit(e: React.FormEvent) {
+
+  const looksLikePhone = identifier.length > 0 && !identifier.includes("@");
+  const IdentifierIcon = looksLikePhone ? Phone : Mail;
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Demo only — wire this up to your auth endpoint.
-    console.log({ email, password, remember });
+    setError(null);
+    setFieldErrors({});
+
+    const result = loginSchema.safeParse({ identifier, password });
+    if (!result.success) {
+      const errors: FieldErrors = {};
+      for (const issue of result.error.issues) {
+        const key = issue.path[0] as keyof FieldErrors;
+        if (!errors[key]) errors[key] = issue.message;
+      }
+      setFieldErrors(errors);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data } = await axios.post(
+        "/api/auth/login",
+        result.data,
+   
+        { withCredentials: true }
+      );
+
+      if (!data?.success) {
+        setError(data?.error ?? "Invalid email/phone or password");
+        return;
+      }
+
+
+      router.refresh();
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.error ?? "Invalid email/phone or password");
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -36,27 +86,41 @@ export default function LoginPage() {
           <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">
             Welcome back
           </h1>
-          
         </div>
 
         <form
           onSubmit={handleSubmit}
+          noValidate
           className="mt-8 rounded-[2rem] border border-slate-900/[0.06] bg-white p-9 shadow-[0_30px_80px_-24px_rgba(15,23,42,0.22)] sm:p-10"
         >
+          {error && (
+            <div className="mb-5 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[0.85rem] text-rose-700">
+              <AlertCircle className="h-4 w-4 shrink-0" strokeWidth={2} />
+              {error}
+            </div>
+          )}
+
           <div className="space-y-5">
             <label className="block">
               <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                <Mail className="h-3.5 w-3.5" strokeWidth={2} />
-                Email
+                <IdentifierIcon className="h-3.5 w-3.5" strokeWidth={2} />
+                Email or phone number
               </span>
               <input
-                required
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@clinic.com"
-                className="w-full rounded-xl border border-slate-900/10 bg-slate-50/60 px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="email@clinic.com or 98XXXXXXXX"
+                className={[
+                  "w-full rounded-xl border bg-slate-50/60 px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:bg-white focus:ring-4",
+                  fieldErrors.identifier
+                    ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
+                    : "border-slate-900/10 focus:border-sky-400 focus:ring-sky-100",
+                ].join(" ")}
               />
+              {fieldErrors.identifier && (
+                <p className="mt-1.5 text-[0.78rem] text-rose-600">{fieldErrors.identifier}</p>
+              )}
             </label>
 
             <label className="block">
@@ -66,12 +130,16 @@ export default function LoginPage() {
               </span>
               <div className="relative">
                 <input
-                  required
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl border border-slate-900/10 bg-slate-50/60 px-3.5 py-2.5 pr-11 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                  className={[
+                    "w-full rounded-xl border bg-slate-50/60 px-3.5 py-2.5 pr-11 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:bg-white focus:ring-4",
+                    fieldErrors.password
+                      ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
+                      : "border-slate-900/10 focus:border-sky-400 focus:ring-sky-100",
+                  ].join(" ")}
                 />
                 <button
                   type="button"
@@ -86,6 +154,9 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
+              {fieldErrors.password && (
+                <p className="mt-1.5 text-[0.78rem] text-rose-600">{fieldErrors.password}</p>
+              )}
             </label>
 
             <div className="flex items-center justify-between">
@@ -109,15 +180,16 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="group relative mt-9 h-[52px] w-full overflow-hidden rounded-full border border-[#a5c5d1] shadow-[0_10px_24px_-12px_rgba(125,163,179,0.6)]"
+            disabled={loading}
+            className="group relative mt-9 h-[52px] w-full overflow-hidden rounded-full border border-[#a5c5d1] shadow-[0_10px_24px_-12px_rgba(125,163,179,0.6)] disabled:cursor-not-allowed disabled:opacity-70"
           >
             <div className="inline-flex h-[52px] w-full items-center justify-center gap-2 bg-[#7da3b3] px-10 text-[0.95rem] font-medium text-white transition-transform duration-300 group-hover:-translate-y-full">
-              Sign In
-              <ArrowRight className="h-4 w-4" strokeWidth={2} />
+              {loading ? "Signing in..." : "Sign In"}
+              {!loading && <ArrowRight className="h-4 w-4" strokeWidth={2} />}
             </div>
             <div className="absolute inset-0 inline-flex h-[52px] w-full translate-y-full items-center justify-center gap-2 bg-white px-10 text-[0.95rem] font-medium text-slate-900 transition-transform duration-300 group-hover:translate-y-0">
-              Sign In
-              <ArrowRight className="h-4 w-4" strokeWidth={2} />
+              {loading ? "Signing in..." : "Sign In"}
+              {!loading && <ArrowRight className="h-4 w-4" strokeWidth={2} />}
             </div>
           </button>
         </form>

@@ -196,7 +196,7 @@ const inputClass =
 const textareaClass =
   "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
 
-// Turn a Treatment record into editable form fields (arrays -> newline text).
+
 function treatmentToForm(t: Treatment): FormState {
   return {
     name: t.name,
@@ -303,7 +303,7 @@ export default function TreatmentsPage() {
             : t
         )
       );
-      // Keep the side panel in sync if the treatment being edited is currently open.
+
       setSelectedTreatment((prev) =>
         prev && prev.id === editingId
           ? {
@@ -457,24 +457,24 @@ export default function TreatmentsPage() {
                   onClick={() => openProfile(t)}
                   className="group cursor-pointer rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#7da3b3]/30 hover:shadow-lg"
                 >
-                  <div className="flex items-start justify-between">
-                    {t.imageUrl ? (
-                      <div className="relative h-16 w-16 overflow-hidden rounded-full ring-4 ring-slate-50">
-                        <Image
-                          src={t.imageUrl}
-                          alt={t.name}
-                          fill
-                          unoptimized
-                          className="object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div
-                        className={`flex h-16 w-16 items-center justify-center rounded-full ring-4 ring-slate-50 ${color}`}
-                      >
-                        <CategoryIcon className="h-6 w-6" strokeWidth={2} />
-                      </div>
-                    )}
+<div className="flex items-start justify-between">
+  {t.imageUrl ? (
+    <div className="relative h-16 w-16">
+      <Image
+        src={t.imageUrl}
+        alt={t.name}
+        fill
+        unoptimized
+        className="object-cover"
+      />
+    </div>
+  ) : (
+    <div
+      className={`flex h-16 w-16 items-center justify-center rounded-full ring-4 ring-slate-50 ${color}`}
+    >
+      <CategoryIcon className="h-6 w-6" strokeWidth={2} />
+    </div>
+  )}
                     <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
                         onClick={(e) => {
