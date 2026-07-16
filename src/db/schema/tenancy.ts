@@ -10,6 +10,7 @@ import {
 import { relations } from "drizzle-orm";
 import { patients } from "./patients";
 import { appointmentTypes, appointments } from "./scheduling";
+import { refreshTokens } from "./auth";
 
 export const orgStatusEnum = pgEnum("org_status", [
   "trial",
@@ -24,6 +25,7 @@ export const organizations = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
     status: orgStatusEnum("status").notNull().default("trial"),
+    slug: text("slug").notNull().unique(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -56,18 +58,25 @@ export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    orgId: uuid("org_id").notNull().references(() => organizations.id),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id),
     email: text("email").notNull().unique(),
+    phone: text("phone").unique(),
     passwordHash: text("password_hash").notNull(),
     name: text("name").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
     orgIdx: index("users_org_id_idx").on(table.orgId),
-  })
+  }),
 );
 
-export const staffRoleEnum = pgEnum("staff_role", ["owner", "clinical", "front_office"]);
+export const staffRoleEnum = pgEnum("staff_role", [
+  "owner",
+  "clinical",
+  "front_office",
+]);
 
 // owner        - full access: staff, settings, billing, reports, all patients at their locations
 // clinical     - dentist + hygienist merged. Note: in most places a hygienist legally
@@ -82,15 +91,21 @@ export const userLocationRoles = pgTable(
   "user_location_roles",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id").notNull().references(() => users.id),
-    locationId: uuid("location_id").notNull().references(() => locations.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => locations.id),
     role: staffRoleEnum("role").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
     userLocationUnique: unique().on(table.userId, table.locationId),
-    locationIdx: index("user_location_roles_location_id_idx").on(table.locationId),
-  })
+    locationIdx: index("user_location_roles_location_id_idx").on(
+      table.locationId,
+    ),
+  }),
 );
 
 // ---------- Relations (Drizzle query-API layer, not database FKs) ----------
@@ -121,17 +136,21 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.orgId],
     references: [organizations.id],
   }),
+  refreshTokens: many(refreshTokens),
   locationRoles: many(userLocationRoles),
   appointmentsAsProvider: many(appointments),
 }));
 
-export const userLocationRolesRelations = relations(userLocationRoles, ({ one }) => ({
-  user: one(users, {
-    fields: [userLocationRoles.userId],
-    references: [users.id],
+export const userLocationRolesRelations = relations(
+  userLocationRoles,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [userLocationRoles.userId],
+      references: [users.id],
+    }),
+    location: one(locations, {
+      fields: [userLocationRoles.locationId],
+      references: [locations.id],
+    }),
   }),
-  location: one(locations, {
-    fields: [userLocationRoles.locationId],
-    references: [locations.id],
-  }),
-}));
+);
