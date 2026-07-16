@@ -1,5 +1,4 @@
 "use client";
-
 import Link from "next/link";
 import { usePathname, useParams, useRouter } from "next/navigation";
 import {
@@ -20,7 +19,7 @@ const NAV_ITEMS = [
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 
-export default function Sidebar() {
+function Sidebar() {
   const pathname = usePathname();
   const params = useParams<{ tenantSlug: string }>();
   const router = useRouter();
@@ -88,3 +87,5 @@ export default function Sidebar() {
     </aside>
   );
 }
+
+export default Sidebar

@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { organizations, refreshTokens, users } from "@/db/schema";
 import { verifyPassword } from "@/lib/auth/hash";
+import { getRedirectPathForUser } from "@/lib/auth/role-redirect";
 import {
   generateRefreshToken,
   hashRefreshToken,
@@ -8,7 +9,6 @@ import {
 } from "@/lib/auth/tokens";
 import { loginSchema } from "@/lib/validators/auth";
 import { eq, or } from "drizzle-orm";
-
 export type LoginResult =
   | {
       success: true;
@@ -17,6 +17,7 @@ export type LoginResult =
       refreshTokenExpiresAt: Date;
       user: { id: string; orgId: string; name: string; email: string };
       org: { slug: string; name: string };
+      redirectTo: string | null;
     }
   | { success: false; error: string };
 
@@ -29,10 +30,10 @@ export type RefreshResult =
     }
   | { success: false; error: string };
 
+
+
 export async function loginController(input: unknown): Promise<LoginResult> {
-  //  console.log(input)
   const parsed = loginSchema.safeParse(input);
-  //   console.log(parsed)
   if (!parsed.success) {
     const firstIssue = parsed.error.issues[0]?.message ?? "Invalid input.";
     return { success: false, error: firstIssue };
@@ -70,6 +71,8 @@ export async function loginController(input: unknown): Promise<LoginResult> {
     .insert(refreshTokens)
     .values({ userId: user.id, tokenHash, expiresAt });
 
+  const redirectTo = await getRedirectPathForUser(user.id, org.slug);
+
   return {
     success: true,
     accessToken,
@@ -82,6 +85,7 @@ export async function loginController(input: unknown): Promise<LoginResult> {
       email: user.email,
     },
     org: { slug: org.slug, name: org.name },
+    redirectTo,
   };
 }
 
