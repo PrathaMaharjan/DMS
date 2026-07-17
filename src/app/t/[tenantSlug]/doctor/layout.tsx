@@ -1,10 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/get-session";
 import { getPrimaryRoleForUser } from "@/lib/auth/role-redirect";
-import Sidebar from "./components/Sidebar";
-// import Sidebar from "./components/Sidebar";
 
-export default async function AdminLayout({
+export default async function DoctorLayout({
   children,
   params,
 }: {
@@ -16,16 +14,10 @@ export default async function AdminLayout({
   if (!session) redirect("/login");
 
   const role = await getPrimaryRoleForUser(session.userId);
-  console.log(role)
-  if (role !== "owner") {
-    const ownFolder = role === "clinical" ? "doctor" : role === "front_office" ? "frontdesk" : "";
+  if (role !== "clinical") {
+    const ownFolder = role === "owner" ? "admin" : role === "front_office" ? "frontdesk" : "";
     redirect(ownFolder ? `/t/${tenantSlug}/${ownFolder}` : "/login");
   }
 
-  return (
-    <div className="flex">
-      <Sidebar />
-      <main className="min-h-screen flex-1 bg-slate-50">{children}</main>
-    </div>
-  );
+  return <>{children}</>;
 }
