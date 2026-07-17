@@ -68,7 +68,6 @@ export default function LoginPage() {
 
   return (
     <section className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-gradient-to-b from-sky-50 via-white to-white px-4 py-16">
-      {/* Decorative background — same language as the Booking page */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <ToothOutline className="absolute -left-16 top-24 h-64 w-64 text-sky-200/60 -rotate-12" />
         <ToothOutline className="absolute -right-20 top-[28rem] h-80 w-80 text-sky-200/50 rotate-12" />
@@ -110,7 +109,7 @@ export default function LoginPage() {
                 type="text"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="email@clinic.com or 98XXXXXXXX"
+                placeholder="email@gmail.com or 9XXXXXXXXX"
                 className={[
                   "w-full rounded-xl border bg-slate-50/60 px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:bg-white focus:ring-4",
                   fieldErrors.identifier
