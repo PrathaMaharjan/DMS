@@ -1,4 +1,5 @@
 import {
+  integer,
   pgTable,
   uuid,
   text,
@@ -6,12 +7,21 @@ import {
   pgEnum,
   index,
   unique,
+  date,
+  time,
+  check,
+  boolean,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { patients } from "./patients";
 import { appointmentTypes, appointments } from "./scheduling";
 import { refreshTokens } from "./auth";
 
+export const employmentTypeEnum = pgEnum("employment_type", [
+  "full_time",
+  "part_time",
+  "contractor",
+]);
 export const orgStatusEnum = pgEnum("org_status", [
   "trial",
   "active",
@@ -40,7 +50,7 @@ export const locations = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     orgId: uuid("org_id")
       .notNull()
-      .references(() => organizations.id),
+      .references(() => organizations.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     timezone: text("timezone").notNull().default("UTC"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -60,11 +70,14 @@ export const users = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     orgId: uuid("org_id")
       .notNull()
-      .references(() => organizations.id),
+      .references(() => organizations.id, { onDelete: "cascade" }),
+
     email: text("email").notNull().unique(),
     phone: text("phone").unique(),
     passwordHash: text("password_hash").notNull(),
     name: text("name").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
@@ -107,12 +120,75 @@ export const userLocationRoles = pgTable(
     ),
   }),
 );
+export const bloodGroupEnum = pgEnum("blood_group", [
+  "A+",
+  "A-",
+  "B+",
+  "B-",
+  "AB+",
+  "AB-",
+  "O+",
+  "O-",
+]);
+export const specializationEnum = pgEnum("specialization", [
+  "general_dentistry",
+  "orthodontics",
+  "endodontics",
+  "periodontics",
+  "oral_surgery",
+  "pediatric_dentistry",
+  "prosthodontics",
+]);
+export const providerProfiles = pgTable("provider_profiles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id),
+  photoUrl: text("photo_url"),
+  specialization: specializationEnum("specialization"),
+  qualification: text("qualification"),
+  education: text("education"),
+  bio: text("bio"),
+  yearsOfExperience: integer("years_of_experience"),
+  dateOfBirth: date("date_of_birth"),
+  bloodGroup: bloodGroupEnum("blood_group"),
+  gender: text("gender"),
+  address: text("address"),
+  employmentType: employmentTypeEnum("employment_type"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const providerSchedules = pgTable(
+  "provider_schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => locations.id),
+    dayOfWeek: integer("day_of_week").notNull(),
+    startTime: time("start_time").notNull(),
+    endTime: time("end_time").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    providerLocationDayUnique: unique("provider_schedules_unique").on(
+      table.userId,
+      table.locationId,
+      table.dayOfWeek,
+    ),
+    dayOfWeekCheck: check(
+      "provider_schedules_day_of_week_check",
+      sql`${table.dayOfWeek} BETWEEN 0 AND 6`,
+    ),
+  }),
+);
 
 // ---------- Relations (Drizzle query-API layer, not database FKs) ----------
-// These reference tables from ./patients and ./scheduling, which in turn import
-// FROM this file for their own foreign keys - a circular import. This is safe:
-// the callback below only runs after every module has finished loading, not
-// during the import itself. Verified working further down this conversation.
 
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   locations: many(locations),
@@ -150,6 +226,30 @@ export const userLocationRolesRelations = relations(
     }),
     location: one(locations, {
       fields: [userLocationRoles.locationId],
+      references: [locations.id],
+    }),
+  }),
+);
+
+export const providerProfilesRelations = relations(
+  providerProfiles,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [providerProfiles.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const providerSchedulesRelations = relations(
+  providerSchedules,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [providerSchedules.userId],
+      references: [users.id],
+    }),
+    location: one(locations, {
+      fields: [providerSchedules.locationId],
       references: [locations.id],
     }),
   }),

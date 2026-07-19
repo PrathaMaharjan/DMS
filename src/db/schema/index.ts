@@ -5,3 +5,4 @@ export * from "./scheduling";
 export * from "./auth";
 export * from "./billing";
 export * from "./clinical";
+export * from "./treatment";

@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { organizations, refreshTokens, users } from "@/db/schema";
+import { locations, organizations, refreshTokens, users } from "@/db/schema";
 import { verifyPassword } from "@/lib/auth/hash";
 import { getRedirectPathForUser } from "@/lib/auth/role-redirect";
 import {
@@ -16,7 +16,7 @@ export type LoginResult =
       refreshToken: string;
       refreshTokenExpiresAt: Date;
       user: { id: string; orgId: string; name: string; email: string };
-      org: { slug: string; name: string };
+      org: { slug: string; name: string; locationId: string };
       redirectTo: string | null;
     }
   | { success: false; error: string };
@@ -29,8 +29,6 @@ export type RefreshResult =
       refreshTokenExpiresAt: Date;
     }
   | { success: false; error: string };
-
-
 
 export async function loginController(input: unknown): Promise<LoginResult> {
   const parsed = loginSchema.safeParse(input);
@@ -63,6 +61,24 @@ export async function loginController(input: unknown): Promise<LoginResult> {
       error: "This clinic's account is not active. Contact support.",
     };
   }
+  const location = await db.query.locations.findFirst({
+    where: eq(locations.orgId, org.id),
+  });
+  if (!location) {
+    return {
+      success: false,
+      error: "No location configured for this organization.",
+    };
+  }
+  if (user.deletedAt) {
+    return { success: false, error: "This account is no longer active." };
+  }
+  if (!user.isActive) {
+    return {
+      success: false,
+      error: "This account has been deactivated. Contact your administrator.",
+    };
+  }
 
   const accessToken = signAccessToken({ userId: user.id, orgId: user.orgId });
   const { token: refreshToken, tokenHash, expiresAt } = generateRefreshToken();
@@ -84,7 +100,11 @@ export async function loginController(input: unknown): Promise<LoginResult> {
       name: user.name,
       email: user.email,
     },
-    org: { slug: org.slug, name: org.name },
+    org: {
+      slug: org.slug,
+      name: org.name,
+      locationId: location?.id,
+    },
     redirectTo,
   };
 }
@@ -153,13 +173,11 @@ export async function refreshController(
     expiresAt: newExpiresAt,
   } = generateRefreshToken();
 
-  await db
-    .insert(refreshTokens)
-    .values({
-      userId: user.id,
-      tokenHash: newTokenHash,
-      expiresAt: newExpiresAt,
-    });
+  await db.insert(refreshTokens).values({
+    userId: user.id,
+    tokenHash: newTokenHash,
+    expiresAt: newExpiresAt,
+  });
 
   return {
     success: true,

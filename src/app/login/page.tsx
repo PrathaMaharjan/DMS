@@ -60,7 +60,7 @@ export default function LoginPage() {
       }
 
       const redirectTo = responseBody?.data?.redirectTo;
-      router.push(redirectTo ?? "/dashboard");
+      router.push(redirectTo ?? "/login");
     } catch (err) {
       if (axios.isAxiosError(err)) {
         setError(

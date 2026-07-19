@@ -18,7 +18,7 @@ export const patients = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     orgId: uuid("org_id")
       .notNull()
-      .references(() => organizations.id),
+      .references(() => organizations.id, { onDelete: "cascade" }),
     locationId: uuid("location_id")
       .notNull()
       .references(() => locations.id),
