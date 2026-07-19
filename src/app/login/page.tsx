@@ -121,7 +121,7 @@ export default function LoginPage() {
                 type="text"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="email@clinic.com or 98XXXXXXXX"
+                placeholder="email@gmail.com or 9XXXXXXXXX"
                 className={[
                   "w-full rounded-xl border bg-slate-50/60 px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:bg-white focus:ring-4",
                   fieldErrors.identifier
@@ -210,7 +210,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-[0.9rem] text-slate-600">
-          Don&apos;t have an account?{" "}
+          Don't have an account?{" "}
           <Link
             href="/signup"
             className="font-medium text-sky-700 underline-offset-4 hover:underline"

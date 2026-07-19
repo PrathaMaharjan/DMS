@@ -457,37 +457,36 @@ export default function TreatmentsPage() {
                   onClick={() => openProfile(t)}
                   className="group cursor-pointer rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#7da3b3]/30 hover:shadow-lg"
                 >
-<div className="flex items-start justify-between">
+<div className="relative -m-6 mb-5">
   {t.imageUrl ? (
-    <div className="relative h-16 w-16">
+    <div className="relative h-44 w-full overflow-hidden rounded-t-2xl">
       <Image
         src={t.imageUrl}
         alt={t.name}
         fill
         unoptimized
-        className="object-cover"
+        className="object-cover transition-transform duration-300 group-hover:scale-105"
       />
     </div>
   ) : (
     <div
-      className={`flex h-16 w-16 items-center justify-center rounded-full ring-4 ring-slate-50 ${color}`}
+      className={`flex h-44 w-full items-center justify-center rounded-t-2xl ${color}`}
     >
-      <CategoryIcon className="h-6 w-6" strokeWidth={2} />
+      <CategoryIcon className="h-14 w-14" strokeWidth={2} />
     </div>
   )}
-                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(t);
-                        }}
-                        aria-label="Edit treatment"
-                        className="flex h-7 w-7 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-slate-100 hover:text-[#3f6274]"
-                      >
-                        <SquarePen className="h-3.5 w-3.5" strokeWidth={2} />
-                      </button>
-                    </div>
-                  </div>
+
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      openEditModal(t);
+    }}
+    aria-label="Edit treatment"
+    className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow transition hover:bg-white"
+  >
+    <SquarePen className="h-4 w-4 text-slate-600" strokeWidth={2} />
+  </button>
+</div>
 
                   <p className="mt-4 text-[1.02rem] font-semibold text-slate-900">{t.name}</p>
 
