@@ -119,6 +119,7 @@ export async function createDoctor(
           phone: data.phone,
           passwordHash,
           name: data.name,
+          isActive: true,
         })
         .returning();
 

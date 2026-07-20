@@ -33,6 +33,7 @@ import {
   Cake,
   Clock,
   VenusAndMars,
+  Trash2,
 } from "lucide-react";
 
 const SPECIALIZATIONS = [
@@ -97,113 +98,6 @@ type Doctor = {
   experienceNotes?: string[];
 };
 
-const INITIAL_DOCTORS: Doctor[] = [
-  {
-    id: "1",
-    name: "Dr. Anisha Sharma",
-    specialization: "Orthodontics",
-    experience: "9",
-    email: "anisha.sharma@chitwandental.com",
-    phone: "9801234567",
-    qualification: "BDS, MDS (Orthodontics)",
-    rating: 4.8,
-    patients: 214,
-    doctorId: "DOC-1001",
-    age: "34",
-    bloodGroup: "O+",
-    gender: "Female",
-    dob: "12 Mar 1992",
-    createdDate: "2023-02-14 10:05:00",
-    address: "Bharatpur-10, Chitwan, Nepal",
-    education: [
-      "Bachelor of Dental Surgery (BDS), Kathmandu University",
-      "MDS in Orthodontics, Manipal College of Dental Sciences",
-    ],
-    experienceNotes: [
-      "9 years of clinical practice in orthodontics and dentofacial orthopedics",
-      "Specializes in clear aligners and early interceptive treatment for children",
-    ],
-  },
-  {
-    id: "2",
-    name: "Dr. Rajiv Thapa",
-    specialization: "Oral Surgery",
-    experience: "12",
-    email: "rajiv.thapa@chitwandental.com",
-    phone: "9807654321",
-    qualification: "BDS, MDS (Oral & Maxillofacial Surgery)",
-    rating: 4.6,
-    patients: 331,
-    doctorId: "DOC-1002",
-    age: "39",
-    bloodGroup: "B+",
-    gender: "Male",
-    dob: "5 Jul 1987",
-    createdDate: "2022-11-02 09:20:00",
-    address: "Narayangarh-4, Chitwan, Nepal",
-    education: [
-      "Bachelor of Dental Surgery (BDS), B.P. Koirala Institute of Health Sciences",
-      "MDS in Oral & Maxillofacial Surgery, Manipal University",
-    ],
-    experienceNotes: [
-      "12 years of experience in complex extractions and jaw reconstruction",
-      "Led over 300 wisdom tooth and dental implant procedures",
-    ],
-  },
-  {
-    id: "3",
-    name: "Dr. Priya Gurung",
-    specialization: "Pediatric Dentistry",
-    experience: "6",
-    email: "priya.gurung@chitwandental.com",
-    phone: "9812345678",
-    qualification: "BDS, MDS (Pediatric Dentistry)",
-    rating: 4.9,
-    patients: 178,
-    doctorId: "DOC-1003",
-    age: "31",
-    bloodGroup: "A+",
-    gender: "Female",
-    dob: "21 Sep 1995",
-    createdDate: "2024-01-18 13:45:00",
-    address: "Ratnanagar-2, Chitwan, Nepal",
-    education: [
-      "Bachelor of Dental Surgery (BDS), Kantipur Dental College",
-      "MDS in Pediatric & Preventive Dentistry, Nair Hospital Dental College",
-    ],
-    experienceNotes: [
-      "6 years focused on child-friendly, anxiety-free dental care",
-      "Runs the clinic's school outreach program for dental hygiene education",
-    ],
-  },
-  {
-    id: "4",
-    name: "Dr. Suresh Karki",
-    specialization: "Periodontics",
-    experience: "15",
-    email: "suresh.karki@chitwandental.com",
-    phone: "9845678901",
-    qualification: "BDS, MDS (Periodontics)",
-    rating: 4.7,
-    patients: 402,
-    doctorId: "DOC-1004",
-    age: "44",
-    bloodGroup: "AB+",
-    gender: "Male",
-    dob: "3 Jan 1982",
-    createdDate: "2021-06-09 08:30:00",
-    address: "Bharatpur-6, Chitwan, Nepal",
-    education: [
-      "Bachelor of Dental Surgery (BDS), Chitwan Medical College",
-      "MDS in Periodontics, Government Dental College, Mumbai",
-    ],
-    experienceNotes: [
-      "15 years treating gum disease and performing dental implant surgery",
-      "Regularly trains junior dentists on periodontal flap procedures",
-    ],
-  },
-];
-
 const EMPTY_FORM = {
   name: "",
   email: "",
@@ -229,7 +123,7 @@ const inputClass =
 const textareaClass =
   "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
 
-
+// Turn a Doctor record into editable form fields (arrays -> newline text).
 function doctorToForm(doc: Doctor): FormState {
   return {
     name: doc.name,
@@ -262,6 +156,8 @@ export default function DoctorsPage() {
   const [loading, setLoading] = useState(true);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [doctorToDelete, setDoctorToDelete] = useState<Doctor | null>(null);
   const [query, setQuery] = useState("");
   const [specializationFilter, setSpecializationFilter] = useState("All");
   const [modalOpen, setModalOpen] = useState(false);
@@ -272,20 +168,30 @@ export default function DoctorsPage() {
   const [profileTab, setProfileTab] = useState<"detail" | "patients" | "appointments">(
     "detail"
   );
+  
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(false);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [patientsLoading, setPatientsLoading] = useState(false);
 
   async function loadData() {
     try {
       setLoading(true);
       // Fetch locations/services first to get locationId
       const servicesRes = await axios.get("/api/services");
+      let locId: string | null = null;
       if (servicesRes.data?.success && servicesRes.data.data.services?.length > 0) {
-        setLocationId(servicesRes.data.data.services[0].locationId);
+        locId = servicesRes.data.data.services[0].locationId;
+        setLocationId(locId);
       }
 
       // Fetch doctors
-      const res = await axios.get("/api/doctor");
+      const res = await axios.get("/api/doctor", {
+        params: locId ? { locationId: locId } : undefined,
+      });
       if (res.data?.success) {
-        const dbDoctors = res.data.doctors || [];
+        const dbDoctors = res.data.data?.doctors || [];
         const mapped = dbDoctors.map((d: any, index: number) => ({
           id: d.id,
           name: d.name,
@@ -320,9 +226,68 @@ export default function DoctorsPage() {
     loadData();
   }, []);
 
-  function openProfile(doc: Doctor) {
+  useEffect(() => {
+    if (!selectedDoctor) return;
+
+    if (profileTab === "appointments") {
+      setAppointmentsLoading(true);
+      axios.get(`/api/doctor/${selectedDoctor.id}/appointments`)
+        .then((res) => {
+          if (res.data?.success) {
+            setAppointments(res.data.data?.appointments || []);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load doctor appointments", err);
+        })
+        .finally(() => {
+          setAppointmentsLoading(false);
+        });
+    } else if (profileTab === "patients") {
+      setPatientsLoading(true);
+      axios.get(`/api/doctor/${selectedDoctor.id}/patent`)
+        .then((res) => {
+          if (res.data?.success) {
+            setPatients(res.data.data?.visits || []);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load doctor patients history", err);
+        })
+        .finally(() => {
+          setPatientsLoading(false);
+        });
+    }
+  }, [profileTab, selectedDoctor?.id]);
+
+  async function openProfile(doc: Doctor) {
     setSelectedDoctor(doc);
     setProfileTab("detail");
+    setDetailsLoading(true);
+    try {
+      const res = await axios.get(`/api/doctor/${doc.id}`);
+      if (res.data?.success && res.data.data?.doctor) {
+        const fullDoc = res.data.data.doctor;
+        const mergedDoc = {
+          ...doc,
+          phone: fullDoc.phone || "",
+          qualification: fullDoc.qualification || "",
+          education: fullDoc.education ? fullDoc.education.split("\n") : [],
+          experienceNotes: fullDoc.bio ? fullDoc.bio.split("\n") : [],
+          age: fullDoc.age || doc.age,
+          bloodGroup: fullDoc.bloodGroup || doc.bloodGroup,
+          gender: fullDoc.gender || doc.gender,
+          dob: fullDoc.dateOfBirth || doc.dob,
+          address: fullDoc.address || doc.address,
+        };
+        setSelectedDoctor((prev) => (prev && prev.id === doc.id ? mergedDoc : prev));
+        setDoctors((prev) => prev.map((d) => (d.id === doc.id ? mergedDoc : d)));
+      }
+    } catch (err) {
+      console.error("Failed to load doctor details", err);
+    } finally {
+      setDetailsLoading(false);
+    }
   }
 
   function openAddModal() {
@@ -333,12 +298,65 @@ export default function DoctorsPage() {
     setModalOpen(true);
   }
 
-  function openEditModal(doc: Doctor) {
+  async function openEditModal(doc: Doctor) {
     setModalMode("edit");
     setEditingId(doc.id);
     setForm(doctorToForm(doc));
     setSubmitError(null);
     setModalOpen(true);
+
+    try {
+      const res = await axios.get(`/api/doctor/${doc.id}`);
+      if (res.data?.success && res.data.data?.doctor) {
+        const fullDoc = res.data.data.doctor;
+        const mergedDoc = {
+          ...doc,
+          phone: fullDoc.phone || "",
+          qualification: fullDoc.qualification || "",
+          education: fullDoc.education ? fullDoc.education.split("\n") : [],
+          experienceNotes: fullDoc.bio ? fullDoc.bio.split("\n") : [],
+          age: fullDoc.age || doc.age,
+          bloodGroup: fullDoc.bloodGroup || doc.bloodGroup,
+          gender: fullDoc.gender || doc.gender,
+          dob: fullDoc.dateOfBirth || doc.dob,
+          address: fullDoc.address || doc.address,
+        };
+        setForm(doctorToForm(mergedDoc));
+        setDoctors((prev) => prev.map((d) => (d.id === doc.id ? mergedDoc : d)));
+      }
+    } catch (err) {
+      console.error("Failed to load doctor details for edit", err);
+    }
+  }
+
+  // Opens the themed confirmation modal for a given doctor.
+  function requestDeleteDoctor(doc: Doctor) {
+    setDoctorToDelete(doc);
+  }
+
+  // Runs the actual delete once the user confirms in the modal.
+  async function confirmDeleteDoctor() {
+    if (!doctorToDelete) return;
+    const doc = doctorToDelete;
+
+    setDeletingId(doc.id);
+    try {
+      const res = await axios.delete(`/api/doctor/${doc.id}`);
+      if (res.data?.success) {
+        setDoctors((prev) => prev.filter((d) => d.id !== doc.id));
+        setSelectedDoctor((prev) => (prev?.id === doc.id ? null : prev));
+      }
+    } catch (err) {
+      console.error("Error deleting doctor:", err);
+      if (axios.isAxiosError(err)) {
+        alert(err.response?.data?.error || "Failed to delete doctor.");
+      } else {
+        alert("An unexpected error occurred while deleting.");
+      }
+    } finally {
+      setDeletingId(null);
+      setDoctorToDelete(null);
+    }
   }
 
   const filtered = useMemo(() => {
@@ -382,23 +400,46 @@ export default function DoctorsPage() {
 
     try {
       if (modalMode === "edit" && editingId) {
-        setDoctors((prev) =>
-          prev.map((d) =>
-            d.id === editingId
-              ? {
-                ...d,
-                ...rest,
-                education: educationList,
-                experienceNotes: experienceNotesList,
-              }
-              : d
-          )
-        );
-        setSelectedDoctor((prev) =>
-          prev && prev.id === editingId
-            ? { ...prev, ...rest, education: educationList, experienceNotes: experienceNotesList }
-            : prev
-        );
+        // Build the same shape of payload the backend's updateDoctor()
+        // controller expects. Only send fields the form actually has.
+        const payload: Record<string, unknown> = {
+          name: form.name,
+          email: form.email,
+          phone: form.phone,
+          specialization: SPECIALIZATION_MAP_BACKEND[form.specialization] || "general_dentistry",
+          qualification: form.qualification,
+          yearsOfExperience: parseInt(form.experience, 10) || 0,
+        };
+
+        if (form.imageUrl) payload.photoKey = form.imageUrl;
+        if (educationList.length > 0) payload.education = educationList.join("\n");
+        if (experienceNotesList.length > 0) payload.bio = experienceNotesList.join("\n");
+        if (form.dob) payload.dateOfBirth = form.dob;
+        if (form.bloodGroup) payload.bloodGroup = form.bloodGroup;
+        if (form.gender) payload.gender = form.gender;
+        if (form.address) payload.address = form.address;
+
+        const res = await axios.patch(`/api/doctor/${editingId}`, payload);
+
+        if (res.data?.success) {
+          setDoctors((prev) =>
+            prev.map((d) =>
+              d.id === editingId
+                ? {
+                    ...d,
+                    ...rest,
+                    education: educationList,
+                    experienceNotes: experienceNotesList,
+                  }
+                : d
+            )
+          );
+          setSelectedDoctor((prev) =>
+            prev && prev.id === editingId
+              ? { ...prev, ...rest, education: educationList, experienceNotes: experienceNotesList }
+              : prev
+          );
+        }
       } else {
         if (!locationId) {
           setSubmitError("Could not determine location ID. Please configure services first.");
@@ -637,6 +678,17 @@ export default function DoctorsPage() {
                           className="flex h-7 w-7 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-slate-100 hover:text-[#3f6274]"
                         >
                           <SquarePen className="h-3.5 w-3.5" strokeWidth={2} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            requestDeleteDoctor(doc);
+                          }}
+                          disabled={deletingId === doc.id}
+                          aria-label="Delete doctor"
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-rose-50 hover:text-rose-500 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
                         </button>
                       </div>
                     </div>
@@ -969,6 +1021,15 @@ export default function DoctorsPage() {
                 <ChevronLeft className="h-4 w-4" strokeWidth={2} />
                 Back
               </button>
+              <button
+                onClick={() => requestDeleteDoctor(selectedDoctor)}
+                disabled={deletingId === selectedDoctor.id}
+                aria-label="Delete doctor"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.85rem] font-medium text-rose-500 transition-colors hover:bg-rose-50 disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                Delete
+              </button>
             </div>
 
             <div className="px-6 py-6">
@@ -1062,107 +1123,243 @@ export default function DoctorsPage() {
               {/* Tab content */}
               {profileTab === "detail" && (
                 <div className="mt-5 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
-                  <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
-                    Doctor Information
-                  </p>
-                  <div className="mt-4 grid grid-cols-2 gap-y-4 text-[0.85rem]">
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <IdCard className="h-3.5 w-3.5" strokeWidth={2} />
-                        Doctor ID
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">
-                        {selectedDoctor.doctorId ?? "—"}
-                      </p>
+                  {detailsLoading ? (
+                    <div className="py-10 text-center text-slate-500">
+                      <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-[#7da3b3]" />
+                      <p className="mt-2 text-[0.8rem]">Loading details...</p>
                     </div>
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <User className="h-3.5 w-3.5" strokeWidth={2} />
-                        Age
+                  ) : (
+                    <>
+                      <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
+                        Doctor Information
                       </p>
-                      <p className="mt-1 font-medium text-slate-800">
-                        {selectedDoctor.age ? `${selectedDoctor.age} Years Old` : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <Droplet className="h-3.5 w-3.5" strokeWidth={2} />
-                        Blood Group
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">
-                        {selectedDoctor.bloodGroup ?? "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <VenusAndMars className="h-3.5 w-3.5" strokeWidth={2} />
-                        Gender
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">
-                        {selectedDoctor.gender ?? "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <Cake className="h-3.5 w-3.5" strokeWidth={2} />
-                        Date of Birth
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">
-                        {selectedDoctor.dob ?? "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <Clock className="h-3.5 w-3.5" strokeWidth={2} />
-                        Created Date
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">
-                        {selectedDoctor.createdDate ?? "—"}
-                      </p>
-                    </div>
-                  </div>
+                      <div className="mt-4 grid grid-cols-2 gap-y-4 text-[0.85rem]">
+                        <div>
+                          <p className="flex items-center gap-1.5 text-slate-400">
+                            <IdCard className="h-3.5 w-3.5" strokeWidth={2} />
+                            Doctor ID
+                          </p>
+                          <p className="mt-1 font-medium text-slate-800">
+                            {selectedDoctor.doctorId ?? "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="flex items-center gap-1.5 text-slate-400">
+                            <User className="h-3.5 w-3.5" strokeWidth={2} />
+                            Age
+                          </p>
+                          <p className="mt-1 font-medium text-slate-800">
+                            {selectedDoctor.age ? `${selectedDoctor.age} Years Old` : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="flex items-center gap-1.5 text-slate-400">
+                            <Droplet className="h-3.5 w-3.5" strokeWidth={2} />
+                            Blood Group
+                          </p>
+                          <p className="mt-1 font-medium text-slate-800">
+                            {selectedDoctor.bloodGroup ?? "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="flex items-center gap-1.5 text-slate-400">
+                            <VenusAndMars className="h-3.5 w-3.5" strokeWidth={2} />
+                            Gender
+                          </p>
+                          <p className="mt-1 font-medium text-slate-800">
+                            {selectedDoctor.gender ?? "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="flex items-center gap-1.5 text-slate-400">
+                            <Cake className="h-3.5 w-3.5" strokeWidth={2} />
+                            Date of Birth
+                          </p>
+                          <p className="mt-1 font-medium text-slate-800">
+                            {selectedDoctor.dob ?? "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="flex items-center gap-1.5 text-slate-400">
+                            <Clock className="h-3.5 w-3.5" strokeWidth={2} />
+                            Created Date
+                          </p>
+                          <p className="mt-1 font-medium text-slate-800">
+                            {selectedDoctor.createdDate ?? "—"}
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="mt-6 border-t border-slate-900/5 pt-5">
-                    <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
-                      Education
-                    </p>
-                    <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[0.85rem] text-slate-600">
-                      {(selectedDoctor.education ?? [selectedDoctor.qualification]).map(
-                        (item) => (
-                          <li key={item}>{item}</li>
-                        )
-                      )}
-                    </ul>
-                  </div>
+                      <div className="mt-6 border-t border-slate-900/5 pt-5">
+                        <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
+                          Education
+                        </p>
+                        <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[0.85rem] text-slate-600">
+                          {selectedDoctor.education && selectedDoctor.education.length > 0 ? (
+                            selectedDoctor.education.map((item, index) => (
+                              <li key={index}>{item}</li>
+                            ))
+                          ) : (
+                            <li>{selectedDoctor.qualification || "—"}</li>
+                          )}
+                        </ul>
+                      </div>
 
-                  <div className="mt-6 border-t border-slate-900/5 pt-5">
-                    <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
-                      Experience
-                    </p>
-                    <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[0.85rem] text-slate-600">
-                      {(
-                        selectedDoctor.experienceNotes ?? [
-                          `${selectedDoctor.experience} years of experience in ${selectedDoctor.specialization.toLowerCase()}`,
-                        ]
-                      ).map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
+                      <div className="mt-6 border-t border-slate-900/5 pt-5">
+                        <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
+                          Experience
+                        </p>
+                        <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[0.85rem] text-slate-600">
+                          {selectedDoctor.experienceNotes && selectedDoctor.experienceNotes.length > 0 ? (
+                            selectedDoctor.experienceNotes.map((item, index) => (
+                              <li key={index}>{item}</li>
+                            ))
+                          ) : (
+                            <li>{selectedDoctor.experience} years of experience in {selectedDoctor.specialization.toLowerCase()}</li>
+                          )}
+                        </ul>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
               {profileTab === "patients" && (
-                <div className="mt-5 rounded-2xl border border-dashed border-slate-900/15 bg-white p-10 text-center text-[0.85rem] text-slate-500 shadow-sm">
-                  No patient history recorded yet.
+                <div className="mt-5 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
+                  <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900 mb-4">
+                    Patient History
+                  </p>
+                  {patientsLoading ? (
+                    <div className="py-12 text-center text-slate-500">
+                      <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-[#7da3b3]" />
+                      <p className="mt-2 text-[0.8rem]">Loading patient history...</p>
+                    </div>
+                  ) : patients.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-900/15 bg-white py-12 text-center text-[0.85rem] text-slate-500">
+                      No patient history recorded yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {patients.map((visit: any, index: number) => (
+                        <div key={visit.appointmentId || index} className="flex items-center justify-between p-3 rounded-xl border border-slate-900/5 hover:bg-slate-50/50">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#7da3b3]/10 text-[#3f6274] font-medium text-[0.9rem]">
+                              {visit.patientName ? visit.patientName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "P"}
+                            </div>
+                            <div>
+                              <p className="text-[0.9rem] font-semibold text-slate-800">{visit.patientName}</p>
+                              <p className="text-[0.75rem] text-slate-500">{visit.treatmentName}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[0.8rem] text-slate-600 font-medium">
+                              {visit.startTime ? new Date(visit.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : "—"}
+                            </p>
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-medium capitalize mt-1 ${
+                              visit.status === "completed" ? "bg-emerald-100 text-emerald-700" :
+                              visit.status === "pending" || visit.status === "scheduled" ? "bg-amber-100 text-amber-700" :
+                              "bg-rose-100 text-rose-700"
+                            }`}>
+                              {visit.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
               {profileTab === "appointments" && (
-                <div className="mt-5 rounded-2xl border border-dashed border-slate-900/15 bg-white p-10 text-center text-[0.85rem] text-slate-500 shadow-sm">
-                  No appointment history recorded yet.
+                <div className="mt-5 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
+                  <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900 mb-4">
+                    Appointment History
+                  </p>
+                  {appointmentsLoading ? (
+                    <div className="py-12 text-center text-slate-500">
+                      <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-[#7da3b3]" />
+                      <p className="mt-2 text-[0.8rem]">Loading appointment history...</p>
+                    </div>
+                  ) : appointments.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-900/15 bg-white py-12 text-center text-[0.85rem] text-slate-500">
+                      No appointment history recorded yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {appointments.map((appt: any, index: number) => {
+                        const apptDate = appt.startTime ? new Date(appt.startTime) : null;
+                        const timeStr = apptDate ? apptDate.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : "";
+                        const dateStr = apptDate ? apptDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : "";
+                        return (
+                          <div key={appt.id || index} className="flex items-center justify-between p-3 rounded-xl border border-slate-900/5 hover:bg-slate-50/50">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#7da3b3]/10 text-[#3f6274] font-medium text-[0.9rem]">
+                                {appt.patientName ? appt.patientName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "P"}
+                              </div>
+                              <div>
+                                <p className="text-[0.9rem] font-semibold text-slate-800">{appt.patientName}</p>
+                                <p className="text-[0.75rem] text-slate-500">{appt.treatmentName}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[0.8rem] text-slate-600 font-medium">
+                                {dateStr} at {timeStr}
+                              </p>
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-medium capitalize mt-1 ${
+                                appt.status === "completed" ? "bg-emerald-100 text-emerald-700" :
+                                appt.status === "pending" || appt.status === "scheduled" ? "bg-amber-100 text-amber-700" :
+                                "bg-rose-100 text-rose-700"
+                              }`}>
+                                {appt.status}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {doctorToDelete && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/50 sm:items-center">
+          <div
+            onClick={() => !deletingId && setDoctorToDelete(null)}
+            className="absolute inset-0"
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm rounded-t-2xl bg-white p-6 text-center shadow-2xl sm:rounded-2xl">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-500">
+              <Trash2 className="h-5 w-5" strokeWidth={2} />
+            </div>
+
+            <h3 className="mt-4 text-[1.05rem] font-semibold text-slate-900">
+              Do you want to remove {doctorToDelete.name}?
+            </h3>
+
+
+            <div className="mt-6 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={confirmDeleteDoctor}
+                disabled={deletingId === doctorToDelete.id}
+                className="flex-1 rounded-full bg-rose-500 px-5 py-2.5 text-[0.9rem] font-medium text-white transition-colors hover:bg-rose-600 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {deletingId === doctorToDelete.id ? "Removing..." : "Remove"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDoctorToDelete(null)}
+                disabled={deletingId === doctorToDelete.id}
+                className="flex-1 rounded-full border border-slate-900/10 px-5 py-2.5 text-[0.9rem] font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

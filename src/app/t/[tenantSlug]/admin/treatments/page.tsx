@@ -30,6 +30,7 @@ import {
   ClipboardList,
   ListChecks,
   Tag,
+  Trash2,
 } from "lucide-react";
 
 const CATEGORIES = [
@@ -78,103 +79,6 @@ type Treatment = {
   aftercare?: string[];
 };
 
-const INITIAL_TREATMENTS: Treatment[] = [
-  {
-    id: "1",
-    name: "Teeth Whitening",
-    category: "Cosmetic",
-    duration: "45 mins",
-    price: 6500,
-    description:
-      "In-office bleaching treatment that lifts stains and brightens the smile by several shades in a single visit.",
-    treatmentId: "TRT-1001",
-    sessions: "1",
-    recoveryTime: "None",
-    anesthesia: "None",
-    createdDate: "2023-03-11 09:00:00",
-    procedureSteps: [
-      "Shade assessment and gum protection with a barrier gel",
-      "Application of whitening agent activated with LED light",
-      "Two to three cycles of 15 minutes with reapplication",
-    ],
-    aftercare: [
-      "Avoid coffee, tea, and red wine for 48 hours",
-      "Use a sensitivity toothpaste if mild sensitivity occurs",
-    ],
-  },
-  {
-    id: "2",
-    name: "Root Canal Treatment",
-    category: "Restorative",
-    duration: "90 mins",
-    price: 12000,
-    description:
-      "Removes infected pulp tissue, cleans and seals the root canal system to save a severely decayed or infected tooth.",
-    treatmentId: "TRT-1002",
-    sessions: "2",
-    recoveryTime: "2-3 days",
-    anesthesia: "Local",
-    createdDate: "2022-11-20 11:30:00",
-    procedureSteps: [
-      "Local anesthesia and isolation of the tooth with a rubber dam",
-      "Access opening and removal of infected pulp",
-      "Cleaning, shaping, and obturation of the root canals",
-      "Placement of a temporary or permanent filling",
-    ],
-    aftercare: [
-      "Avoid chewing on the treated side until the crown is placed",
-      "Mild soreness for 2-3 days is normal; use prescribed painkillers if needed",
-    ],
-  },
-  {
-    id: "3",
-    name: "Dental Implant",
-    category: "Surgical",
-    duration: "120 mins",
-    price: 55000,
-    description:
-      "Titanium implant post surgically placed into the jawbone to replace a missing tooth root, topped later with a crown.",
-    treatmentId: "TRT-1003",
-    sessions: "3",
-    recoveryTime: "3-6 months for full integration",
-    anesthesia: "Local",
-    createdDate: "2023-07-02 08:45:00",
-    procedureSteps: [
-      "Jawbone assessment via 3D imaging and treatment planning",
-      "Surgical placement of the titanium implant fixture",
-      "Healing period for osseointegration",
-      "Abutment and crown placement",
-    ],
-    aftercare: [
-      "Soft diet for the first week",
-      "Avoid smoking during the healing period to protect integration",
-    ],
-  },
-  {
-    id: "4",
-    name: "Scaling and Polishing",
-    category: "Preventive",
-    duration: "30 mins",
-    price: 2500,
-    description:
-      "Routine cleaning that removes plaque and tartar buildup above and below the gumline, followed by a polish.",
-    treatmentId: "TRT-1004",
-    sessions: "1",
-    recoveryTime: "None",
-    anesthesia: "None",
-    createdDate: "2024-02-05 10:15:00",
-    procedureSteps: [
-      "Ultrasonic scaling to remove plaque and calculus",
-      "Hand scaling for stubborn deposits near the gumline",
-      "Polishing with a rotary brush and prophylaxis paste",
-    ],
-    aftercare: [
-      "Mild gum sensitivity for a day is normal",
-      "Recommended every 6 months for maintenance",
-    ],
-  },
-];
-
 const EMPTY_FORM = {
   name: "",
   category: CATEGORIES[0],
@@ -196,7 +100,6 @@ const inputClass =
 
 const textareaClass =
   "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
-
 
 function treatmentToForm(t: Treatment): FormState {
   return {
@@ -225,6 +128,8 @@ export default function TreatmentsPage() {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [locationId, setLocationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Treatment | null>(null);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [modalOpen, setModalOpen] = useState(false);
@@ -294,6 +199,34 @@ export default function TreatmentsPage() {
     setEditingId(t.id);
     setForm(treatmentToForm(t));
     setModalOpen(true);
+  }
+
+  function requestDeleteTreatment(t: Treatment) {
+    setDeleteTarget(t);
+  }
+
+  async function confirmDeleteTreatment() {
+    if (!deleteTarget) return;
+    const t = deleteTarget;
+
+    setDeletingId(t.id);
+    try {
+      const res = await axios.delete(`/api/treatment/${t.id}`);
+      if (res.data?.success) {
+        setTreatments((prev) => prev.filter((x) => x.id !== t.id));
+        setSelectedTreatment((prev) => (prev?.id === t.id ? null : prev));
+      }
+    } catch (err) {
+      console.error("Error deleting treatment:", err);
+      if (axios.isAxiosError(err)) {
+        alert(err.response?.data?.error || "Failed to delete treatment.");
+      } else {
+        alert("An unexpected error occurred while deleting.");
+      }
+    } finally {
+      setDeletingId(null);
+      setDeleteTarget(null);
+    }
   }
 
   const filtered = useMemo(() => {
@@ -599,16 +532,29 @@ export default function TreatmentsPage() {
                         </div>
                       )}
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(t);
-                        }}
-                        aria-label="Edit treatment"
-                        className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow transition hover:bg-white"
-                      >
-                        <SquarePen className="h-4 w-4 text-slate-600" strokeWidth={2} />
-                      </button>
+                      <div className="absolute right-3 top-3 flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(t);
+                          }}
+                          aria-label="Edit treatment"
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow transition hover:bg-white"
+                        >
+                          <SquarePen className="h-4 w-4 text-slate-600" strokeWidth={2} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            requestDeleteTreatment(t);
+                          }}
+                          disabled={deletingId === t.id}
+                          aria-label="Delete treatment"
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4 text-slate-600" strokeWidth={2} />
+                        </button>
+                      </div>
                     </div>
 
                     <p className="mt-4 text-[1.02rem] font-semibold text-slate-900">{t.name}</p>
@@ -889,6 +835,15 @@ export default function TreatmentsPage() {
                 <ChevronLeft className="h-4 w-4" strokeWidth={2} />
                 Back
               </button>
+              <button
+                onClick={() => requestDeleteTreatment(selectedTreatment)}
+                disabled={deletingId === selectedTreatment.id}
+                aria-label="Delete treatment"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.85rem] font-medium text-rose-500 transition-colors hover:bg-rose-50 disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                Delete
+              </button>
             </div>
 
             <div className="px-6 py-6">
@@ -1058,6 +1013,43 @@ export default function TreatmentsPage() {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 px-4">
+          <div
+            onClick={() => setDeleteTarget(null)}
+            className="absolute inset-0"
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-500">
+              <Trash2 className="h-5 w-5" strokeWidth={2} />
+            </div>
+            <h3 className="mt-4 text-[1.05rem] font-semibold text-slate-900">
+              Do you want to delete {deleteTarget.name} ?
+            </h3>
+
+            <div className="mt-6 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={confirmDeleteTreatment}
+                disabled={deletingId === deleteTarget.id}
+                className="flex-1 rounded-full bg-rose-500 px-4 py-2.5 text-[0.9rem] font-medium text-white transition-colors hover:bg-rose-600 disabled:opacity-60"
+              >
+                {deletingId === deleteTarget.id ? "Deleting..." : "Delete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deletingId === deleteTarget.id}
+                className="flex-1 rounded-full border border-slate-900/10 px-4 py-2.5 text-[0.9rem] font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
