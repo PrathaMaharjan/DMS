@@ -24,8 +24,6 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Only the landing page gets the transparent-over-hero, white-text treatment
-  // before scrolling. Every other page is always dark-on-light.
   const isLanding = pathname === "/";
   const light = isLanding && !scrolled;
 
@@ -47,7 +45,7 @@ export default function Navbar() {
             light ? "text-white" : "text-slate-900",
           ].join(" ")}
         >
-          Chitwan Dental Clinic
+          Chitwan Dental Home
         </Link>
 
         {/* Desktop Navigation */}

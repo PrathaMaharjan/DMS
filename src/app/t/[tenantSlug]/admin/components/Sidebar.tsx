@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useParams, useRouter } from "next/navigation";
+import axios from "axios";
 import {
   LayoutDashboard,
   Stethoscope,
@@ -12,10 +13,10 @@ import {
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "", icon: LayoutDashboard, exact: true },
-  { label: "Doctors", href: "/doctors", icon: Stethoscope },
   { label: "Appointments", href: "/appointments", icon: CalendarDays },
-  { label: "Treatments", href: "/treatments", icon: CalendarDays },
+  { label: "Doctors", href: "/doctors", icon: Stethoscope },
   { label: "Patients", href: "/patients", icon: Users },
+  { label: "Treatments", href: "/treatments", icon: CalendarDays },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -27,10 +28,11 @@ function Sidebar() {
   const adminRoot = `/t/${params.tenantSlug}/admin`;
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", {
-      method: "POST",
-      credentials: "include",
-    });
+    await axios.post(
+      "/api/auth/logout",
+      {},
+      { withCredentials: true }
+    );
     router.push(`/login`);
     router.refresh();
   }

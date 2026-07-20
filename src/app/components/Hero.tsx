@@ -30,7 +30,7 @@ export default function Hero() {
           <div className="mt-10 flex flex-wrap items-center gap-5">
 
           <Link
-  href="/book"
+  href="/booking"
   className="group relative inline-flex h-14 items-center overflow-hidden rounded-full bg-white pl-7 pr-16 text-slate-900 shadow-lg"
 >
 
