@@ -564,19 +564,7 @@ export default function PatientsPage() {
 
             <div className="px-6 py-6">
               <form onSubmit={handleSubmit} className="space-y-8">
-                <div className="flex items-center gap-4 rounded-2xl border border-slate-900/5 bg-white p-4 shadow-sm">
-                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-400">
-                    {form.imageUrl ? (
-                      <Image src={form.imageUrl} alt="Patient preview" fill unoptimized className="object-cover" />
-                    ) : (
-                      <ImagePlus className="h-5 w-5" strokeWidth={1.8} />
-                    )}
-                  </div>
-                  <label className="cursor-pointer rounded-full border border-slate-900/10 px-4 py-2 text-[0.85rem] font-medium text-slate-700 transition-colors hover:bg-slate-50">
-                    Upload photo
-                    <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
-                  </label>
-                </div>
+
 
                 {FORM_SECTIONS.map((section) => (
                   <div

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import axios from "axios";
 import {
   Search,
   Plus,
@@ -221,7 +222,9 @@ function linesToArray(value: string): string[] {
 }
 
 export default function TreatmentsPage() {
-  const [treatments, setTreatments] = useState<Treatment[]>(INITIAL_TREATMENTS);
+  const [treatments, setTreatments] = useState<Treatment[]>([]);
+  const [locationId, setLocationId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [modalOpen, setModalOpen] = useState(false);
@@ -232,6 +235,47 @@ export default function TreatmentsPage() {
   const [profileTab, setProfileTab] = useState<"detail" | "procedure" | "aftercare">(
     "detail"
   );
+
+  async function loadData() {
+    try {
+      setLoading(true);
+      // Fetch locations/services first to get locationId
+      const servicesRes = await axios.get("/api/services");
+      if (servicesRes.data?.success && servicesRes.data.data.services?.length > 0) {
+        setLocationId(servicesRes.data.data.services[0].locationId);
+      }
+
+      // Fetch treatments
+      const treatmentsRes = await axios.get("/api/treatment");
+      if (treatmentsRes.data?.success) {
+        const dbTreatments = treatmentsRes.data.data.treatments || [];
+        const mapped = dbTreatments.map((t: any, index: number) => ({
+          id: t.id,
+          name: t.name,
+          category: CATEGORIES.find(c => c.toLowerCase() === t.category) || t.category,
+          duration: `${t.durationMinutes} mins`,
+          price: t.priceCents / 100,
+          description: t.description || "",
+          imageUrl: undefined,
+          treatmentId: `TRT-${1000 + index + 1}`,
+          sessions: String(t.sessions || 1),
+          recoveryTime: t.recoveryTime || "",
+          anesthesia: t.anesthesia ? (t.anesthesia.charAt(0).toUpperCase() + t.anesthesia.slice(1)) : "None",
+          procedureSteps: t.procedureSteps || [],
+          aftercare: t.aftercareInstructions || [],
+        }));
+        setTreatments(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to load treatments data", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   function openProfile(t: Treatment) {
     setSelectedTreatment(t);
@@ -281,7 +325,7 @@ export default function TreatmentsPage() {
     update("imageUrl", url);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     const { procedureSteps, aftercare, price, ...rest } = form;
@@ -289,50 +333,123 @@ export default function TreatmentsPage() {
     const aftercareList = linesToArray(aftercare);
     const priceNumber = Number(price) || 0;
 
-    if (modalMode === "edit" && editingId) {
-      setTreatments((prev) =>
-        prev.map((t) =>
-          t.id === editingId
-            ? {
-                ...t,
-                ...rest,
-                price: priceNumber,
-                procedureSteps: procedureList,
-                aftercare: aftercareList,
-              }
-            : t
-        )
-      );
+    const durationVal = parseInt(form.duration.replace(/\D/g, ""), 10) || 30;
+    const priceVal = Math.round(priceNumber * 100);
+    const sessionsVal = parseInt(form.sessions, 10) || 1;
+    const anesthesiaVal = form.anesthesia.toLowerCase();
 
-      setSelectedTreatment((prev) =>
-        prev && prev.id === editingId
-          ? {
-              ...prev,
-              ...rest,
-              price: priceNumber,
-              procedureSteps: procedureList,
-              aftercare: aftercareList,
-            }
-          : prev
-      );
-    } else {
-      setTreatments((prev) => [
-        {
-          id: crypto.randomUUID(),
-          treatmentId: `TRT-${1000 + prev.length + 1}`,
-          createdDate: new Date().toISOString().slice(0, 16).replace("T", " "),
-          ...rest,
-          price: priceNumber,
+    try {
+      if (modalMode === "edit" && editingId) {
+        const payload = {
+          name: form.name,
+          category: form.category.toLowerCase(),
+          durationMinutes: durationVal,
+          priceCents: priceVal,
+          sessions: sessionsVal,
+          anesthesia: anesthesiaVal,
+          recoveryTime: form.recoveryTime || null,
+          description: form.description || null,
           procedureSteps: procedureList,
-          aftercare: aftercareList,
-        },
-        ...prev,
-      ]);
-    }
+          aftercareInstructions: aftercareList,
+        };
 
-    setForm(EMPTY_FORM);
-    setEditingId(null);
-    setModalOpen(false);
+        const res = await axios.patch(`/api/treatment/${editingId}`, payload);
+        if (res.data?.success) {
+          const updatedTreatment = res.data.data.treatment;
+          setTreatments((prev) =>
+            prev.map((t) =>
+              t.id === editingId
+                ? {
+                    ...t,
+                    name: updatedTreatment.name,
+                    category: CATEGORIES.find(c => c.toLowerCase() === updatedTreatment.category) || updatedTreatment.category,
+                    duration: `${updatedTreatment.durationMinutes} mins`,
+                    price: updatedTreatment.priceCents / 100,
+                    description: updatedTreatment.description || "",
+                    sessions: String(updatedTreatment.sessions || 1),
+                    recoveryTime: updatedTreatment.recoveryTime || "",
+                    anesthesia: updatedTreatment.anesthesia ? (updatedTreatment.anesthesia.charAt(0).toUpperCase() + updatedTreatment.anesthesia.slice(1)) : "None",
+                    procedureSteps: updatedTreatment.procedureSteps || [],
+                    aftercare: updatedTreatment.aftercareInstructions || [],
+                  }
+                : t
+            )
+          );
+
+          setSelectedTreatment((prev) =>
+            prev && prev.id === editingId
+              ? {
+                  ...prev,
+                  name: updatedTreatment.name,
+                  category: CATEGORIES.find(c => c.toLowerCase() === updatedTreatment.category) || updatedTreatment.category,
+                  duration: `${updatedTreatment.durationMinutes} mins`,
+                  price: updatedTreatment.priceCents / 100,
+                  description: updatedTreatment.description || "",
+                  sessions: String(updatedTreatment.sessions || 1),
+                  recoveryTime: updatedTreatment.recoveryTime || "",
+                  anesthesia: updatedTreatment.anesthesia ? (updatedTreatment.anesthesia.charAt(0).toUpperCase() + updatedTreatment.anesthesia.slice(1)) : "None",
+                  procedureSteps: updatedTreatment.procedureSteps || [],
+                  aftercare: updatedTreatment.aftercareInstructions || [],
+                }
+              : prev
+          );
+        }
+      } else {
+        if (!locationId) {
+          alert("Could not determine location ID. Please configure services first.");
+          return;
+        }
+
+        const payload = {
+          locationId,
+          name: form.name,
+          category: form.category.toLowerCase(),
+          durationMinutes: durationVal,
+          priceCents: priceVal,
+          sessions: sessionsVal,
+          anesthesia: anesthesiaVal,
+          recoveryTime: form.recoveryTime || null,
+          description: form.description || null,
+          procedureSteps: procedureList,
+          aftercareInstructions: aftercareList,
+        };
+
+        const res = await axios.post("/api/treatment", payload);
+        if (res.data?.success) {
+          const newTreatment = res.data.data.treatment;
+          setTreatments((prev) => [
+            {
+              id: newTreatment.id,
+              treatmentId: `TRT-${1000 + prev.length + 1}`,
+              createdDate: new Date(newTreatment.createdAt).toISOString().slice(0, 16).replace("T", " "),
+              name: newTreatment.name,
+              category: CATEGORIES.find(c => c.toLowerCase() === newTreatment.category) || newTreatment.category,
+              duration: `${newTreatment.durationMinutes} mins`,
+              price: newTreatment.priceCents / 100,
+              description: newTreatment.description || "",
+              imageUrl: undefined,
+              sessions: String(newTreatment.sessions || 1),
+              recoveryTime: newTreatment.recoveryTime || "",
+              anesthesia: newTreatment.anesthesia ? (newTreatment.anesthesia.charAt(0).toUpperCase() + newTreatment.anesthesia.slice(1)) : "None",
+              procedureSteps: newTreatment.procedureSteps || [],
+              aftercare: newTreatment.aftercareInstructions || [],
+            },
+            ...prev,
+          ]);
+        }
+      }
+
+      setForm(EMPTY_FORM);
+      setEditingId(null);
+      setModalOpen(false);
+    } catch (err) {
+      console.error("Error submitting treatment:", err);
+      if (axios.isAxiosError(err)) {
+        alert(err.response?.data?.error || "An error occurred.");
+      } else {
+        alert("An error occurred.");
+      }
+    }
   }
 
   const stats = [
@@ -447,74 +564,81 @@ export default function TreatmentsPage() {
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4">
-            {filtered.map((t) => {
-              const CategoryIcon = CATEGORY_ICONS[t.category] ?? Sparkles;
-              const color = CATEGORY_COLORS[t.category] ?? "bg-slate-100 text-slate-700";
+            {loading ? (
+              <div className="col-span-full py-16 text-center text-slate-500">
+                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-[#7da3b3]" />
+                <p className="mt-4 text-[0.9rem]">Loading treatments...</p>
+              </div>
+            ) : (
+              filtered.map((t) => {
+                const CategoryIcon = CATEGORY_ICONS[t.category] ?? Sparkles;
+                const color = CATEGORY_COLORS[t.category] ?? "bg-slate-100 text-slate-700";
 
-              return (
-                <div
-                  key={t.id}
-                  onClick={() => openProfile(t)}
-                  className="group cursor-pointer rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#7da3b3]/30 hover:shadow-lg"
-                >
-<div className="relative -m-6 mb-5">
-  {t.imageUrl ? (
-    <div className="relative h-44 w-full overflow-hidden rounded-t-2xl">
-      <Image
-        src={t.imageUrl}
-        alt={t.name}
-        fill
-        unoptimized
-        className="object-cover transition-transform duration-300 group-hover:scale-105"
-      />
-    </div>
-  ) : (
-    <div
-      className={`flex h-44 w-full items-center justify-center rounded-t-2xl ${color}`}
-    >
-      <CategoryIcon className="h-14 w-14" strokeWidth={2} />
-    </div>
-  )}
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => openProfile(t)}
+                    className="group cursor-pointer rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#7da3b3]/30 hover:shadow-lg"
+                  >
+                    <div className="relative -m-6 mb-5">
+                      {t.imageUrl ? (
+                        <div className="relative h-44 w-full overflow-hidden rounded-t-2xl">
+                          <Image
+                            src={t.imageUrl}
+                            alt={t.name}
+                            fill
+                            unoptimized
+                            className="object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        </div>
+                      ) : (
+                        <div
+                          className={`flex h-44 w-full items-center justify-center rounded-t-2xl ${color}`}
+                        >
+                          <CategoryIcon className="h-14 w-14" strokeWidth={2} />
+                        </div>
+                      )}
 
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      openEditModal(t);
-    }}
-    aria-label="Edit treatment"
-    className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow transition hover:bg-white"
-  >
-    <SquarePen className="h-4 w-4 text-slate-600" strokeWidth={2} />
-  </button>
-</div>
-
-                  <p className="mt-4 text-[1.02rem] font-semibold text-slate-900">{t.name}</p>
-
-                  <span className="mt-2 inline-flex items-center rounded-full bg-[#7da3b3]/10 px-2.5 py-1 text-[0.75rem] font-medium text-[#3f6274]">
-                    {t.category}
-                  </span>
-
-                  <div className="mt-3 flex items-center gap-1.5 text-[0.8rem] text-slate-500">
-                    <Clock className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                    {t.duration}
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between border-t border-slate-900/5 pt-4">
-                    <div className="flex items-center gap-1">
-                      <Banknote className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                      <span className="text-[0.85rem] font-medium text-slate-700">
-                        NPR {t.price.toLocaleString()}
-                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(t);
+                        }}
+                        aria-label="Edit treatment"
+                        className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow transition hover:bg-white"
+                      >
+                        <SquarePen className="h-4 w-4 text-slate-600" strokeWidth={2} />
+                      </button>
                     </div>
-                    <p className="text-[0.8rem] text-slate-500">
-                      {t.sessions ?? "1"} session{t.sessions === "1" ? "" : "s"}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
 
-            {filtered.length === 0 && (
+                    <p className="mt-4 text-[1.02rem] font-semibold text-slate-900">{t.name}</p>
+
+                    <span className="mt-2 inline-flex items-center rounded-full bg-[#7da3b3]/10 px-2.5 py-1 text-[0.75rem] font-medium text-[#3f6274]">
+                      {t.category}
+                    </span>
+
+                    <div className="mt-3 flex items-center gap-1.5 text-[0.8rem] text-slate-500">
+                      <Clock className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                      {t.duration}
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between border-t border-slate-900/5 pt-4">
+                      <div className="flex items-center gap-1">
+                        <Banknote className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                        <span className="text-[0.85rem] font-medium text-slate-700">
+                          NPR {t.price.toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-[0.8rem] text-slate-500">
+                        {t.sessions ?? "1"} session{t.sessions === "1" ? "" : "s"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+
+            {filtered.length === 0 && !loading && (
               <div className="col-span-full rounded-2xl border border-dashed border-slate-900/15 bg-white py-16 text-center text-slate-500">
                 No treatments match your filters.
               </div>

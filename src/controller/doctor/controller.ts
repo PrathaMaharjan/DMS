@@ -53,15 +53,15 @@ async function findOwnedDoctor(doctorId: string, orgId: string) {
 
 export type CreateDoctorResult =
   | {
-      success: true;
-      doctor: {
-        id: string;
-        name: string;
-        email: string;
-        photoUrl: string | null;
-      };
-      emailSent: boolean;
-    }
+    success: true;
+    doctor: {
+      id: string;
+      name: string;
+      email: string;
+      photoUrl: string | null;
+    };
+    emailSent: boolean;
+  }
   | { success: false; error: string; code: DoctorErrorCode };
 
 export async function createDoctor(
@@ -177,7 +177,7 @@ export async function createDoctor(
     if (getPgErrorCode(err) === "23505") {
       return {
         success: false,
-        error: "A staff member with this email already exists.",
+        error: "A staff member with this email/phone number already exists.",
         code: "DUPLICATE",
       };
     }
@@ -193,17 +193,17 @@ export async function createDoctor(
 // ----------------------------------get doctor ------------------------------------------
 export type GetDoctorsResult =
   | {
-      success: true;
-      doctors: {
-        id: string;
-        name: string;
-        email: string;
-        photoUrl: string | null;
-        specialization: string | null;
-        yearsOfExperience: number | null;
-      }[];
-      pagination: { total: number; limit: number; offset: number };
-    }
+    success: true;
+    doctors: {
+      id: string;
+      name: string;
+      email: string;
+      photoUrl: string | null;
+      specialization: string | null;
+      yearsOfExperience: number | null;
+    }[];
+    pagination: { total: number; limit: number; offset: number };
+  }
   | { success: false; error: string; code: DoctorErrorCode };
 
 const DEFAULT_LIMIT = 20;
@@ -223,17 +223,17 @@ export async function getDoctors(
 
     const whereClause = locationId
       ? and(
-          eq(userLocationRoles.role, "clinical"),
-          eq(userLocationRoles.locationId, locationId),
-          eq(users.orgId, session.orgId),
-          isNull(users.deletedAt),
-        )
+        eq(userLocationRoles.role, "clinical"),
+        eq(userLocationRoles.locationId, locationId),
+        eq(users.orgId, session.orgId),
+        isNull(users.deletedAt),
+      )
       : and(
-          eq(userLocationRoles.role, "clinical"),
-          eq(users.orgId, session.orgId),
-          eq(users.isActive, true),
-          isNull(users.deletedAt),
-        );
+        eq(userLocationRoles.role, "clinical"),
+        eq(users.orgId, session.orgId),
+        eq(users.isActive, true),
+        isNull(users.deletedAt),
+      );
     const [results, countResult] = await Promise.all([
       db
         .select({
@@ -262,18 +262,18 @@ export async function getDoctors(
     const doctorIds = results.map((d) => d.id);
     const patientCounts = doctorIds.length
       ? await db
-          .select({
-            providerId: appointments.providerId,
-            patientCount: sql<number>`count(distinct ${appointments.patientId})::int`,
-          })
-          .from(appointments)
-          .where(
-            and(
-              inArray(appointments.providerId, doctorIds),
-              eq(appointments.status, "completed"),
-            ),
-          )
-          .groupBy(appointments.providerId)
+        .select({
+          providerId: appointments.providerId,
+          patientCount: sql<number>`count(distinct ${appointments.patientId})::int`,
+        })
+        .from(appointments)
+        .where(
+          and(
+            inArray(appointments.providerId, doctorIds),
+            eq(appointments.status, "completed"),
+          ),
+        )
+        .groupBy(appointments.providerId)
       : [];
     const countsByDoctor = new Map(
       patientCounts.map((p) => [p.providerId, p.patientCount]),
@@ -302,9 +302,9 @@ export async function getDoctors(
 
 export type UpdateDoctorResult =
   | {
-      success: true;
-      doctor: { id: string };
-    }
+    success: true;
+    doctor: { id: string };
+  }
   | { success: false; error: string; code: DoctorErrorCode };
 
 export async function updateDoctor(
@@ -453,18 +453,18 @@ export type HistoryErrorCode = "UNAUTHORIZED" | "NOT_FOUND" | "SERVER_ERROR";
 
 export type DoctorAppointmentHistoryResult =
   | {
-      success: true;
-      appointments: {
-        id: string;
-        startTime: Date;
-        endTime: Date;
-        status: string;
-        serviceName: string;
-        patientId: string;
-        patientName: string;
-      }[];
-      pagination: { total: number; limit: number; offset: number };
-    }
+    success: true;
+    appointments: {
+      id: string;
+      startTime: Date;
+      endTime: Date;
+      status: string;
+      serviceName: string;
+      patientId: string;
+      patientName: string;
+    }[];
+    pagination: { total: number; limit: number; offset: number };
+  }
   | { success: false; error: string; code: HistoryErrorCode };
 
 export async function getAppointmentHistoryByDoctor(
@@ -542,17 +542,17 @@ export async function getAppointmentHistoryByDoctor(
 // ------------------------- get Patent History ------------------------------------
 export type PatientHistoryByDoctorResult =
   | {
-      success: true;
-      visits: {
-        appointmentId: string;
-        startTime: Date;
-        status: string;
-        serviceName: string;
-        patientId: string;
-        patientName: string;
-      }[];
-      pagination: { total: number; limit: number; offset: number };
-    }
+    success: true;
+    visits: {
+      appointmentId: string;
+      startTime: Date;
+      status: string;
+      serviceName: string;
+      patientId: string;
+      patientName: string;
+    }[];
+    pagination: { total: number; limit: number; offset: number };
+  }
   | { success: false; error: string; code: HistoryErrorCode };
 export async function getPatientHistoryByDoctor(
   doctorId: string,
@@ -564,7 +564,7 @@ export async function getPatientHistoryByDoctor(
     const limit = Math.min(Math.max(options?.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
     const offset = Math.max(options?.offset ?? 0, 0);
 
-      // Same ownership check - confirms the doctor belongs to this org before
+    // Same ownership check - confirms the doctor belongs to this org before
     // revealing any of their patient history.
     const doctor = await db.query.users.findFirst({
       where: and(eq(users.id, doctorId), eq(users.orgId, session.orgId)),
@@ -574,7 +574,7 @@ export async function getPatientHistoryByDoctor(
     }
 
     const whereClause = eq(appointments.providerId, doctorId);
-        const [results, countResult] = await Promise.all([
+    const [results, countResult] = await Promise.all([
       db
         .select({
           appointmentId: appointments.id,
@@ -595,7 +595,7 @@ export async function getPatientHistoryByDoctor(
     ]);
 
     const total = countResult[0]?.count ?? 0;
-        return { success: true, visits: results, pagination: { total, limit, offset } };
+    return { success: true, visits: results, pagination: { total, limit, offset } };
   } catch (err) {
     if (err instanceof SessionError) {
       return { success: false, error: err.message, code: "UNAUTHORIZED" };

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import axios from "axios";
 import {
   Search,
   Plus,
@@ -42,6 +43,25 @@ const SPECIALIZATIONS = [
   "Oral Surgery",
   "Pediatric Dentistry",
 ];
+
+const SPECIALIZATION_MAP_BACKEND: Record<string, string> = {
+  "General Dentistry": "general_dentistry",
+  "Orthodontics": "orthodontics",
+  "Endodontics": "endodontics",
+  "Periodontics": "periodontics",
+  "Oral Surgery": "oral_surgery",
+  "Pediatric Dentistry": "pediatric_dentistry",
+};
+
+const SPECIALIZATION_MAP_FRONTEND: Record<string, string> = {
+  "general_dentistry": "General Dentistry",
+  "orthodontics": "Orthodontics",
+  "endodontics": "Endodontics",
+  "periodontics": "Periodontics",
+  "oral_surgery": "Oral Surgery",
+  "pediatric_dentistry": "Pediatric Dentistry",
+  "prosthodontics": "Prosthodontics",
+};
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["Female", "Male", "Other"];
@@ -209,7 +229,7 @@ const inputClass =
 const textareaClass =
   "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
 
-// Turn a Doctor record into editable form fields (arrays -> newline text).
+
 function doctorToForm(doc: Doctor): FormState {
   return {
     name: doc.name,
@@ -237,7 +257,11 @@ function linesToArray(value: string): string[] {
 }
 
 export default function DoctorsPage() {
-  const [doctors, setDoctors] = useState<Doctor[]>(INITIAL_DOCTORS);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [locationId, setLocationId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [query, setQuery] = useState("");
   const [specializationFilter, setSpecializationFilter] = useState("All");
   const [modalOpen, setModalOpen] = useState(false);
@@ -249,6 +273,53 @@ export default function DoctorsPage() {
     "detail"
   );
 
+  async function loadData() {
+    try {
+      setLoading(true);
+      // Fetch locations/services first to get locationId
+      const servicesRes = await axios.get("/api/services");
+      if (servicesRes.data?.success && servicesRes.data.data.services?.length > 0) {
+        setLocationId(servicesRes.data.data.services[0].locationId);
+      }
+
+      // Fetch doctors
+      const res = await axios.get("/api/doctor");
+      if (res.data?.success) {
+        const dbDoctors = res.data.doctors || [];
+        const mapped = dbDoctors.map((d: any, index: number) => ({
+          id: d.id,
+          name: d.name,
+          specialization: SPECIALIZATION_MAP_FRONTEND[d.specialization] || "General Dentistry",
+          experience: String(d.yearsOfExperience ?? 0),
+          email: d.email,
+          phone: d.phone || "",
+          qualification: d.qualification || "BDS",
+          rating: 5.0,
+          patients: d.patientsCheckedUp ?? 0,
+          imageUrl: d.photoUrl || undefined,
+          doctorId: `DOC-${1000 + index + 1}`,
+          age: d.age || "30",
+          bloodGroup: d.bloodGroup || "O+",
+          gender: d.gender || "Female",
+          dob: d.dob || "",
+          createdDate: d.createdAt ? new Date(d.createdAt).toISOString().slice(0, 16).replace("T", " ") : "",
+          address: d.address || "",
+          education: d.education ? [d.education] : [],
+          experienceNotes: d.bio ? [d.bio] : [],
+        }));
+        setDoctors(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to load doctors data", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
   function openProfile(doc: Doctor) {
     setSelectedDoctor(doc);
     setProfileTab("detail");
@@ -258,6 +329,7 @@ export default function DoctorsPage() {
     setModalMode("add");
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setSubmitError(null);
     setModalOpen(true);
   }
 
@@ -265,6 +337,7 @@ export default function DoctorsPage() {
     setModalMode("edit");
     setEditingId(doc.id);
     setForm(doctorToForm(doc));
+    setSubmitError(null);
     setModalOpen(true);
   }
 
@@ -298,51 +371,106 @@ export default function DoctorsPage() {
     update("imageUrl", url);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitError(null);
+    setSubmitting(true);
 
     const { education, experienceNotes, ...rest } = form;
     const educationList = linesToArray(education);
     const experienceNotesList = linesToArray(experienceNotes);
 
-    if (modalMode === "edit" && editingId) {
-      setDoctors((prev) =>
-        prev.map((d) =>
-          d.id === editingId
-            ? {
+    try {
+      if (modalMode === "edit" && editingId) {
+        setDoctors((prev) =>
+          prev.map((d) =>
+            d.id === editingId
+              ? {
                 ...d,
                 ...rest,
                 education: educationList,
                 experienceNotes: experienceNotesList,
               }
-            : d
-        )
-      );
-      // Keep the side panel in sync if the doctor being edited is currently open.
-      setSelectedDoctor((prev) =>
-        prev && prev.id === editingId
-          ? { ...prev, ...rest, education: educationList, experienceNotes: experienceNotesList }
-          : prev
-      );
-    } else {
-      setDoctors((prev) => [
-        {
-          id: crypto.randomUUID(),
-          rating: 5,
-          patients: 0,
-          doctorId: `DOC-${1000 + prev.length + 1}`,
-          createdDate: new Date().toISOString().slice(0, 16).replace("T", " "),
-          ...rest,
-          education: educationList,
-          experienceNotes: experienceNotesList,
-        },
-        ...prev,
-      ]);
-    }
+              : d
+          )
+        );
+        setSelectedDoctor((prev) =>
+          prev && prev.id === editingId
+            ? { ...prev, ...rest, education: educationList, experienceNotes: experienceNotesList }
+            : prev
+        );
+      } else {
+        if (!locationId) {
+          setSubmitError("Could not determine location ID. Please configure services first.");
+          setSubmitting(false);
+          return;
+        }
 
-    setForm(EMPTY_FORM);
-    setEditingId(null);
-    setModalOpen(false);
+        const payload: Record<string, unknown> = {
+          locationId,
+          name: form.name,
+          email: form.email,
+          password: "Password123!",
+          specialization: SPECIALIZATION_MAP_BACKEND[form.specialization] || "general_dentistry",
+          yearsOfExperience: parseInt(form.experience, 10) || 0,
+          employmentType: "full_time",
+        };
+
+        // Only include optional fields if they have values
+        if (form.phone.trim()) payload.phone = form.phone.trim();
+        if (form.imageUrl) payload.photoKey = form.imageUrl;
+        if (form.qualification) payload.qualification = form.qualification;
+        if (educationList.length > 0) payload.education = educationList.join("\n");
+        if (experienceNotesList.length > 0) payload.bio = experienceNotesList.join("\n");
+        if (form.dob) payload.dateOfBirth = form.dob;
+        if (form.bloodGroup) payload.bloodGroup = form.bloodGroup;
+        if (form.gender) payload.gender = form.gender;
+        if (form.address) payload.address = form.address;
+
+        const res = await axios.post("/api/doctor", payload);
+        if (res.data?.success) {
+          const newDoc = res.data.data.doctor;
+          setDoctors((prev) => [
+            {
+              id: newDoc.id,
+              rating: 5,
+              patients: 0,
+              doctorId: `DOC-${1000 + prev.length + 1}`,
+              createdDate: new Date().toISOString().slice(0, 16).replace("T", " "),
+              name: newDoc.name,
+              email: newDoc.email,
+              phone: form.phone,
+              specialization: form.specialization,
+              experience: form.experience,
+              qualification: form.qualification,
+              imageUrl: newDoc.photoUrl || undefined,
+              age: form.age,
+              bloodGroup: form.bloodGroup,
+              gender: form.gender,
+              dob: form.dob,
+              address: form.address,
+              education: educationList,
+              experienceNotes: experienceNotesList,
+            },
+            ...prev,
+          ]);
+        }
+      }
+
+      setForm(EMPTY_FORM);
+      setEditingId(null);
+      setSubmitError(null);
+      setModalOpen(false);
+    } catch (err) {
+      console.error("Error submitting doctor:", err);
+      if (axios.isAxiosError(err)) {
+        setSubmitError(err.response?.data?.error || "An error occurred. Please try again.");
+      } else {
+        setSubmitError("An unexpected error occurred. Please try again.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const stats = [
@@ -410,13 +538,13 @@ export default function DoctorsPage() {
                   {stat.value}
                 </p>
 
-          
+
               </div>
             );
           })}
         </div>
 
-    
+
         <div className="mt-10 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
@@ -457,84 +585,88 @@ export default function DoctorsPage() {
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4">
-            {filtered.map((doc, i) => {
-              const initials = doc.name
-                .replace("Dr.", "")
-                .trim()
-                .split(" ")
-                .map((p) => p[0])
-                .slice(0, 2)
-                .join("")
-                .toUpperCase();
+            {loading ? (
+              <div className="col-span-full py-16 text-center text-slate-500">
+                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-[#7da3b3]" />
+                <p className="mt-4 text-[0.9rem]">Loading doctors...</p>
+              </div>
+            ) : (
+              filtered.map((doc, i) => {
+                const initials = doc.name
+                  .replace("Dr.", "")
+                  .trim()
+                  .split(" ")
+                  .map((p) => p[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase();
 
-              const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
+                const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
 
-              return (
-                <div
-                  key={doc.id}
-                  onClick={() => openProfile(doc)}
-                  className="group cursor-pointer rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#7da3b3]/30 hover:shadow-lg"
-                >
-                  <div className="flex items-start justify-between">
-                    {doc.imageUrl ? (
-                      <div className="relative h-16 w-16 overflow-hidden rounded-full ring-4 ring-slate-50">
-                        <Image
-                          src={doc.imageUrl}
-                          alt={doc.name}
-                          fill
-                          unoptimized
-                          className="object-cover"
-                        />
+                return (
+                  <div
+                    key={doc.id}
+                    onClick={() => openProfile(doc)}
+                    className="group cursor-pointer rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#7da3b3]/30 hover:shadow-lg"
+                  >
+                    <div className="flex items-start justify-between">
+                      {doc.imageUrl ? (
+                        <div className="relative h-16 w-16 overflow-hidden rounded-full ring-4 ring-slate-50">
+                          <Image
+                            src={doc.imageUrl}
+                            alt={doc.name}
+                            fill
+                            unoptimized
+                            className="object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div
+                          className={`flex h-16 w-16 items-center justify-center rounded-full text-[1.05rem] font-semibold ring-4 ring-slate-50 ${color}`}
+                        >
+                          {initials}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(doc);
+                          }}
+                          aria-label="Edit doctor"
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-slate-100 hover:text-[#3f6274]"
+                        >
+                          <SquarePen className="h-3.5 w-3.5" strokeWidth={2} />
+                        </button>
                       </div>
-                    ) : (
-                      <div
-                        className={`flex h-16 w-16 items-center justify-center rounded-full text-[1.05rem] font-semibold ring-4 ring-slate-50 ${color}`}
-                      >
-                        {initials}
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(doc);
-                        }}
-                        aria-label="Edit doctor"
-                        className="flex h-7 w-7 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-slate-100 hover:text-[#3f6274]"
-                      >
-                        <SquarePen className="h-3.5 w-3.5" strokeWidth={2} />
-                      </button>
+                    </div>
 
+                    <p className="mt-4 text-[1.02rem] font-semibold text-slate-900">{doc.name}</p>
+
+                    <span className="mt-2 inline-flex items-center rounded-full bg-[#7da3b3]/10 px-2.5 py-1 text-[0.75rem] font-medium text-[#3f6274]">
+                      {doc.specialization}
+                    </span>
+
+                    <div className="mt-3 flex items-center gap-1.5 text-[0.8rem] text-slate-500">
+                      <BriefcaseMedical className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                      {doc.experience} years experience
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between border-t border-slate-900/5 pt-4">
+                      <div className="flex items-center gap-1">
+                        <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                        <span className="text-[0.85rem] font-medium text-slate-700">
+                          {doc.rating.toFixed(1)}
+                        </span>
+                      </div>
+                      <p className="text-[0.8rem] text-slate-500">{doc.patients} patients</p>
                     </div>
                   </div>
+                );
+              })
+            )}
 
-                  <p className="mt-4 text-[1.02rem] font-semibold text-slate-900">{doc.name}</p>
-
-                  <span className="mt-2 inline-flex items-center rounded-full bg-[#7da3b3]/10 px-2.5 py-1 text-[0.75rem] font-medium text-[#3f6274]">
-                    {doc.specialization}
-                  </span>
-
-                  <div className="mt-3 flex items-center gap-1.5 text-[0.8rem] text-slate-500">
-                    <BriefcaseMedical className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                    {doc.experience} years experience
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between border-t border-slate-900/5 pt-4">
-                    <div className="flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                      <span className="text-[0.85rem] font-medium text-slate-700">
-                        {doc.rating.toFixed(1)}
-                      </span>
-                    </div>
-                    <p className="text-[0.8rem] text-slate-500">{doc.patients} patients</p>
-                  </div>
-
-
-                </div>
-              );
-            })}
-
-            {filtered.length === 0 && (
+            {filtered.length === 0 && !loading && (
               <div className="col-span-full rounded-2xl border border-dashed border-slate-900/15 bg-white py-16 text-center text-slate-500">
                 No doctors match your filters.
               </div>
@@ -543,7 +675,7 @@ export default function DoctorsPage() {
         </div>
       </div>
 
- 
+
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40">
           <div
@@ -561,252 +693,259 @@ export default function DoctorsPage() {
                 <ChevronLeft className="h-4 w-4" strokeWidth={2} />
                 Back
               </button>
-          
+
             </div>
 
             <div className="px-6 py-6">
-            <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4">
 
-              <div className="flex items-center gap-4">
-                <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-400">
-                  {form.imageUrl ? (
-                    <Image
-                      src={form.imageUrl}
-                      alt="Doctor preview"
-                      fill
-                      unoptimized
-                      className="object-cover"
+                <div className="flex items-center gap-4">
+                  <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-400">
+                    {form.imageUrl ? (
+                      <Image
+                        src={form.imageUrl}
+                        alt="Doctor preview"
+                        fill
+                        unoptimized
+                        className="object-cover"
+                      />
+                    ) : (
+                      <ImagePlus className="h-6 w-6" strokeWidth={1.8} />
+                    )}
+                  </div>
+                  <label className="cursor-pointer rounded-full border border-slate-900/10 px-4 py-2 text-[0.85rem] font-medium text-slate-700 transition-colors hover:bg-slate-50">
+                    Upload photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      className="hidden"
                     />
-                  ) : (
-                    <ImagePlus className="h-6 w-6" strokeWidth={1.8} />
-                  )}
+                  </label>
                 </div>
-                <label className="cursor-pointer rounded-full border border-slate-900/10 px-4 py-2 text-[0.85rem] font-medium text-slate-700 transition-colors hover:bg-slate-50">
-                  Upload photo
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="hidden"
-                  />
-                </label>
-              </div>
 
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <User className="h-3.5 w-3.5" strokeWidth={2} />
-                  Full name
-                </span>
-                <input
-                  required
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => update("name", e.target.value)}
-                  placeholder=""
-                  className={inputClass}
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-4">
-                <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <Mail className="h-3.5 w-3.5" strokeWidth={2} />
-                    Email
-                  </span>
-                  <input
-                    required
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => update("email", e.target.value)}
-
-                    className={inputClass}
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <Phone className="h-3.5 w-3.5" strokeWidth={2} />
-                    Phone
-                  </span>
-                  <input
-                    required
-                    type="tel"
-                    value={form.phone}
-                    onChange={(e) => update("phone", e.target.value)}
-                  
-                    className={inputClass}
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <Stethoscope className="h-3.5 w-3.5" strokeWidth={2} />
-                    Specialization
-                  </span>
-                  <select
-                    value={form.specialization}
-                    onChange={(e) => update("specialization", e.target.value)}
-                    className={inputClass}
-                  >
-                    {SPECIALIZATIONS.map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <BriefcaseMedical className="h-3.5 w-3.5" strokeWidth={2} />
-                    Experience 
-                  </span>
-                  <input
-                    required
-                    type="number"
-                    min={0}
-                    value={form.experience}
-                    onChange={(e) => update("experience", e.target.value)}
-                
-                    className={inputClass}
-                  />
-                </label>
-              </div>
-
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <GraduationCap className="h-3.5 w-3.5" strokeWidth={2} />
-                  Qualification
-                </span>
-                <input
-                  required
-                  type="text"
-                  value={form.qualification}
-                  onChange={(e) => update("qualification", e.target.value)}
-         
-                  className={inputClass}
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-4">
                 <label className="block">
                   <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
                     <User className="h-3.5 w-3.5" strokeWidth={2} />
-                    Age
+                    Full name
                   </span>
                   <input
-                    type="number"
-                    min={0}
-                    value={form.age}
-                    onChange={(e) => update("age", e.target.value)}
-                 
+                    required
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => update("name", e.target.value)}
+                    placeholder=""
                     className={inputClass}
                   />
                 </label>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <Mail className="h-3.5 w-3.5" strokeWidth={2} />
+                      Email
+                    </span>
+                    <input
+                      required
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => update("email", e.target.value)}
+
+                      className={inputClass}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <Phone className="h-3.5 w-3.5" strokeWidth={2} />
+                      Phone
+                    </span>
+                    <input
+                      required
+                      type="tel"
+                      value={form.phone}
+                      onChange={(e) => update("phone", e.target.value)}
+
+                      className={inputClass}
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <Stethoscope className="h-3.5 w-3.5" strokeWidth={2} />
+                      Specialization
+                    </span>
+                    <select
+                      value={form.specialization}
+                      onChange={(e) => update("specialization", e.target.value)}
+                      className={inputClass}
+                    >
+                      {SPECIALIZATIONS.map((s) => (
+                        <option key={s}>{s}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <BriefcaseMedical className="h-3.5 w-3.5" strokeWidth={2} />
+                      Experience
+                    </span>
+                    <input
+                      required
+                      type="number"
+                      min={0}
+                      value={form.experience}
+                      onChange={(e) => update("experience", e.target.value)}
+
+                      className={inputClass}
+                    />
+                  </label>
+                </div>
+
                 <label className="block">
                   <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <Cake className="h-3.5 w-3.5" strokeWidth={2} />
-                    Date of birth
+                    <GraduationCap className="h-3.5 w-3.5" strokeWidth={2} />
+                    Qualification
+                  </span>
+                  <input
+                    required
+                    type="text"
+                    value={form.qualification}
+                    onChange={(e) => update("qualification", e.target.value)}
+
+                    className={inputClass}
+                  />
+                </label>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <User className="h-3.5 w-3.5" strokeWidth={2} />
+                      Age
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.age}
+                      onChange={(e) => update("age", e.target.value)}
+
+                      className={inputClass}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <Cake className="h-3.5 w-3.5" strokeWidth={2} />
+                      Date of birth
+                    </span>
+                    <input
+                      type="date"
+                      value={form.dob}
+                      onChange={(e) => update("dob", e.target.value)}
+                      max={new Date().toISOString().split("T")[0]}
+                      className={inputClass}
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <Droplet className="h-3.5 w-3.5" strokeWidth={2} />
+                      Blood group
+                    </span>
+                    <select
+                      value={form.bloodGroup}
+                      onChange={(e) => update("bloodGroup", e.target.value)}
+                      className={inputClass}
+                    >
+                      {BLOOD_GROUPS.map((b) => (
+                        <option key={b}>{b}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <VenusAndMars className="h-3.5 w-3.5" strokeWidth={2} />
+                      Gender
+                    </span>
+                    <select
+                      value={form.gender}
+                      onChange={(e) => update("gender", e.target.value)}
+                      className={inputClass}
+                    >
+                      {GENDERS.map((g) => (
+                        <option key={g}>{g}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <label className="block">
+                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                    <MapPin className="h-3.5 w-3.5" strokeWidth={2} />
+                    Address
                   </span>
                   <input
                     type="text"
-                    value={form.dob}
-                    onChange={(e) => update("dob", e.target.value)}
-                  
+                    value={form.address}
+                    onChange={(e) => update("address", e.target.value)}
+
                     className={inputClass}
                   />
                 </label>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
                 <label className="block">
                   <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <Droplet className="h-3.5 w-3.5" strokeWidth={2} />
-                    Blood group
+                    <GraduationCap className="h-3.5 w-3.5" strokeWidth={2} />
+                    Education
                   </span>
-                  <select
-                    value={form.bloodGroup}
-                    onChange={(e) => update("bloodGroup", e.target.value)}
-                    className={inputClass}
-                  >
-                    {BLOOD_GROUPS.map((b) => (
-                      <option key={b}>{b}</option>
-                    ))}
-                  </select>
+                  <textarea
+                    rows={3}
+                    value={form.education}
+                    onChange={(e) => update("education", e.target.value)}
+
+                    className={textareaClass}
+                  />
                 </label>
+
                 <label className="block">
                   <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <VenusAndMars className="h-3.5 w-3.5" strokeWidth={2} />
-                    Gender
+                    <BriefcaseMedical className="h-3.5 w-3.5" strokeWidth={2} />
+                    Experience
                   </span>
-                  <select
-                    value={form.gender}
-                    onChange={(e) => update("gender", e.target.value)}
-                    className={inputClass}
-                  >
-                    {GENDERS.map((g) => (
-                      <option key={g}>{g}</option>
-                    ))}
-                  </select>
+                  <textarea
+                    rows={3}
+                    value={form.experienceNotes}
+                    onChange={(e) => update("experienceNotes", e.target.value)}
+
+                    className={textareaClass}
+                  />
                 </label>
-              </div>
 
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <MapPin className="h-3.5 w-3.5" strokeWidth={2} />
-                  Address
-                </span>
-                <input
-                  type="text"
-                  value={form.address}
-                  onChange={(e) => update("address", e.target.value)}
+                {submitError && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-[0.85rem] text-rose-700">
+                    {submitError}
+                  </div>
+                )}
 
-                  className={inputClass}
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <GraduationCap className="h-3.5 w-3.5" strokeWidth={2} />
-                  Education 
-                </span>
-                <textarea
-                  rows={3}
-                  value={form.education}
-                  onChange={(e) => update("education", e.target.value)}
-
-                  className={textareaClass}
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <BriefcaseMedical className="h-3.5 w-3.5" strokeWidth={2} />
-                  Experience 
-                </span>
-                <textarea
-                  rows={3}
-                  value={form.experienceNotes}
-                  onChange={(e) => update("experienceNotes", e.target.value)}
-                  
-                  className={textareaClass}
-                />
-              </label>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="submit"
-                  className="rounded-full bg-[#7da3b3] px-6 py-2.5 text-[0.9rem] font-medium text-white transition-colors  hover:bg-[#345263]"
-                >
-                  {modalMode === "edit" ? "Save Changes" : "Add Doctor"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="rounded-full px-5 py-2.5 text-[0.9rem] font-medium text-slate-500 transition-colors hover:text-slate-800"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="rounded-full bg-[#7da3b3] px-6 py-2.5 text-[0.9rem] font-medium text-white transition-colors hover:bg-[#345263] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {submitting ? "Saving..." : modalMode === "edit" ? "Save Changes" : "Add Doctor"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalOpen(false)}
+                    className="rounded-full px-5 py-2.5 text-[0.9rem] font-medium text-slate-500 transition-colors hover:text-slate-800"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -869,11 +1008,10 @@ export default function DoctorsPage() {
                       {Array.from({ length: 5 }).map((_, i) => (
                         <Star
                           key={i}
-                          className={`h-3.5 w-3.5 ${
-                            i < Math.round(selectedDoctor.rating)
+                          className={`h-3.5 w-3.5 ${i < Math.round(selectedDoctor.rating)
                               ? "fill-amber-400 text-amber-400"
                               : "fill-slate-200 text-slate-200"
-                          }`}
+                            }`}
                         />
                       ))}
                       <span className="ml-1 font-medium text-slate-700">
@@ -911,11 +1049,10 @@ export default function DoctorsPage() {
                   <button
                     key={tab.key}
                     onClick={() => setProfileTab(tab.key)}
-                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${
-                      profileTab === tab.key
+                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${profileTab === tab.key
                         ? "border-[#3f6274] text-[#3f6274]"
                         : "border-transparent text-slate-500 hover:text-slate-700"
-                    }`}
+                      }`}
                   >
                     {tab.label}
                   </button>
