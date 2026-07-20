@@ -6,6 +6,8 @@ import {
   organizations,
   patients,
   providerProfiles,
+  providerSchedules,
+  treatments,
   userLocationRoles,
   users,
 } from "@/db/schema";
@@ -175,6 +177,15 @@ export async function createDoctor(
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     if (getPgErrorCode(err) === "23505") {
+      const constraint =
+        (err as { cause?: { constraint?: string } })?.cause?.constraint ?? "";
+      if (constraint.includes("phone")) {
+        return {
+          success: false,
+          error: "A staff member with this phone number already exists.",
+          code: "DUPLICATE",
+        };
+      }
       return {
         success: false,
         error: "A staff member with this email already exists.",
@@ -459,7 +470,7 @@ export type DoctorAppointmentHistoryResult =
         startTime: Date;
         endTime: Date;
         status: string;
-        serviceName: string;
+        treatmentName: string; // was serviceName
         patientId: string;
         patientName: string;
       }[];
@@ -500,16 +511,13 @@ export async function getAppointmentHistoryByDoctor(
           startTime: appointments.startTime,
           endTime: appointments.endTime,
           status: appointments.status,
-          serviceName: appointmentTypes.name,
+          treatmentName: treatments.name, // was serviceName: appointmentTypes.name
           patientId: patients.id,
           patientName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`,
         })
         .from(appointments)
         .innerJoin(patients, eq(appointments.patientId, patients.id))
-        .innerJoin(
-          appointmentTypes,
-          eq(appointments.appointmentTypeId, appointmentTypes.id),
-        )
+        .innerJoin(treatments, eq(appointments.treatmentId, treatments.id)) // was appointmentTypes / appointmentTypeId
         .where(whereClause)
         .orderBy(desc(appointments.startTime))
         .limit(limit)
@@ -547,7 +555,7 @@ export type PatientHistoryByDoctorResult =
         appointmentId: string;
         startTime: Date;
         status: string;
-        serviceName: string;
+        treatmentName: string; // was serviceName
         patientId: string;
         patientName: string;
       }[];
@@ -556,15 +564,18 @@ export type PatientHistoryByDoctorResult =
   | { success: false; error: string; code: HistoryErrorCode };
 export async function getPatientHistoryByDoctor(
   doctorId: string,
-  options?: { limit?: number; offset?: number }
+  options?: { limit?: number; offset?: number },
 ): Promise<PatientHistoryByDoctorResult> {
   try {
     const session = await requireSession();
 
-    const limit = Math.min(Math.max(options?.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+    const limit = Math.min(
+      Math.max(options?.limit ?? DEFAULT_LIMIT, 1),
+      MAX_LIMIT,
+    );
     const offset = Math.max(options?.offset ?? 0, 0);
 
-      // Same ownership check - confirms the doctor belongs to this org before
+    // Same ownership check - confirms the doctor belongs to this org before
     // revealing any of their patient history.
     const doctor = await db.query.users.findFirst({
       where: and(eq(users.id, doctorId), eq(users.orgId, session.orgId)),
@@ -574,33 +585,138 @@ export async function getPatientHistoryByDoctor(
     }
 
     const whereClause = eq(appointments.providerId, doctorId);
-        const [results, countResult] = await Promise.all([
+    const [results, countResult] = await Promise.all([
       db
         .select({
           appointmentId: appointments.id,
           startTime: appointments.startTime,
           status: appointments.status,
-          serviceName: appointmentTypes.name,
+          treatmentName: treatments.name, // was serviceName: appointmentTypes.name
           patientId: patients.id,
           patientName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`,
         })
         .from(appointments)
         .innerJoin(patients, eq(appointments.patientId, patients.id))
-        .innerJoin(appointmentTypes, eq(appointments.appointmentTypeId, appointmentTypes.id))
+        .innerJoin(treatments, eq(appointments.treatmentId, treatments.id)) // was appointmentTypes / appointmentTypeId
         .where(whereClause)
         .orderBy(desc(appointments.startTime))
         .limit(limit)
         .offset(offset),
-      db.select({ count: sql<number>`count(*)::int` }).from(appointments).where(whereClause),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(appointments)
+        .where(whereClause),
     ]);
 
     const total = countResult[0]?.count ?? 0;
-        return { success: true, visits: results, pagination: { total, limit, offset } };
+    return {
+      success: true,
+      visits: results,
+      pagination: { total, limit, offset },
+    };
   } catch (err) {
     if (err instanceof SessionError) {
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong loading doctor's patient history.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong loading doctor's patient history.",
+      code: "SERVER_ERROR",
+    };
+  }
+}
+
+// --------------------------------getSingle doctor --------------------------------------
+export type GetDoctorResult =
+  | {
+      success: true;
+      doctor: {
+        id: string;
+        name: string;
+        email: string;
+        phone: string | null;
+        photoUrl: string | null;
+        specialization: string | null;
+        qualification: string | null;
+        education: string | null;
+        bio: string | null;
+        yearsOfExperience: number | null;
+        schedule: {
+          dayOfWeek: number;
+          startTime: string;
+          endTime: string;
+          locationId: string;
+        }[];
+      };
+    }
+  | { success: false; error: string; code: DoctorErrorCode };
+
+export async function getDoctor(doctorId: string): Promise<GetDoctorResult> {
+  try {
+    const session = await requireSession();
+
+    const [record, schedule] = await Promise.all([
+      db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          phone: users.phone,
+          photoUrl: providerProfiles.photoUrl,
+          specialization: providerProfiles.specialization,
+          qualification: providerProfiles.qualification,
+          education: providerProfiles.education,
+          bio: providerProfiles.bio,
+          yearsOfExperience: providerProfiles.yearsOfExperience,
+        })
+        .from(users)
+        .innerJoin(userLocationRoles, eq(userLocationRoles.userId, users.id))
+        .leftJoin(providerProfiles, eq(providerProfiles.userId, users.id))
+        .where(
+          and(
+            eq(users.id, doctorId),
+            eq(users.orgId, session.orgId),
+            eq(userLocationRoles.role, "clinical"),
+            eq(users.isActive, true),
+            isNull(users.deletedAt),
+          ),
+        )
+        .limit(1),
+      db
+        .select({
+          dayOfWeek: providerSchedules.dayOfWeek,
+          startTime: providerSchedules.startTime,
+          endTime: providerSchedules.endTime,
+          locationId: providerSchedules.locationId,
+        })
+        .from(providerSchedules)
+        .where(eq(providerSchedules.userId, doctorId))
+        .orderBy(providerSchedules.dayOfWeek),
+    ]);
+
+    const found = record[0];
+    if (!found) {
+      return { success: false, error: "Doctor not found.", code: "NOT_FOUND" };
+    }
+
+    return {
+      success: true,
+      doctor: {
+        ...found,
+        photoUrl: imagePresets.full(found.photoUrl),
+        schedule,
+      },
+    };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return {
+      success: false,
+      error: "Something went wrong loading the doctor.",
+      code: "SERVER_ERROR",
+    };
   }
 }
