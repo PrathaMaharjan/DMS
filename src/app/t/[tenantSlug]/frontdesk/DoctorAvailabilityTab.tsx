@@ -12,10 +12,7 @@ const DOCTOR_SCHEDULES = [
 export default function DoctorAvailabilityTab() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 rounded-xl border border-sky-100 bg-sky-50/60 p-3.5 text-xs text-sky-800">
-        <AlertCircle className="h-4 w-4 shrink-0" />
-        <span><strong>Front Desk Privilege:</strong> Read-only allocation matrix. Changes require practitioner configuration override.</span>
-      </div>
+
 
       <div className="grid gap-4 sm:grid-cols-2">
         {DOCTOR_SCHEDULES.map((doc, idx) => (
