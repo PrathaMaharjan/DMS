@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import axios from "axios";
 import {
   Mail,
   ArrowRight,
   ArrowLeft,
   AlertCircle,
-  CheckCircle2,
 } from "lucide-react";
 import { z } from "zod";
 
@@ -19,11 +19,11 @@ const forgotPasswordSchema = z.object({
 type FieldErrors = Partial<Record<"email", string>>;
 
 export default function ForgotPasswordPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [isSubmitted, setIsSubmitted] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,10 +50,13 @@ export default function ForgotPasswordPage() {
 
       if (!responseBody?.success) {
         setError(responseBody?.error ?? "Something went wrong. Please try again.");
+        setLoading(false);
         return;
       }
 
-      setIsSubmitted(true);
+      // Send the user straight to OTP verification, carrying the email
+      // along so that page knows which address the code was sent to.
+      router.push(`/verify-otp?email=${encodeURIComponent(result.data.email)}`);
     } catch (err) {
       if (axios.isAxiosError(err)) {
         setError(
@@ -62,7 +65,6 @@ export default function ForgotPasswordPage() {
       } else {
         setError("Something went wrong. Please try again.");
       }
-    } finally {
       setLoading(false);
     }
   }
@@ -91,9 +93,7 @@ export default function ForgotPasswordPage() {
             Reset password
           </h1>
           <p className="mt-2 text-[0.9rem] text-slate-500 max-w-sm mx-auto">
-            {!isSubmitted 
-              ? "Enter your email address and we will send instructions to recover your account." 
-              : "Check your inbox for recovery instructions."}
+            Enter your email address and we will send a code to recover your account.
           </p>
         </div>
 
@@ -105,66 +105,48 @@ export default function ForgotPasswordPage() {
             </div>
           )}
 
-          {!isSubmitted ? (
-            <form onSubmit={handleSubmit} noValidate>
-              <div className="space-y-5">
-                <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <Mail className="h-3.5 w-3.5" strokeWidth={2} />
-                    Email address
-                  </span>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="email@example.com"
-                    className={[
-                      "w-full rounded-xl border bg-slate-50/60 px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:bg-white focus:ring-4",
-                      fieldErrors.email
-                        ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
-                        : "border-slate-900/10 focus:border-sky-400 focus:ring-sky-100",
-                    ].join(" ")}
-                  />
-                  {fieldErrors.email && (
-                    <p className="mt-1.5 text-[0.78rem] text-rose-600">
-                      {fieldErrors.email}
-                    </p>
-                  )}
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="group relative mt-9 h-[52px] w-full overflow-hidden rounded-full border border-[#a5c5d1] shadow-[0_10px_24px_-12px_rgba(125,163,179,0.6)] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                <div className="inline-flex h-[52px] w-full items-center justify-center gap-2 bg-[#7da3b3] px-10 text-[0.95rem] font-medium text-white transition-transform duration-300 group-hover:-translate-y-full">
-                  {loading ? "Sending link..." : "Send Reset Instructions"}
-                  {!loading && <ArrowRight className="h-4 w-4" strokeWidth={2} />}
-                </div>
-                <div className="absolute inset-0 inline-flex h-[52px] w-full translate-y-full items-center justify-center gap-2 bg-white px-10 text-[0.95rem] font-medium text-slate-900 transition-transform duration-300 group-hover:translate-y-0">
-                  {loading ? "Sending link..." : "Send Reset Instructions"}
-                  {!loading && <ArrowRight className="h-4 w-4" strokeWidth={2} />}
-                </div>
-              </button>
-            </form>
-          ) : (
-            <div className="text-center py-4">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 mb-4">
-                <CheckCircle2 className="w-6 h-6" strokeWidth={2} />
-              </div>
-              <h3 className="text-lg font-medium text-slate-900">Link has been sent</h3>
-              <p className="mt-2 text-sm text-slate-500">
-                We've sent recovery info to <span className="font-medium text-slate-700">{email}</span> if it matches a registered account.
-              </p>
-              <button 
-                onClick={() => setIsSubmitted(false)}
-                className="mt-6 text-[0.85rem] font-medium text-sky-700 underline-offset-4 hover:underline"
-              >
-                Resend link
-              </button>
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="space-y-5">
+              <label className="block">
+                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                  <Mail className="h-3.5 w-3.5" strokeWidth={2} />
+                  Email address
+                </span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="email@example.com"
+                  className={[
+                    "w-full rounded-xl border bg-slate-50/60 px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:bg-white focus:ring-4",
+                    fieldErrors.email
+                      ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
+                      : "border-slate-900/10 focus:border-sky-400 focus:ring-sky-100",
+                  ].join(" ")}
+                />
+                {fieldErrors.email && (
+                  <p className="mt-1.5 text-[0.78rem] text-rose-600">
+                    {fieldErrors.email}
+                  </p>
+                )}
+              </label>
             </div>
-          )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="group relative mt-9 h-[52px] w-full overflow-hidden rounded-full border border-[#a5c5d1] shadow-[0_10px_24px_-12px_rgba(125,163,179,0.6)] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <div className="inline-flex h-[52px] w-full items-center justify-center gap-2 bg-[#7da3b3] px-10 text-[0.95rem] font-medium text-white transition-transform duration-300 group-hover:-translate-y-full">
+                {loading ? "Sending code..." : "Send Reset Code"}
+                {!loading && <ArrowRight className="h-4 w-4" strokeWidth={2} />}
+              </div>
+              <div className="absolute inset-0 inline-flex h-[52px] w-full translate-y-full items-center justify-center gap-2 bg-white px-10 text-[0.95rem] font-medium text-slate-900 transition-transform duration-300 group-hover:translate-y-0">
+                {loading ? "Sending code..." : "Send Reset Code"}
+                {!loading && <ArrowRight className="h-4 w-4" strokeWidth={2} />}
+              </div>
+            </button>
+          </form>
         </div>
 
         <p className="mt-6 text-center text-[0.9rem] text-slate-600">
