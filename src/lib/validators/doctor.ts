@@ -23,14 +23,15 @@ export const createDoctorSchema = z.object({
   bio: z.string().optional(),
   yearsOfExperience: z.number().int().nonnegative().optional(),
   dateOfBirth: z.string().optional(),
-  bloodGroup: z.enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]).optional(),
+  bloodGroup: z
+    .enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"])
+    .optional(),
   gender: z.string().optional(),
   address: z.string().optional(),
   employmentType: z.enum(["full_time", "part_time", "contractor"]).optional(),
 });
 
 export type CreateDoctorInput = z.infer<typeof createDoctorSchema>;
-
 
 export const updateDoctorSchema = z.object({
   name: z.string().min(1, "Full name is required").optional(),
@@ -53,7 +54,9 @@ export const updateDoctorSchema = z.object({
   bio: z.string().optional(),
   yearsOfExperience: z.number().int().nonnegative().optional(),
   dateOfBirth: z.string().optional(),
-  bloodGroup: z.enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]).optional(),
+  bloodGroup: z
+    .enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"])
+    .optional(),
   gender: z.string().optional(),
   address: z.string().optional(),
   employmentType: z.enum(["full_time", "part_time", "contractor"]).optional(),

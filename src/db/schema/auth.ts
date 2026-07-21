@@ -18,7 +18,34 @@ export const refreshTokens = pgTable(
     userIdx: index("refresh_tokens_user_id_idx").on(table.userId),
   })
 );
-
+export const passwordResetOtps = pgTable(
+  "password_reset_otps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    otpHash: text("otp_hash").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index("password_reset_otps_user_id_idx").on(table.userId),
+  })
+);
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({ userIdx: index("password_reset_tokens_user_id_idx").on(table.userId) })
+);
 export const platformAdminRefreshTokens = pgTable(
   "platform_admin_refresh_tokens",
   {

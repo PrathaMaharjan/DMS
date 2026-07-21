@@ -8,7 +8,9 @@ export const clinicalNotes = pgTable(
   "clinical_notes",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    appointmentId: uuid("appointment_id").notNull().references(() => appointments.id),
+   appointmentId: uuid("appointment_id")
+  .notNull()
+  .references(() => appointments.id, { onDelete: "cascade" }),
     providerId: uuid("provider_id").notNull().references(() => users.id),
     noteText: text("note_text").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -22,7 +24,9 @@ export const odontogramEntries = pgTable(
   "odontogram_entries",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    patientId: uuid("patient_id").notNull().references(() => patients.id),
+    patientId: uuid("patient_id")
+  .notNull()
+  .references(() => patients.id, { onDelete: "cascade" }),
     toothNumber: integer("tooth_number").notNull(),
     condition: text("condition").notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

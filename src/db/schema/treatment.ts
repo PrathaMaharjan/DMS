@@ -1,6 +1,7 @@
 import { pgTable, uuid, text, integer, timestamp, pgEnum, index, unique } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { locations } from "./tenancy";
+import { appointments } from "./scheduling";
 
 export const treatmentCategoryEnum = pgEnum("treatment_category", [
   "preventive",
@@ -41,6 +42,10 @@ export const treatments = pgTable(
   })
 );
 
-export const treatmentsRelations = relations(treatments, ({ one }) => ({
+// export const treatmentsRelations = relations(treatments, ({ one }) => ({
+//   location: one(locations, { fields: [treatments.locationId], references: [locations.id] }),
+// }));
+export const treatmentsRelations = relations(treatments, ({ one, many }) => ({
   location: one(locations, { fields: [treatments.locationId], references: [locations.id] }),
+  appointments: many(appointments),
 }));
