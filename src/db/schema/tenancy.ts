@@ -76,6 +76,7 @@ export const users = pgTable(
     phone: text("phone").unique(),
     passwordHash: text("password_hash").notNull(),
     name: text("name").notNull(),
+    
     isActive: boolean("is_active").notNull().default(true),
     deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

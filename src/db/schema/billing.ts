@@ -1,27 +1,49 @@
-import { pgTable, uuid, integer, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  integer,
+  timestamp,
+  pgEnum,
+  index,
+} from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { organizations, locations } from "./tenancy";
 import { patients } from "./patients";
 import { appointments } from "./scheduling";
 
-export const ledgerEntryTypeEnum = pgEnum("ledger_entry_type", ["charge", "payment", "adjustment"]);
+export const ledgerEntryTypeEnum = pgEnum("ledger_entry_type", [
+  "charge",
+  "payment",
+  "adjustment",
+]);
 
 export const ledgerEntries = pgTable(
   "ledger_entries",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    orgId: uuid("org_id").notNull().references(() => organizations.id),
-    locationId: uuid("location_id").notNull().references(() => locations.id),
-    patientId: uuid("patient_id").notNull().references(() => patients.id),
-    appointmentId: uuid("appointment_id").references(() => appointments.id),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => locations.id),
+    patientId: uuid("patient_id")
+      .notNull()
+      .references(() => patients.id, { onDelete: "cascade" }),
+    appointmentId: uuid("appointment_id").references(() => appointments.id, {
+      onDelete: "cascade",
+    }),
     type: ledgerEntryTypeEnum("type").notNull(),
     amountCents: integer("amount_cents").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
     patientIdx: index("ledger_entries_patient_id_idx").on(table.patientId),
-    orgLocationIdx: index("ledger_entries_org_location_idx").on(table.orgId, table.locationId),
-  })
+    orgLocationIdx: index("ledger_entries_org_location_idx").on(
+      table.orgId,
+      table.locationId,
+    ),
+  }),
 );
 
 export const ledgerEntriesRelations = relations(ledgerEntries, ({ one }) => ({
