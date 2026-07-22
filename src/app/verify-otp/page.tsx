@@ -11,36 +11,31 @@ export default function VerifyOTPPage() {
   const searchParams = useSearchParams();
   const email = searchParams.get("email") || "";
 
-  // 6-digit OTP code state array
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
 
-  // Handle keypress & auto-advance
   function handleChange(value: string, index: number) {
     if (isNaN(Number(value))) return;
 
     const newOtp = [...otp];
-    // Take only the last entered character
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
 
-    // Auto-focus next field if typed a digit
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
   }
 
-  // Handle Backspace navigation
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>, index: number) {
     if (e.key === "Backspace" && !otp[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   }
 
-  // Handle Paste event for entire 6-digit OTP
   function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
     e.preventDefault();
     const pastedData = e.clipboardData.getData("text").trim();
@@ -53,7 +48,6 @@ export default function VerifyOTPPage() {
     });
     setOtp(newOtp);
 
-    // Focus the box following the last pasted digit
     const nextIndex = Math.min(digits.length, 5);
     inputRefs.current[nextIndex]?.focus();
   }
@@ -82,7 +76,6 @@ export default function VerifyOTPPage() {
         return;
       }
 
-      // Redirect to password reset screen with the server temp token
       const resetToken = responseBody?.data?.resetToken;
       router.push(`/reset-password?token=${resetToken}`);
     } catch (err) {
@@ -96,13 +89,22 @@ export default function VerifyOTPPage() {
     }
   }
 
+  async function handleResend() {
+    setError(null);
+    setResendMessage(null);
+    try {
+      await axios.post("/api/auth/forgot-password", { email });
+    } catch {
+      // Deliberately silent either way, same "never confirm or deny"
+      // principle the backend itself follows for this endpoint.
+    } finally {
+      setResendMessage("If an account exists with this email, a new code has been sent.");
+    }
+  }
+
   return (
     <section className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-gradient-to-b from-sky-50 via-white to-white px-4 py-16">
-      {/* Background Decorative Elements */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 overflow-hidden"
-      >
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <ToothOutline className="absolute -left-16 top-24 h-64 w-64 -rotate-12 text-sky-200/60" />
         <ToothOutline className="absolute -right-20 top-[28rem] h-80 w-80 rotate-12 text-sky-200/50" />
         <ToothbrushOutline className="absolute bottom-16 left-[8%] h-40 w-40 -rotate-6 text-sky-200/50" />
@@ -113,17 +115,10 @@ export default function VerifyOTPPage() {
 
       <div className="relative mx-auto w-full max-w-md">
         <div className="text-center">
-          <p className="text-sm font-medium uppercase tracking-[0.25em] text-sky-400">
-            Security Verification
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">
-            Enter OTP Code
-          </h1>
+          <p className="text-sm font-medium uppercase tracking-[0.25em] text-sky-400">Security Verification</p>
+          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">Enter OTP Code</h1>
           <p className="mt-2 text-[0.9rem] text-slate-600">
-            We sent a verification code to{" "}
-            <span className="font-medium text-slate-900">
-              {email || "your email"}
-            </span>
+            We sent a verification code to <span className="font-medium text-slate-900">{email || "your email"}</span>
           </p>
         </div>
 
@@ -136,6 +131,12 @@ export default function VerifyOTPPage() {
             <div className="mb-5 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[0.85rem] text-rose-700">
               <AlertCircle className="h-4 w-4 shrink-0" strokeWidth={2} />
               {error}
+            </div>
+          )}
+
+          {resendMessage && (
+            <div className="mb-5 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-[0.85rem] text-sky-700">
+              {resendMessage}
             </div>
           )}
 
@@ -153,9 +154,9 @@ export default function VerifyOTPPage() {
                   inputMode="numeric"
                   maxLength={1}
                   value={digit}
-                ref={(el) => {
-                inputRefs.current[index] = el;
-                }}
+                  ref={(el) => {
+                    inputRefs.current[index] = el;
+                  }}
                   onChange={(e) => handleChange(e.target.value, index)}
                   onKeyDown={(e) => handleKeyDown(e, index)}
                   onPaste={handlePaste}
@@ -183,20 +184,13 @@ export default function VerifyOTPPage() {
 
         <p className="mt-6 text-center text-[0.9rem] text-slate-600">
           Didn't receive the code?{" "}
-          <button
-            type="button"
-            onClick={() => alert("OTP resent successfully")}
-            className="font-medium text-sky-700 underline-offset-4 hover:underline"
-          >
+          <button type="button" onClick={handleResend} className="font-medium text-sky-700 underline-offset-4 hover:underline">
             Resend OTP
           </button>
         </p>
 
-         <p className="mt-6 text-center text-[0.9rem] text-slate-600">
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-1.5 font-medium text-sky-700 underline-offset-4 hover:underline"
-          >
+        <p className="mt-6 text-center text-[0.9rem] text-slate-600">
+          <Link href="/login" className="inline-flex items-center gap-1.5 font-medium text-sky-700 underline-offset-4 hover:underline">
             <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
             Back to sign in
           </Link>
@@ -206,7 +200,6 @@ export default function VerifyOTPPage() {
   );
 }
 
-/* Background SVGs matching the page theme */
 function ToothOutline({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 200 220" fill="none" className={className}>
@@ -223,36 +216,10 @@ function ToothOutline({ className }: { className?: string }) {
 function ToothbrushOutline({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 220 100" fill="none" className={className}>
-      <rect
-        x="10"
-        y="42"
-        width="120"
-        height="16"
-        rx="8"
-        stroke="currentColor"
-        strokeWidth="5"
-      />
-      <path
-        d="M130 50h30"
-        stroke="currentColor"
-        strokeWidth="5"
-        strokeLinecap="round"
-      />
-      <rect
-        x="160"
-        y="20"
-        width="50"
-        height="60"
-        rx="14"
-        stroke="currentColor"
-        strokeWidth="5"
-      />
-      <path
-        d="M172 34v32M186 30v40M200 34v32"
-        stroke="currentColor"
-        strokeWidth="5"
-        strokeLinecap="round"
-      />
+      <rect x="10" y="42" width="120" height="16" rx="8" stroke="currentColor" strokeWidth="5" />
+      <path d="M130 50h30" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <rect x="160" y="20" width="50" height="60" rx="14" stroke="currentColor" strokeWidth="5" />
+      <path d="M172 34v32M186 30v40M200 34v32" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
     </svg>
   );
 }
