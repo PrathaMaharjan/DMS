@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { locations, treatments } from "@/db/schema";
-import { requireSession } from "@/lib/auth/get-session";
+import { requireSession, SessionError } from "@/lib/auth/get-session";
 import { treatmentSchema, updateTreatmentSchema } from "@/lib/validators/treatments";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -252,5 +252,36 @@ export async function deleteTreatment(treatmentId: string): Promise<DeleteTreatm
     }
     console.error(err);
     return { success: false, error: "Something went wrong deleting the treatment.", code: "SERVER_ERROR" };
+  }
+}
+
+
+// get treatment name and id 
+export type TreatmentOptionsResult =
+  | { success: true; treatments: { id: string; name: string }[] }
+  | { success: false; error: string; code: TreatmentErrorCode };
+
+export async function getTreatmentOptions(locationId?: string): Promise<TreatmentOptionsResult> {
+  try {
+    // const session = await requireSession();
+
+    // const whereClause = locationId
+    //   ? and(eq(treatments.locationId, locationId), eq(locations.orgId, session.orgId))
+    //   : eq(locations.orgId, session.orgId);
+
+    const results = await db
+      .select({ id: treatments.id, name: treatments.name })
+      .from(treatments)
+      // .innerJoin(locations, eq(treatments.locationId, locations.id))
+      // .where(whereClause)
+      // .orderBy(treatments.name);
+
+    return { success: true, treatments: results };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return { success: false, error: "Something went wrong loading treatments.", code: "SERVER_ERROR" };
   }
 }

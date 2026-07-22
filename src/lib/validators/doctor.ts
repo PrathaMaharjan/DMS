@@ -63,3 +63,16 @@ export const updateDoctorSchema = z.object({
 });
 
 export type UpdateDoctorInput = z.infer<typeof updateDoctorSchema>;
+
+export const updateScheduleSchema = z.object({
+  locationId: z.string().uuid("Missing or invalid location"),
+  schedule: z.array(
+    z.object({
+      dayOfWeek: z.number().int().min(0).max(6),
+      startTime: z.string().min(1, "Start time is required"),
+      endTime: z.string().min(1, "End time is required"),
+    })
+  ),
+});
+
+export type UpdateScheduleInput = z.infer<typeof updateScheduleSchema>;

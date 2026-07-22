@@ -1,4 +1,3 @@
-// src/lib/public/resolve-org.ts
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { organizations } from "@/db/schema";

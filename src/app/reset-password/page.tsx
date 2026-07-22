@@ -4,23 +4,18 @@ import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
-import {
-  Lock,
-  Eye,
-  EyeOff,
-  ArrowRight,
-  AlertCircle,
-  CheckCircle2,
-} from "lucide-react";
+import { Lock, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
 import { z } from "zod";
 
-const resetPasswordSchema = z.object({
-  password: z.string().min(8, "Password must be at least 8 characters long"),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
-});
+const resetPasswordSchema = z
+  .object({
+    password: z.string().min(8, "Password must be at least 8 characters long"),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 type FieldErrors = Partial<Record<"password" | "confirmPassword", string>>;
 
@@ -61,9 +56,13 @@ function ResetPasswordForm() {
 
     setLoading(true);
     try {
+      // Matches resetPasswordSchema on the backend exactly: resetToken,
+      // newPassword, confirmPassword - not token/password, which never
+      // matched what the server actually expects.
       const { data: responseBody } = await axios.post("/api/auth/reset-password", {
-        token,
-        password: result.data.password,
+        resetToken: token,
+        newPassword: result.data.password,
+        confirmPassword: result.data.confirmPassword,
       });
 
       if (!responseBody?.success) {
@@ -98,7 +97,6 @@ function ResetPasswordForm() {
       {!isSuccess ? (
         <form onSubmit={handleSubmit} noValidate>
           <div className="space-y-5">
-            {/* New Password field */}
             <label className="block">
               <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
                 <Lock className="h-3.5 w-3.5" strokeWidth={2} />
@@ -122,21 +120,12 @@ function ResetPasswordForm() {
                   onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" strokeWidth={2} />
-                  ) : (
-                    <Eye className="h-4 w-4" strokeWidth={2} />
-                  )}
+                  {showPassword ? <EyeOff className="h-4 w-4" strokeWidth={2} /> : <Eye className="h-4 w-4" strokeWidth={2} />}
                 </button>
               </div>
-              {fieldErrors.password && (
-                <p className="mt-1.5 text-[0.78rem] text-rose-600">
-                  {fieldErrors.password}
-                </p>
-              )}
+              {fieldErrors.password && <p className="mt-1.5 text-[0.78rem] text-rose-600">{fieldErrors.password}</p>}
             </label>
 
-            {/* Confirm Password field */}
             <label className="block">
               <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
                 <Lock className="h-3.5 w-3.5" strokeWidth={2} />
@@ -160,17 +149,11 @@ function ResetPasswordForm() {
                   onClick={() => setShowConfirmPassword((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
                 >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-4 w-4" strokeWidth={2} />
-                  ) : (
-                    <Eye className="h-4 w-4" strokeWidth={2} />
-                  )}
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" strokeWidth={2} /> : <Eye className="h-4 w-4" strokeWidth={2} />}
                 </button>
               </div>
               {fieldErrors.confirmPassword && (
-                <p className="mt-1.5 text-[0.78rem] text-rose-600">
-                  {fieldErrors.confirmPassword}
-                </p>
+                <p className="mt-1.5 text-[0.78rem] text-rose-600">{fieldErrors.confirmPassword}</p>
               )}
             </label>
           </div>
@@ -208,11 +191,7 @@ function ResetPasswordForm() {
 export default function ResetPasswordPage() {
   return (
     <section className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-gradient-to-b from-sky-50 via-white to-white px-4 py-16">
-  
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 overflow-hidden"
-      >
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <ToothOutline className="absolute -left-16 top-24 h-64 w-64 text-sky-200/60 -rotate-12" />
         <ToothOutline className="absolute -right-20 top-[28rem] h-80 w-80 text-sky-200/50 rotate-12" />
         <ToothbrushOutline className="absolute left-[8%] bottom-16 h-40 w-40 text-sky-200/50 -rotate-6" />
@@ -223,12 +202,8 @@ export default function ResetPasswordPage() {
 
       <div className="relative mx-auto w-full max-w-md">
         <div className="text-center">
-          <p className="text-sm font-medium uppercase tracking-[0.25em] text-sky-400">
-            Secure Update
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">
-            Create new password
-          </h1>
+          <p className="text-sm font-medium uppercase tracking-[0.25em] text-sky-400">Secure Update</p>
+          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">Create new password</h1>
         </div>
 
         <Suspense fallback={<div className="mt-8 text-center text-slate-500">Loading...</div>}>
@@ -236,11 +211,7 @@ export default function ResetPasswordPage() {
         </Suspense>
 
         <p className="mt-6 text-center text-[0.9rem] text-slate-600">
-       
-          <Link
-            href="/login"
-            className="font-medium text-sky-700 underline-offset-4 hover:underline"
-          >
+          <Link href="/login" className="font-medium text-sky-700 underline-offset-4 hover:underline">
             Go back to sign in
           </Link>
         </p>
@@ -249,7 +220,6 @@ export default function ResetPasswordPage() {
   );
 }
 
-// Background SVGs
 function ToothOutline({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 200 220" fill="none" className={className}>
