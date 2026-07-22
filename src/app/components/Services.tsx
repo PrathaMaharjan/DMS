@@ -31,7 +31,11 @@ const SERVICES = [
 const LOOP_SERVICES = [...SERVICES, ...SERVICES, ...SERVICES];
 const SET_COUNT = SERVICES.length;
 
-export default function Services() {
+interface ServicesProps {
+  tenantSlug?: string;
+}
+
+export default function Services({ tenantSlug }: ServicesProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const isCorrectingRef = useRef(false);
   const isInteractingRef = useRef(false);

@@ -11,7 +11,7 @@ export default function VerifyOTPPage() {
   const searchParams = useSearchParams();
   const email = searchParams.get("email") || "";
 
-  // 6-digit OTP code state array
+  
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
