@@ -34,7 +34,11 @@ const DOCTORS = [
 
 const LOOP_DOCTORS = [...DOCTORS, ...DOCTORS, ...DOCTORS];
 
-export default function Doctors() {
+interface DoctorsProps {
+  tenantSlug?: string;
+}
+
+export default function Doctors({ tenantSlug }: DoctorsProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const isCorrectingRef = useRef(false);
 

@@ -15,7 +15,11 @@ interface Sparkle {
 
 let sparkleId = 0;
 
-export default function BrushingHighlight() {
+interface BrushingHighlightProps {
+  tenantSlug?: string;
+}
+
+export default function BrushingHighlight({ tenantSlug }: BrushingHighlightProps) {
   const [sparkleList, setSparkleList] = useState<Sparkle[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastSpawnRef = useRef(0);

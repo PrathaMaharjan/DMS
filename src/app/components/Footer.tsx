@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { SiInstagram, SiWhatsapp, SiFacebook, SiYoutube } from "@icons-pack/react-simple-icons";
 
+interface FooterProps {
+  tenantSlug?: string;
+}
+
 const FOOTER_COLUMNS = [
   {
     heading: "General",
@@ -36,7 +40,7 @@ const SOCIAL_LINKS = [
   { label: "YouTube", href: "#", icon: SiYoutube },
 ];
 
-export default function Footer() {
+export default function Footer({ tenantSlug = "chitwan-dental-home" }: FooterProps) {
   return (
     <footer className="bg-[#7da3b3]">
       <div className="mx-auto max-w-6xl px-6 lg:px-8">

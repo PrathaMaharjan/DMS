@@ -2,7 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-export default function Hero() {
+interface HeroProps {
+  tenantSlug?: string;
+}
+
+export default function Hero({ tenantSlug }: HeroProps) {
   return (
     <section className="relative flex min-h-screen items-center overflow-hidden">
    

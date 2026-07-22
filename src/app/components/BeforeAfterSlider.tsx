@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
-import { MoveHorizontal, Sparkles, Star } from "lucide-react";
+import { MoveHorizontal, Sparkles } from "lucide-react";
 
 interface BeforeAfterSliderProps {
   beforeImage: string;
@@ -14,6 +14,7 @@ interface BeforeAfterSliderProps {
   heading?: string;
   subtext?: string;
   showBadges?: boolean;
+  tenantSlug?: string; 
 }
 
 export default function BeforeAfterSlider({
@@ -26,6 +27,7 @@ export default function BeforeAfterSlider({
   heading = "See the transformation",
   subtext = "Drag the slider and watch years of stains disappear in one visit.",
   showBadges = true,
+  tenantSlug = "chitwan-dental-home", 
 }: BeforeAfterSliderProps) {
   const [position, setPosition] = useState(50);
   const [dragging, setDragging] = useState(false);
@@ -134,12 +136,16 @@ export default function BeforeAfterSlider({
               />
             </div>
 
-            <span className="absolute left-3 top-3 rounded-full bg-black/40 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
-              {beforeLabel}
-            </span>
-            <span className="absolute right-3 top-3 rounded-full bg-black/40 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
-              {afterLabel}
-            </span>
+            {showBadges && (
+              <>
+                <span className="absolute left-3 top-3 rounded-full bg-black/40 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
+                  {beforeLabel}
+                </span>
+                <span className="absolute right-3 top-3 rounded-full bg-black/40 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
+                  {afterLabel}
+                </span>
+              </>
+            )}
 
             <div
               className="pointer-events-none absolute inset-y-0 w-[2px] bg-white"
