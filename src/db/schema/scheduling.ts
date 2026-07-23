@@ -34,6 +34,7 @@ export const appointmentTypes = pgTable(
 export const appointmentStatusEnum = pgEnum("appointment_status", [
   "requested",
   "confirmed",
+  "checked_in",
   "completed",
   "cancelled",
   "no_show",

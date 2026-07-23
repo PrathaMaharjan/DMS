@@ -4,12 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import {
-  Mail,
-  ArrowRight,
-  ArrowLeft,
-  AlertCircle,
-} from "lucide-react";
+import { Mail, ArrowRight, ArrowLeft, AlertCircle } from "lucide-react";
 import { z } from "zod";
 
 const forgotPasswordSchema = z.object({
@@ -43,10 +38,7 @@ export default function ForgotPasswordPage() {
 
     setLoading(true);
     try {
-      const { data: responseBody } = await axios.post(
-        "/api/auth/forgot-password",
-        result.data
-      );
+      const { data: responseBody } = await axios.post("/api/auth/forgot-password", result.data);
 
       if (!responseBody?.success) {
         setError(responseBody?.error ?? "Something went wrong. Please try again.");
@@ -54,14 +46,10 @@ export default function ForgotPasswordPage() {
         return;
       }
 
-      // Send the user straight to OTP verification, carrying the email
-      // along so that page knows which address the code was sent to.
       router.push(`/verify-otp?email=${encodeURIComponent(result.data.email)}`);
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        setError(
-          err.response?.data?.error ?? "Could not process request. Verify your email."
-        );
+        setError(err.response?.data?.error ?? "Could not process request. Verify your email.");
       } else {
         setError("Something went wrong. Please try again.");
       }
@@ -71,11 +59,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <section className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-gradient-to-b from-sky-50 via-white to-white px-4 py-16">
-      {/* Decorative background shapes */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 overflow-hidden"
-      >
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <ToothOutline className="absolute -left-16 top-24 h-64 w-64 text-sky-200/60 -rotate-12" />
         <ToothOutline className="absolute -right-20 top-[28rem] h-80 w-80 text-sky-200/50 rotate-12" />
         <ToothbrushOutline className="absolute left-[8%] bottom-16 h-40 w-40 text-sky-200/50 -rotate-6" />
@@ -86,12 +70,8 @@ export default function ForgotPasswordPage() {
 
       <div className="relative mx-auto w-full max-w-md">
         <div className="text-center">
-          <p className="text-sm font-medium uppercase tracking-[0.25em] text-sky-400">
-            Account Recovery
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">
-            Reset password
-          </h1>
+          <p className="text-sm font-medium uppercase tracking-[0.25em] text-sky-400">Account Recovery</p>
+          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">Reset password</h1>
           <p className="mt-2 text-[0.9rem] text-slate-500 max-w-sm mx-auto">
             Enter your email address and we will send a code to recover your account.
           </p>
@@ -124,11 +104,7 @@ export default function ForgotPasswordPage() {
                       : "border-slate-900/10 focus:border-sky-400 focus:ring-sky-100",
                   ].join(" ")}
                 />
-                {fieldErrors.email && (
-                  <p className="mt-1.5 text-[0.78rem] text-rose-600">
-                    {fieldErrors.email}
-                  </p>
-                )}
+                {fieldErrors.email && <p className="mt-1.5 text-[0.78rem] text-rose-600">{fieldErrors.email}</p>}
               </label>
             </div>
 
@@ -150,10 +126,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         <p className="mt-6 text-center text-[0.9rem] text-slate-600">
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-1.5 font-medium text-sky-700 underline-offset-4 hover:underline"
-          >
+          <Link href="/login" className="inline-flex items-center gap-1.5 font-medium text-sky-700 underline-offset-4 hover:underline">
             <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
             Back to sign in
           </Link>
@@ -179,36 +152,10 @@ function ToothOutline({ className }: { className?: string }) {
 function ToothbrushOutline({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 220 100" fill="none" className={className}>
-      <rect
-        x="10"
-        y="42"
-        width="120"
-        height="16"
-        rx="8"
-        stroke="currentColor"
-        strokeWidth="5"
-      />
-      <path
-        d="M130 50h30"
-        stroke="currentColor"
-        strokeWidth="5"
-        strokeLinecap="round"
-      />
-      <rect
-        x="160"
-        y="20"
-        width="50"
-        height="60"
-        rx="14"
-        stroke="currentColor"
-        strokeWidth="5"
-      />
-      <path
-        d="M172 34v32M186 30v40M200 34v32"
-        stroke="currentColor"
-        strokeWidth="5"
-        strokeLinecap="round"
-      />
+      <rect x="10" y="42" width="120" height="16" rx="8" stroke="currentColor" strokeWidth="5" />
+      <path d="M130 50h30" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <rect x="160" y="20" width="50" height="60" rx="14" stroke="currentColor" strokeWidth="5" />
+      <path d="M172 34v32M186 30v40M200 34v32" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
     </svg>
   );
 }

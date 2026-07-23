@@ -18,8 +18,22 @@ import { sendStaffWelcomeEmail } from "@/lib/email/sendWelComeMail";
 import {
   createDoctorSchema,
   updateDoctorSchema,
+  UpdateScheduleInput,
+  updateScheduleSchema,
 } from "@/lib/validators/doctor";
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  ne,
+  sql,
+} from "drizzle-orm";
 
 export type DoctorErrorCode =
   | "UNAUTHORIZED"
@@ -717,6 +731,294 @@ export async function getDoctor(doctorId: string): Promise<GetDoctorResult> {
     return {
       success: false,
       error: "Something went wrong loading the doctor.",
+      code: "SERVER_ERROR",
+    };
+  }
+}
+
+// -------------------------------- updateSchedule -----------------------------------------
+export type UpdateScheduleResult =
+  | { success: true }
+  | { success: false; error: string; code: DoctorErrorCode };
+
+// The actual logic - takes an explicit doctorId rather than reading it
+// from the session itself, so both callers below can share one
+// implementation without duplicating the replace-on-save transaction.
+async function replaceSchedule(
+  doctorId: string,
+  data: UpdateScheduleInput,
+): Promise<UpdateScheduleResult> {
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(providerSchedules)
+      .where(
+        and(
+          eq(providerSchedules.userId, doctorId),
+          eq(providerSchedules.locationId, data.locationId),
+        ),
+      );
+
+    if (data.schedule.length > 0) {
+      await tx.insert(providerSchedules).values(
+        data.schedule.map((day) => ({
+          userId: doctorId,
+          locationId: data.locationId,
+          dayOfWeek: day.dayOfWeek,
+          startTime: day.startTime,
+          endTime: day.endTime,
+        })),
+      );
+    }
+  });
+
+  return { success: true };
+}
+
+// Doctor editing their OWN hours - identity comes from session.userId
+// only, never from the request. A doctor can never touch anyone else's
+// schedule through this function, structurally, not just by convention.
+export async function updateMySchedule(
+  input: unknown,
+): Promise<UpdateScheduleResult> {
+  try {
+    const session = await requireSession();
+
+    const parsed = updateScheduleSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: parsed.error.issues[0]?.message ?? "Invalid input.",
+        code: "VALIDATION",
+      };
+    }
+    const data = parsed.data;
+
+    const assignment = await db.query.userLocationRoles.findFirst({
+      where: and(
+        eq(userLocationRoles.userId, session.userId),
+        eq(userLocationRoles.locationId, data.locationId),
+        eq(userLocationRoles.role, "clinical"),
+      ),
+    });
+    if (!assignment) {
+      return {
+        success: false,
+        error: "You are not assigned to this location.",
+        code: "NOT_FOUND",
+      };
+    }
+
+    return await replaceSchedule(session.userId, data);
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return {
+      success: false,
+      error: "Something went wrong updating your schedule.",
+      code: "SERVER_ERROR",
+    };
+  }
+}
+
+// -------------------------- update by owner -----------------------------------
+// comes from the URL, but ownership is still verified against session.orgId
+// before anything is touched, same tenant-isolation pattern as everything
+// else (findOwnedDoctor).
+export async function updateDoctorSchedule(
+  doctorId: string,
+  input: unknown,
+): Promise<UpdateScheduleResult> {
+  try {
+    const session = await requireSession();
+
+    const parsed = updateScheduleSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: parsed.error.issues[0]?.message ?? "Invalid input.",
+        code: "VALIDATION",
+      };
+    }
+    const data = parsed.data;
+
+    const owned = await findOwnedDoctor(doctorId, session.orgId);
+    if (!owned) {
+      return { success: false, error: "Doctor not found.", code: "NOT_FOUND" };
+    }
+
+    return await replaceSchedule(doctorId, data);
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return {
+      success: false,
+      error: "Something went wrong updating the doctor's schedule.",
+      code: "SERVER_ERROR",
+    };
+  }
+}
+
+// ------------------ get schedule information ----------------------------------
+export type ScheduleStatusResult =
+  | {
+      success: true;
+      doctors: {
+        id: string;
+        name: string;
+        startTime: string | null;
+        endTime: string | null;
+        status: "available" | "on_leave" | "not_scheduled";
+        openSlots: number;
+      }[];
+    }
+  | { success: false; error: string; code: DoctorErrorCode };
+export async function getDoctorScheduleStatus(
+  locationId: string,
+  date: string,
+): Promise<ScheduleStatusResult> {
+  try {
+    const session = await requireSession();
+    const dayOfWeek = new Date(`${date}T00:00:00`).getDay();
+
+    const doctorRows = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        startTime: providerSchedules.startTime,
+        endTime: providerSchedules.endTime,
+      })
+      .from(users)
+      .innerJoin(userLocationRoles, eq(userLocationRoles.userId, users.id))
+      .leftJoin(
+        providerSchedules,
+        and(
+          eq(providerSchedules.userId, users.id),
+          eq(providerSchedules.locationId, locationId),
+          eq(providerSchedules.dayOfWeek, dayOfWeek),
+        ),
+      )
+      .where(
+        and(
+          eq(userLocationRoles.locationId, locationId),
+          eq(userLocationRoles.role, "clinical"),
+          eq(users.orgId, session.orgId),
+          eq(users.isActive, true),
+          isNull(users.deletedAt),
+        ),
+      );
+
+    const doctorIds = doctorRows.map((d) => d.id);
+
+    const dayStart = new Date(`${date}T00:00:00`);
+    const dayEnd = new Date(`${date}T23:59:59`);
+    const bookedRows = doctorIds.length
+      ? await db
+          .select({
+            providerId: appointments.providerId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(appointments)
+          .where(
+            and(
+              inArray(appointments.providerId, doctorIds),
+              ne(appointments.status, "cancelled"),
+              gt(appointments.startTime, dayStart),
+              lt(appointments.startTime, dayEnd),
+            ),
+          )
+          .groupBy(appointments.providerId)
+      : [];
+    const bookedByDoctor = new Map(
+      bookedRows.map((b) => [b.providerId, b.count]),
+    );
+
+    const doctors = doctorRows.map((d) => {
+      if (!d.startTime || !d.endTime) {
+        // Not scheduled to work this day of the week at all.
+        return { ...d, status: "not_scheduled" as const, openSlots: 0 };
+      }
+
+      const [startH, startM] = d.startTime.split(":").map(Number);
+      const [endH, endM] = d.endTime.split(":").map(Number);
+      const totalMinutes = endH * 60 + endM - (startH * 60 + startM);
+      const totalSlots = Math.floor(totalMinutes / 30);
+      const booked = bookedByDoctor.get(d.id) ?? 0;
+      const openSlots = Math.max(totalSlots - booked, 0);
+
+      // Inferred, not recorded: scheduled to work, but zero slots left
+      // reads as "on leave" here - genuinely indistinguishable from
+      // "fully booked" without a real leave record.
+      const status =
+        openSlots === 0 ? ("on_leave" as const) : ("available" as const);
+
+      return { ...d, status, openSlots };
+    });
+
+    return { success: true, doctors };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return {
+      success: false,
+      error: "Something went wrong loading doctor schedules.",
+      code: "SERVER_ERROR",
+    };
+  }
+}
+
+// ------------------------- get doctor name and id ---------------------------------------
+export type GetDoctorNameAndIdResult =
+  | {
+      success: true;
+      doctors: {
+        id: string;
+        name: string;
+      }[];
+    }
+  | { success: false; error: string; code: DoctorErrorCode };
+
+export async function getDoctorNameAndId(
+  locationId?: string,
+): Promise<GetDoctorNameAndIdResult> {
+  try {
+    const session = await requireSession();
+    const whereClause = locationId
+      ? and(
+          eq(userLocationRoles.role, "clinical"),
+          eq(userLocationRoles.locationId, locationId),
+          eq(users.orgId, session.orgId),
+          isNull(users.deletedAt),
+        )
+      : and(
+          eq(userLocationRoles.role, "clinical"),
+          eq(users.orgId, session.orgId),
+          eq(users.isActive, true),
+          isNull(users.deletedAt),
+        );
+    const result = await db
+      .select({
+        id: users.id,
+        name: users.name,
+      })
+      .from(users)
+      .innerJoin(userLocationRoles, eq(userLocationRoles.userId, users.id))
+      .where(whereClause)
+      .orderBy(users.name);
+    return { success: true, doctors: result };
+  } catch (error) {
+    if (error instanceof SessionError) {
+      return { success: false, error: error.message, code: "UNAUTHORIZED" };
+    }
+    console.error(error);
+    return {
+      success: false,
+      error: "Something went wrong loading doctor names and ids.",
       code: "SERVER_ERROR",
     };
   }
