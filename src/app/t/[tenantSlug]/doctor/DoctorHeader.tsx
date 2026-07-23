@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
-import { CalendarDays, Clock, Users } from "lucide-react";
+import { CalendarDays, Clock, Users, LogOut } from "lucide-react";
 
 export type DoctorTabType = "schedule" | "appointments" | "patients";
 
 interface DoctorHeaderProps {
   activeTab: DoctorTabType;
   setActiveTab: (tab: DoctorTabType) => void;
+  onLogout?: () => void;
 }
 
 function formatSlug(slug: string) {
@@ -19,13 +20,19 @@ function formatSlug(slug: string) {
     .join(" ");
 }
 
-export default function DoctorHeader({ activeTab, setActiveTab }: DoctorHeaderProps) {
+export default function DoctorHeader({
+  activeTab,
+  setActiveTab,
+  onLogout,
+}: DoctorHeaderProps) {
   const params = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
   const tenantSlug = params?.tenantSlug ?? "";
 
   const [orgName, setOrgName] = useState<string>(
     tenantSlug ? formatSlug(tenantSlug) : "Clinic Management"
   );
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -51,8 +58,44 @@ export default function DoctorHeader({ activeTab, setActiveTab }: DoctorHeaderPr
     };
   }, [tenantSlug]);
 
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+
+    try {
+      // Call the Next.js API route located at src/app/api/auth/logout/route.ts
+      await axios.post("/api/auth/logout");
+      
+      // Execute optional callback if provided
+      if (onLogout) {
+        onLogout();
+      }
+    } catch (err) {
+      console.error("Failed to log out", err);
+    } finally {
+      setIsLoggingOut(false);
+     
+      const loginPath = tenantSlug ? `/t/${tenantSlug}/login` : "/login";
+      router.push(loginPath);
+      router.refresh();
+    }
+  };
+
   return (
-    <div className="w-full flex flex-col items-center justify-center gap-6 border-b border-slate-900/5 pb-8 text-center">
+    <div className="relative w-full flex flex-col items-center justify-center gap-6 border-b border-slate-900/5 pb-8 text-center">
+    
+      <div className="absolute top-0 right-0">
+        <button
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="inline-flex items-center gap-1.5 rounded-full border border-rose-200/80 bg-rose-50/50 px-3.5 py-1.5 text-xs font-semibold text-rose-600 transition-all duration-200 hover:bg-rose-100 hover:border-rose-300 hover:text-rose-700 shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
+        </button>
+      </div>
+
+      {/* Header Info */}
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#7da3b3]">
           Doctor Portal
