@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import axios from "axios";
 import {
   Calendar,
   Clock,
@@ -13,6 +14,9 @@ import {
   Phone,
   ChevronLeft,
   ChevronRight,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 
 export interface DoctorAppointment {
@@ -22,109 +26,235 @@ export interface DoctorAppointment {
   service: string;
   date: string;
   time: string;
+  rawStartTime: string;
   status: "Confirmed" | "In Progress" | "Completed" | "Cancelled";
   attendance: "Pending" | "Checked In" | "No Show";
+}
+
+function formatTimeDisplay(isoString: string) {
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return { date: "-", time: "-" };
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const formattedHours = String(hours).padStart(2, "0");
+
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${formattedHours}:${minutes} ${ampm}`,
+  };
+}
+
+function getTodayStr() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export default function DoctorAppointmentsTab() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPeriod, setFilterPeriod] = useState<
-    "today" | "upcoming" | "checked-in" | "completed" | "all"
-  >("today");
+    "all" | "today" | "upcoming" | "checked-in" | "completed"
+  >("all");
 
- 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 7;
 
-  const todayStr = "2026-07-21";
+  const [locationId, setLocationId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [appointments, setAppointments] = useState<DoctorAppointment[]>([
-    {
-      id: "APT-101",
-      patientName: "Aarav Sharma",
-      patientPhone: "9841000000",
-      service: "Dental Checkup & Cleaning",
-      date: "2026-07-21",
-      time: "10:00 AM",
-      status: "Confirmed",
-      attendance: "Checked In",
-    },
-    {
-      id: "APT-102",
-      patientName: "Sita Adhikari",
-      patientPhone: "9851012345",
-      service: "Root Canal Treatment",
-      date: "2026-07-21",
-      time: "11:30 AM",
-      status: "Confirmed",
-      attendance: "Pending",
-    },
-    {
-      id: "APT-103",
-      patientName: "Rohan Shrestha",
-      patientPhone: "9801234567",
-      service: "Teeth Whitening",
-      date: "2026-07-21",
-      time: "02:00 PM",
-      status: "Confirmed",
-      attendance: "Pending",
-    },
-    {
-      id: "APT-104",
-      patientName: "Maya Gurung",
-      patientPhone: "9812345678",
-      service: "Cavity Filling",
-      date: "2026-07-22",
-      time: "09:30 AM",
-      status: "Confirmed",
-      attendance: "Pending",
-    },
-    {
-      id: "APT-105",
-      patientName: "Bikash Thapa",
-      patientPhone: "9849988776",
-      service: "Scaling & Polishing",
-      date: "2026-07-21",
-      time: "03:30 PM",
-      status: "Completed",
-      attendance: "Checked In",
-    },
-  ]);
+  const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
 
-  const handleMarkAttendance = (
+  const todayStr = getTodayStr();
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+
+      // 1. Multi-endpoint fallback to resolve Location ID
+      let currentLocId = locationId;
+      if (!currentLocId) {
+        const [servicesRes, treatmentsRes, patientsRes] = await Promise.all([
+          axios.get("/api/services").catch(() => null),
+          axios.get("/api/treatment").catch(() => null),
+          axios.get("/api/patent").catch(() => null),
+        ]);
+
+        if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
+          currentLocId = servicesRes.data.data.services[0].locationId;
+        } else if (treatmentsRes?.data?.success && treatmentsRes.data.data.treatments?.length > 0) {
+          currentLocId = treatmentsRes.data.data.treatments[0].locationId;
+        } else if (patientsRes?.data?.success && patientsRes.data.data.patients?.length > 0) {
+          currentLocId = patientsRes.data.data.patients[0].locationId;
+        }
+
+        if (currentLocId) {
+          setLocationId(currentLocId);
+        }
+      }
+
+      if (currentLocId) {
+        // 2. Fetch appointments for location
+        const apptsRes = await axios.get("/api/appoments", {
+          params: { locationId: currentLocId },
+        });
+
+        if (apptsRes.data?.success && apptsRes.data.data.appointments) {
+          const mapped: DoctorAppointment[] = apptsRes.data.data.appointments.map(
+            (a: any) => {
+              const { date, time } = formatTimeDisplay(a.startTime);
+              let status: DoctorAppointment["status"] = "Confirmed";
+              let attendance: DoctorAppointment["attendance"] = "Pending";
+
+              if (a.status === "completed") {
+                status = "Completed";
+                attendance = "Checked In";
+              } else if (a.status === "checked_in") {
+                status = "Confirmed";
+                attendance = "Checked In";
+              } else if (a.status === "no_show") {
+                status = "Confirmed";
+                attendance = "No Show";
+              } else if (a.status === "cancelled") {
+                status = "Cancelled";
+                attendance = "Pending";
+              }
+
+              return {
+                id: a.id,
+                patientName: a.patientName || "Patient",
+                patientPhone: a.patientPhone || "-",
+                service: a.treatmentName || "General Service",
+                date,
+                time,
+                rawStartTime: a.startTime,
+                status,
+                attendance,
+                rawStatus: a.status,
+              };
+            }
+          );
+
+          setAppointments(mapped);
+        }
+      } else {
+        setErrorMsg("Location ID could not be identified for this session.");
+      }
+    } catch (err: any) {
+      console.error("Failed to load doctor appointments:", err);
+      setErrorMsg(err.response?.data?.error || "Failed to fetch appointments from server.");
+    } finally {
+      setLoading(false);
+    }
+  }, [locationId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleMarkAttendance = async (
     id: string,
-    attendance: "Checked In" | "No Show" | "Pending"
+    statusValue: string
   ) => {
+    // Optimistically update UI local state
     setAppointments((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, attendance } : item))
+      prev.map((item) => {
+        if (item.id === id) {
+          let status: DoctorAppointment["status"] = "Confirmed";
+          let attendance: DoctorAppointment["attendance"] = "Pending";
+
+          if (statusValue === "completed") {
+            status = "Completed";
+            attendance = "Checked In";
+          } else if (statusValue === "checked_in") {
+            status = "Confirmed";
+            attendance = "Checked In";
+          } else if (statusValue === "no_show") {
+            status = "Confirmed";
+            attendance = "No Show";
+          } else if (statusValue === "cancelled") {
+            status = "Cancelled";
+            attendance = "Pending";
+          }
+
+          return {
+            ...item,
+            rawStatus: statusValue,
+            status,
+            attendance,
+          };
+        }
+        return item;
+      })
     );
+
+    try {
+      setUpdatingId(id);
+      const res = await axios.patch(`/api/appoments/${id}/status`, {
+        status: statusValue,
+      });
+      if (res.data?.success) {
+        await loadData();
+      } else {
+        alert(res.data?.error || "Failed to update attendance status.");
+        await loadData();
+      }
+    } catch (err: any) {
+      console.error("Attendance update error:", err);
+      alert(err.response?.data?.error || "Failed to update attendance status.");
+      await loadData();
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
-  const handleCompleteAppointment = (id: string) => {
-    setAppointments((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: "Completed",
-              attendance: "Checked In",
-            }
-          : item
-      )
-    );
+  const handleCompleteAppointment = async (id: string) => {
+    try {
+      setUpdatingId(id);
+      const res = await axios.patch(`/api/appoments/${id}/status`, {
+        status: "completed",
+      });
+      if (res.data?.success) {
+        await loadData();
+      } else {
+        alert(res.data?.error || "Failed to complete appointment.");
+      }
+    } catch (err: any) {
+      console.error("Completion error:", err);
+      alert(err.response?.data?.error || "Failed to complete appointment.");
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
-  const handleUndoCompletion = (id: string) => {
-    setAppointments((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: "Confirmed",
-            }
-          : item
-      )
-    );
+  const handleUndoCompletion = async (id: string) => {
+    try {
+      setUpdatingId(id);
+      const res = await axios.patch(`/api/appoments/${id}/status`, {
+        status: "checked_in",
+      });
+      if (res.data?.success) {
+        await loadData();
+      } else {
+        alert(res.data?.error || "Failed to undo completion.");
+      }
+    } catch (err: any) {
+      console.error("Undo completion error:", err);
+      alert(err.response?.data?.error || "Failed to undo completion.");
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   const stats = {
@@ -157,7 +287,7 @@ export default function DoctorAppointmentsTab() {
   });
 
   // Pagination Logic
-  const totalPages = Math.ceil(filteredAppointments.length / itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(filteredAppointments.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedAppointments = filteredAppointments.slice(
     startIndex,
@@ -172,6 +302,21 @@ export default function DoctorAppointmentsTab() {
 
   return (
     <div className="w-full space-y-6 text-slate-800">
+      {errorMsg && (
+        <div className="flex items-center justify-between rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-xs text-rose-700">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>{errorMsg}</span>
+          </div>
+          <button
+            onClick={() => loadData()}
+            className="flex items-center gap-1 font-semibold text-rose-600 hover:underline"
+          >
+            <RefreshCw className="h-3 w-3" /> Retry
+          </button>
+        </div>
+      )}
+
       {/* Top Stat Cards Grid */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
         <div className="rounded-xl border border-slate-200/80 bg-white p-4">
@@ -239,7 +384,7 @@ export default function DoctorAppointmentsTab() {
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
-              setCurrentPage(1); // Reset page on search input change
+              setCurrentPage(1);
             }}
             className="w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-10 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-[#7da3b3] focus:bg-white transition-all"
           />
@@ -247,13 +392,13 @@ export default function DoctorAppointmentsTab() {
 
         {/* Tab Filters */}
         <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 border border-slate-200 text-xs">
-          {(["today", "upcoming", "checked-in", "completed", "all"] as const).map(
+          {(["all", "today", "upcoming", "checked-in", "completed"] as const).map(
             (tab) => (
               <button
                 key={tab}
                 onClick={() => {
                   setFilterPeriod(tab);
-                  setCurrentPage(1); // Reset page when filter tab changes
+                  setCurrentPage(1);
                 }}
                 className={`rounded-md px-3 py-1.5 font-semibold capitalize transition-all ${
                   filterPeriod === tab
@@ -270,206 +415,227 @@ export default function DoctorAppointmentsTab() {
 
       {/* Tabular Appointments List */}
       <div className="w-full overflow-hidden rounded-2xl border border-slate-900/5 bg-white/90 shadow-lg backdrop-blur-sm flex flex-col justify-between">
-        <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/70 text-xs font-medium text-slate-500">
-                <th className="p-4 pl-6">Patient Name</th>
-                <th className="p-4">Phone Number</th>
-                <th className="p-4">Service</th>
-                <th className="p-4">Date</th>
-                <th className="p-4">Time</th>
-                <th className="p-4">Status</th>
-                <th className="p-4 text-center">Attendance</th>
-                <th className="p-4 pr-6 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-sm">
-              {paginatedAppointments.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="p-12 text-center">
-                    <Stethoscope className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-                    <p className="text-xs font-semibold text-slate-600">
-                      No appointments found
-                    </p>
-                    <p className="text-[0.75rem] text-slate-400 mt-0.5">
-                      Try tweaking your search term or tab filter.
-                    </p>
-                  </td>
+        {loading ? (
+          <div className="p-12 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
+            <Loader2 className="h-6 w-6 animate-spin text-[#7da3b3]" />
+            <span>Loading appointments from database...</span>
+          </div>
+        ) : (
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left border-collapse min-w-[1000px]">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/70 text-xs font-medium text-slate-500">
+                  <th className="p-4 pl-6">Patient Name</th>
+                  <th className="p-4">Phone Number</th>
+                  <th className="p-4">Service</th>
+                  <th className="p-4">Date</th>
+                  <th className="p-4">Time</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4 text-center">Attendance</th>
+                  <th className="p-4 pr-6 text-center">Actions</th>
                 </tr>
-              ) : (
-                paginatedAppointments.map((item) => (
-                  <tr
-                    key={item.id}
-                    className={`hover:bg-slate-50/50 transition-colors ${
-                      item.status === "Completed" ? "bg-slate-50/40" : ""
-                    }`}
-                  >
-                    <td className="p-4 pl-6">
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-sky-50 flex items-center justify-center text-[#7da3b3] font-bold shrink-0 border border-sky-100">
-                          <User className="h-4 w-4" />
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {paginatedAppointments.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-12 text-center">
+                      <Stethoscope className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+                      <p className="text-xs font-semibold text-slate-600">
+                        No appointments found
+                      </p>
+                      <p className="text-[0.75rem] text-slate-400 mt-0.5">
+                        Try tweaking your search term or tab filter.
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedAppointments.map((item) => (
+                    <tr
+                      key={item.id}
+                      className={`hover:bg-slate-50/50 transition-colors ${
+                        item.status === "Completed" ? "bg-slate-50/40" : ""
+                      }`}
+                    >
+                      <td className="p-4 pl-6">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full bg-sky-50 flex items-center justify-center text-[#7da3b3] font-bold shrink-0 border border-sky-100">
+                            <User className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-900 text-xs">
+                              {item.patientName}
+                            </p>
+                            <span className="text-[0.65rem] font-semibold text-slate-400 truncate max-w-[120px] block">
+                              {item.id}
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold text-slate-900 text-xs">
-                            {item.patientName}
-                          </p>
-                          <span className="text-[0.65rem] font-semibold text-slate-400">
-                            {item.id}
-                          </span>
+                      </td>
+
+                      <td className="p-4 text-xs font-medium text-slate-700 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="h-3.5 w-3.5 text-slate-400" />
+                          {item.patientPhone}
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="p-4 text-xs font-medium text-slate-700 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5 text-slate-400" />
-                        {item.patientPhone}
-                      </div>
-                    </td>
+                      <td className="p-4 text-xs font-medium text-slate-800">
+                        <span className="inline-block bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200/60">
+                          {item.service}
+                        </span>
+                      </td>
 
-                    <td className="p-4 text-xs font-medium text-slate-800">
-                      <span className="inline-block bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200/60">
-                        {item.service}
-                      </span>
-                    </td>
+                      <td className="p-4 text-xs font-medium text-slate-700 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                          {item.date}
+                        </div>
+                      </td>
 
-                    <td className="p-4 text-xs font-medium text-slate-700 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                        {item.date}
-                      </div>
-                    </td>
+                      <td className="p-4 text-xs font-semibold text-slate-800 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-slate-400" />
+                          {item.time}
+                        </div>
+                      </td>
 
-                    <td className="p-4 text-xs font-semibold text-slate-800 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5 text-slate-400" />
-                        {item.time}
-                      </div>
-                    </td>
+                      <td className="p-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center rounded-md px-2 py-0.5 text-[0.65rem] font-bold ${
+                            item.status === "Completed"
+                              ? "bg-slate-100 text-slate-600 border border-slate-200"
+                              : "bg-sky-50 text-sky-700 border border-sky-200"
+                          }`}
+                        >
+                          {item.status}
+                        </span>
+                      </td>
 
-                    <td className="p-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[0.65rem] font-bold ${
-                          item.status === "Completed"
-                            ? "bg-slate-100 text-slate-600 border border-slate-200"
-                            : "bg-sky-50 text-sky-700 border border-sky-200"
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
-
-                    {/* Attendance Column */}
-                    <td className="p-4 text-center whitespace-nowrap">
-                      {item.status !== "Completed" ? (
+                      {/* Attendance Column */}
+                      <td className="p-4 text-center whitespace-nowrap">
                         <select
-                          value={item.attendance}
+                          disabled={updatingId === item.id}
+                          value={
+                            item.status === "Completed"
+                              ? "completed"
+                              : item.status === "Cancelled"
+                              ? "cancelled"
+                              : item.attendance === "Checked In"
+                              ? "checked_in"
+                              : item.attendance === "No Show"
+                              ? "no_show"
+                              : "confirmed"
+                          }
                           onChange={(e) =>
                             handleMarkAttendance(
                               item.id,
-                              e.target.value as "Checked In" | "No Show" | "Pending"
+                              e.target.value
                             )
                           }
-                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold outline-none transition-all cursor-pointer ${
-                            item.attendance === "Checked In"
+                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold outline-none transition-all cursor-pointer disabled:opacity-50 ${
+                            item.attendance === "Checked In" || item.status === "Completed"
                               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : item.attendance === "No Show"
+                              : item.attendance === "No Show" || item.status === "Cancelled"
                               ? "border-rose-200 bg-rose-50 text-rose-700"
                               : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                           }`}
                         >
-                          <option value="Pending">Pending</option>
-                          <option value="Checked In">Checked In</option>
-                          <option value="No Show">No Show</option>
+                          <option value="confirmed">Confirmed (Pending)</option>
+                          <option value="checked_in">Checked In</option>
+                          <option value="no_show">No Show</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
                         </select>
-                      ) : (
-                        <span
-                          className={`inline-flex items-center rounded-md px-2 py-0.5 text-[0.65rem] font-bold ${
-                            item.attendance === "Checked In"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : "bg-slate-100 text-slate-600 border border-slate-200"
-                          }`}
-                        >
-                          {item.attendance}
-                        </span>
-                      )}
-                    </td>
+                      </td>
 
-                    {/* Action Column */}
-                    <td className="p-4 pr-6 text-center whitespace-nowrap">
-                      {item.status !== "Completed" ? (
-                        item.attendance === "Checked In" ? (
-                          <button
-                            onClick={() => handleCompleteAppointment(item.id)}
-                            className="inline-flex items-center gap-1 rounded-lg bg-[#7da3b3] px-3 py-1 text-xs font-semibold text-white shadow-sm hover:bg-[#6b92a2] transition-colors cursor-pointer"
-                          >
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Complete
-                          </button>
+                      {/* Action Column */}
+                      <td className="p-4 pr-6 text-center whitespace-nowrap">
+                        {item.status !== "Completed" ? (
+                          item.attendance === "Checked In" ? (
+                            <button
+                              disabled={updatingId === item.id}
+                              onClick={() => handleCompleteAppointment(item.id)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-[#7da3b3] px-3 py-1 text-xs font-semibold text-white shadow-sm hover:bg-[#6b92a2] transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                              {updatingId === item.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              )}
+                              Complete
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400 font-medium italic">
+                              Check in first
+                            </span>
+                          )
                         ) : (
-                          <span className="text-xs text-slate-400 font-medium italic">
-                            Check in first
-                          </span>
-                        )
-                      ) : (
-                        <button
-                          onClick={() => handleUndoCompletion(item.id)}
-                          title="Click to undo completion"
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 transition-all cursor-pointer shadow-xs"
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Done
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                          <button
+                            disabled={updatingId === item.id}
+                            onClick={() => handleUndoCompletion(item.id)}
+                            title="Click to undo completion"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Done
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination Controls */}
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-6 py-3 text-xs">
-          <span className="text-[0.7rem] text-slate-500 font-medium">
-            Showing <strong className="text-slate-800">{filteredAppointments.length > 0 ? startIndex + 1 : 0}</strong> to{" "}
-            <strong className="text-slate-800">
-              {Math.min(startIndex + itemsPerPage, filteredAppointments.length)}
-            </strong>{" "}
-            of <strong className="text-slate-800">{filteredAppointments.length}</strong>
-          </span>
+        {!loading && filteredAppointments.length > 0 && (
+          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-6 py-3 text-xs">
+            <span className="text-[0.7rem] text-slate-500 font-medium">
+              Showing{" "}
+              <strong className="text-slate-800">
+                {filteredAppointments.length > 0 ? startIndex + 1 : 0}
+              </strong>{" "}
+              to{" "}
+              <strong className="text-slate-800">
+                {Math.min(startIndex + itemsPerPage, filteredAppointments.length)}
+              </strong>{" "}
+              of <strong className="text-slate-800">{filteredAppointments.length}</strong>
+            </span>
 
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </button>
-
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+            <div className="flex items-center gap-1">
               <button
-                key={pageNum}
-                onClick={() => handlePageChange(pageNum)}
-                className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${
-                  currentPage === pageNum
-                    ? "bg-[#7da3b3] text-white shadow-sm"
-                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                }`}
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
               >
-                {pageNum}
+                <ChevronLeft className="h-3.5 w-3.5" />
               </button>
-            ))}
 
-            <button
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                <button
+                  key={pageNum}
+                  onClick={() => handlePageChange(pageNum)}
+                  className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${
+                    currentPage === pageNum
+                      ? "bg-[#7da3b3] text-white shadow-sm"
+                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

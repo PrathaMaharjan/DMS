@@ -37,11 +37,11 @@ export type BookAppointmentErrorCode =
 
 export type BookAppointmentResult =
   | {
-      success: true;
-      appointmentId: string;
-      patientId: string;
-      wasNewPatient: boolean;
-    }
+    success: true;
+    appointmentId: string;
+    patientId: string;
+    wasNewPatient: boolean;
+  }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 // Schedule-time check disabled for now, on purpose - every active clinical
@@ -301,18 +301,18 @@ export async function bookAppointment(
 // ---------------get gending appoment --------------------------------
 export type PendingReviewResult =
   | {
-      success: true;
-      appointments: {
-        id: string;
-        patientName: string;
-        patientPhone: string | null;
-        patientEmail: string | null;
-        treatmentName: string;
-        startTime: Date;
-        source: string;
-        notes: string | null;
-      }[];
-    }
+    success: true;
+    appointments: {
+      id: string;
+      patientName: string;
+      patientPhone: string | null;
+      patientEmail: string | null;
+      treatmentName: string;
+      startTime: Date;
+      source: string;
+      notes: string | null;
+    }[];
+  }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 export async function getPendingAppointments(
@@ -506,22 +506,22 @@ export async function reassignAppointmentDoctor(
 
 export type GetAppointmentsResult =
   | {
-      success: true;
-      appointments: {
-        id: string;
-        patientName: string;
-        patientPhone: string | null;
-        patientEmail: string | null;
-        providerName: string;
-        treatmentName: string;
-        startTime: Date;
-        endTime: Date;
-        status: string;
-        source: string;
-        notes: string | null;
-      }[];
-      pagination: { total: number; limit: number; offset: number };
-    }
+    success: true;
+    appointments: {
+      id: string;
+      patientName: string;
+      patientPhone: string | null;
+      patientEmail: string | null;
+      providerName: string;
+      treatmentName: string;
+      startTime: Date;
+      endTime: Date;
+      status: string;
+      source: string;
+      notes: string | null;
+    }[];
+    pagination: { total: number; limit: number; offset: number };
+  }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 const DEFAULT_LIMIT = 20;
@@ -562,10 +562,13 @@ export async function getAppointments(
       db
         .select({
           id: appointments.id,
+          patientId: appointments.patientId,
           patientName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`,
           patientPhone: patients.phone,
           patientEmail: patients.email,
+          providerId: appointments.providerId,
           providerName: users.name,
+          treatmentId: appointments.treatmentId,
           treatmentName: treatments.name,
           startTime: appointments.startTime,
           endTime: appointments.endTime,
@@ -612,24 +615,24 @@ export async function getAppointments(
 // -----------------------get dingle appoment ----------------------------
 export type GetAppointmentResult =
   | {
-      success: true;
-      appointment: {
-        id: string;
-        patientId: string;
-        patientName: string;
-        patientPhone: string | null;
-        patientEmail: string | null;
-        providerId: string;
-        providerName: string;
-        treatmentId: string;
-        treatmentName: string;
-        startTime: Date;
-        endTime: Date;
-        status: string;
-        source: string;
-        notes: string | null;
-      };
-    }
+    success: true;
+    appointment: {
+      id: string;
+      patientId: string;
+      patientName: string;
+      patientPhone: string | null;
+      patientEmail: string | null;
+      providerId: string;
+      providerName: string;
+      treatmentId: string;
+      treatmentName: string;
+      startTime: Date;
+      endTime: Date;
+      status: string;
+      source: string;
+      notes: string | null;
+    };
+  }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 export async function getAppointment(

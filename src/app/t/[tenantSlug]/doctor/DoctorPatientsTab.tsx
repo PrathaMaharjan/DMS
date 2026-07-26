@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import axios from "axios";
 import {
   Search,
   User,
@@ -14,6 +15,7 @@ import {
   PlusCircle,
   ChevronDown,
   ChevronLeft,
+  Loader2,
 } from "lucide-react";
 
 export interface TreatmentRecord {
@@ -40,6 +42,8 @@ export interface TreatedPatient {
 export default function DoctorPatientsTab() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<TreatedPatient | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
@@ -51,129 +55,40 @@ export default function DoctorPatientsTab() {
   const [newAllergiesInput, setNewAllergiesInput] = useState("");
   const [newMedicalHistoryInput, setNewMedicalHistoryInput] = useState("");
 
-  const [patients, setPatients] = useState<TreatedPatient[]>([
-    {
-      id: "PAT-001",
-      name: "Aarav Sharma",
-      phone: "9841000000",
-      age: 34,
-      gender: "Male",
-      medicalHistory: ["Hypertension"],
-      allergies: ["Penicillin"],
-      lastVisit: "2026-07-21",
-      totalVisits: 3,
-      history: [
-        {
-          id: "TR-101",
-          date: "2026-07-21",
-          service: "Dental Checkup & Cleaning",
-          notes: "Mild gingivitis detected near lower right molars. Cleaned and applied fluoride coating.",
-          prescription: "Chlorhexidine Mouthwash 0.12% - Use twice daily for 7 days.",
-        },
-        {
-          id: "TR-088",
-          date: "2026-03-15",
-          service: "Cavity Filling",
-          notes: "Composite filling on tooth #14. Patient tolerated procedure well.",
-        },
-      ],
-    },
-    {
-      id: "PAT-002",
-      name: "Sita Adhikari",
-      phone: "9851012345",
-      age: 28,
-      gender: "Female",
-      medicalHistory: ["None"],
-      allergies: ["None"],
-      lastVisit: "2026-06-10",
-      totalVisits: 1,
-      history: [
-        {
-          id: "TR-092",
-          date: "2026-06-10",
-          service: "Initial Consultation",
-          notes: "Evaluated for root canal procedure. X-rays taken.",
-        },
-      ],
-    },
-    {
-      id: "PAT-003",
-      name: "Maya Gurung",
-      phone: "9812345678",
-      age: 42,
-      gender: "Female",
-      medicalHistory: ["Asthma"],
-      allergies: ["Latex"],
-      lastVisit: "2026-05-02",
-      totalVisits: 2,
-      history: [
-        {
-          id: "TR-074",
-          date: "2026-05-02",
-          service: "Scaling & Polishing",
-          notes: "Routine tartar removal completed.",
-        },
-      ],
-    },
-    {
-      id: "PAT-004",
-      name: "Rohan Shrestha",
-      phone: "9801122334",
-      age: 50,
-      gender: "Male",
-      medicalHistory: ["Diabetes Type 2"],
-      allergies: ["Sulfa Drugs"],
-      lastVisit: "2026-04-18",
-      totalVisits: 4,
-      history: [
-        {
-          id: "TR-061",
-          date: "2026-04-18",
-          service: "Periodontal Evaluation",
-          notes: "Gum pocket depths measured. Prescribed specialized rinse.",
-        },
-      ],
-    },
-    {
-      id: "PAT-005",
-      name: "Pooja Karki",
-      phone: "9860554433",
-      age: 23,
-      gender: "Female",
-      medicalHistory: ["None"],
-      allergies: ["Dust"],
-      lastVisit: "2026-03-29",
-      totalVisits: 1,
-      history: [
-        {
-          id: "TR-055",
-          date: "2026-03-29",
-          service: "Tooth Extraction",
-          notes: "Extracted impacted lower right wisdom tooth under local anesthesia.",
-        },
-      ],
-    },
-    {
-      id: "PAT-006",
-      name: "Bikash Thapa",
-      phone: "9849988776",
-      age: 38,
-      gender: "Male",
-      medicalHistory: ["High Cholesterol"],
-      allergies: ["Aspirin"],
-      lastVisit: "2026-02-14",
-      totalVisits: 5,
-      history: [
-        {
-          id: "TR-041",
-          date: "2026-02-14",
-          service: "Crown Placement",
-          notes: "Permanent porcelain crown fitted on tooth #19.",
-        },
-      ],
-    },
-  ]);
+  const [patients, setPatients] = useState<TreatedPatient[]>([]);
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+
+      const res = await axios.get("/api/patent");
+      if (res.data?.success && res.data.data.patients) {
+        const mapped: TreatedPatient[] = res.data.data.patients.map((p: any) => ({
+          id: p.id,
+          name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
+          phone: p.phone || "-",
+          age: p.age || 0,
+          gender: p.gender || "Male",
+          medicalHistory: [],
+          allergies: [],
+          lastVisit: p.lastVisit ? new Date(p.lastVisit).toISOString().split("T")[0] : "N/A",
+          totalVisits: 1,
+          history: [],
+        }));
+        setPatients(mapped);
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch doctor patients:", err);
+      setErrorMsg("Failed to load patient records from database.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Filter patients by name, phone, or ID
   const filteredPatients = patients.filter(
@@ -184,7 +99,7 @@ export default function DoctorPatientsTab() {
   );
 
   // Pagination Logic
-  const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(filteredPatients.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedPatients = filteredPatients.slice(startIndex, startIndex + itemsPerPage);
 
@@ -194,12 +109,32 @@ export default function DoctorPatientsTab() {
     }
   };
 
-  const handleSelectPatient = (patient: TreatedPatient) => {
+  const handleSelectPatient = async (patient: TreatedPatient) => {
     setSelectedPatient(patient);
     setShowNoteDropdown(false);
+
+    try {
+      const res = await axios.get(`/api/patent/${patient.id}`).catch(() => null);
+      if (res?.data?.success && res.data.data.patient) {
+        const p = res.data.data.patient;
+        setSelectedPatient((prev) =>
+          prev
+            ? {
+                ...prev,
+                name: `${p.firstName || ""} ${p.lastName || ""}`.trim(),
+                phone: p.phone || prev.phone,
+                age: p.age || prev.age,
+                gender: p.gender || prev.gender,
+              }
+            : prev
+        );
+      }
+    } catch (err) {
+      console.error("Error loading patient detail:", err);
+    }
   };
 
-  const handleAddTreatmentNote = (e: React.FormEvent) => {
+  const handleAddTreatmentNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPatient || !newService || !newNotes) return;
 
@@ -246,6 +181,19 @@ export default function DoctorPatientsTab() {
 
   return (
     <div className="w-full space-y-6 text-slate-800">
+      {/* Notifications */}
+      {errorMsg && (
+        <div className="flex items-center justify-between rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-xs text-rose-700">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>{errorMsg}</span>
+          </div>
+          <button onClick={() => setErrorMsg(null)} className="text-rose-400 hover:text-rose-600">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Search & Top Action Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
         <div className="relative flex-1 min-w-[280px]">
@@ -256,336 +204,320 @@ export default function DoctorPatientsTab() {
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
-              setCurrentPage(1); // Reset to page 1 on search
+              setCurrentPage(1);
             }}
-            className="w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-10 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-[#7da3b3] focus:bg-white transition-all"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 py-2 text-xs font-medium outline-none focus:border-sky-400 focus:bg-white transition-all placeholder:text-slate-400"
           />
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-slate-500 font-medium">Total Patients:</span>
-          <span className="rounded-md bg-slate-100 px-2.5 py-1 text-slate-900 font-bold border border-slate-200">
-            {patients.length}
-          </span>
+        <div className="text-xs font-medium text-slate-500">
+          Total Treated Patients: <strong className="text-slate-800 font-semibold">{filteredPatients.length}</strong>
         </div>
       </div>
 
-      {/* Grid: Left Patient Table/Roster | Right Medical Record Detail */}
-      <div className="grid gap-6 lg:grid-cols-12">
-        {/* Left Column: Front-Desk Style Patient Roster */}
-        <div className="lg:col-span-5 flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white shadow-sm overflow-hidden min-h-[580px]">
-          <div>
-            {/* Table Header Style */}
-            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-3 text-[0.7rem] font-bold uppercase tracking-wider text-slate-500">
-              <span>Patient Directory</span>
-              <span>Last Visit / Service</span>
+      {/* Patients Grid */}
+      {loading ? (
+        <div className="p-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2 bg-white rounded-2xl border border-slate-100 shadow-sm">
+          <Loader2 className="h-6 w-6 animate-spin text-[#7da3b3]" />
+          <span>Loading patient records...</span>
+        </div>
+      ) : filteredPatients.length === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-xs text-slate-500 shadow-sm">
+          No patient records match your criteria.
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {paginatedPatients.map((patient) => (
+            <div
+              key={patient.id}
+              onClick={() => handleSelectPatient(patient)}
+              className={`group relative flex flex-col justify-between rounded-2xl border bg-white p-5 shadow-sm transition-all cursor-pointer hover:shadow-md ${
+                selectedPatient?.id === patient.id
+                  ? "border-[#7da3b3] ring-2 ring-[#7da3b3]/20"
+                  : "border-slate-200/80 hover:border-slate-300"
+              }`}
+            >
+              <div>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-50 text-[#7da3b3] font-bold border border-sky-100">
+                      <User className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm group-hover:text-[#7da3b3] transition-colors">
+                        {patient.name}
+                      </h3>
+                      <p className="text-[0.7rem] font-medium text-slate-400">{patient.id}</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-600 transition-colors" />
+                </div>
+
+                <div className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Phone:</span>
+                    <span className="font-semibold text-slate-800">{patient.phone}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Age & Gender:</span>
+                    <span className="font-medium text-slate-800">
+                      {patient.age > 0 ? `${patient.age} yrs` : "N/A"} • {patient.gender}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Last Visit:</span>
+                    <span className="font-medium text-slate-700 flex items-center gap-1">
+                      <Calendar className="h-3 w-3 text-slate-400" />
+                      {patient.lastVisit}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-[0.7rem]">
+                <span className="inline-flex items-center gap-1 font-semibold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-md">
+                  <FileText className="h-3 w-3" />
+                  {patient.history.length} Record{patient.history.length === 1 ? "" : "s"}
+                </span>
+                <span className="text-slate-400 font-medium group-hover:text-slate-700 transition-colors">
+                  View Medical Chart →
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-4 text-xs shadow-sm">
+          <span className="text-slate-500 font-medium">
+            Page <strong className="text-slate-800">{currentPage}</strong> of{" "}
+            <strong className="text-slate-800">{totalPages}</strong>
+          </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4" /> Previous
+            </button>
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+            >
+              Next <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Patient Detail Modal */}
+      {selectedPatient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl border border-slate-100 space-y-6">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-100 text-[#7da3b3] font-bold text-lg">
+                  <User className="h-6 w-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">{selectedPatient.name}</h2>
+                  <p className="text-xs text-slate-500 font-medium">
+                    ID: {selectedPatient.id} • {selectedPatient.phone}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedPatient(null)}
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
-            {/* Patient Cards List */}
-            <div className="divide-y divide-slate-100">
-              {paginatedPatients.length === 0 ? (
-                <div className="p-8 text-center">
-                  <User className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-                  <p className="text-xs font-semibold text-slate-500">No records found</p>
+            {/* Quick Profile Summary */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
+              <div>
+                <span className="block text-slate-400 font-medium">Age & Gender</span>
+                <span className="font-semibold text-slate-800">
+                  {selectedPatient.age > 0 ? `${selectedPatient.age} yrs` : "N/A"} • {selectedPatient.gender}
+                </span>
+              </div>
+              <div>
+                <span className="block text-slate-400 font-medium">Last Visit</span>
+                <span className="font-semibold text-slate-800">{selectedPatient.lastVisit}</span>
+              </div>
+              <div>
+                <span className="block text-slate-400 font-medium">Total Visits</span>
+                <span className="font-semibold text-slate-800">{selectedPatient.totalVisits}</span>
+              </div>
+              <div>
+                <span className="block text-slate-400 font-medium">Status</span>
+                <span className="font-semibold text-emerald-600">Active Patient</span>
+              </div>
+            </div>
+
+            {/* Medical History & Allergies */}
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-rose-100 bg-rose-50/40 p-4 space-y-2">
+                <h4 className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
+                  <AlertCircle className="h-4 w-4 text-rose-600" /> Allergies
+                </h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedPatient.allergies.length > 0 ? (
+                    selectedPatient.allergies.map((alg, i) => (
+                      <span key={i} className="bg-rose-100 text-rose-800 text-[0.7rem] font-semibold px-2.5 py-0.5 rounded-full border border-rose-200">
+                        {alg}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-400">No known allergies recorded.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-4 space-y-2">
+                <h4 className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                  <History className="h-4 w-4 text-amber-600" /> Medical History
+                </h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedPatient.medicalHistory.length > 0 ? (
+                    selectedPatient.medicalHistory.map((med, i) => (
+                      <span key={i} className="bg-amber-100 text-amber-800 text-[0.7rem] font-semibold px-2.5 py-0.5 rounded-full border border-amber-200">
+                        {med}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-400">No pre-existing conditions recorded.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Add Clinical Note Button */}
+            <div className="flex justify-between items-center pt-2">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Stethoscope className="h-4 w-4 text-[#7da3b3]" /> Treatment History
+              </h3>
+
+              <button
+                onClick={() => setShowNoteDropdown(!showNoteDropdown)}
+                className="flex items-center gap-1.5 rounded-xl bg-[#7da3b3] px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#6b92a2] transition-colors"
+              >
+                <PlusCircle className="h-4 w-4" /> Add Treatment Note
+              </button>
+            </div>
+
+            {/* Add Note Form */}
+            {showNoteDropdown && (
+              <form onSubmit={handleAddTreatmentNote} className="space-y-4 rounded-xl border border-sky-100 bg-sky-50/50 p-4 text-xs">
+                <h4 className="font-bold text-sky-900">Add Clinical Note & Prescription</h4>
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">Service / Procedure *</label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="e.g. Root Canal Therapy"
+                      value={newService}
+                      onChange={(e) => setNewService(e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 outline-none focus:border-sky-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">Prescription (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Amoxicillin 500mg - 3x daily"
+                      value={newPrescription}
+                      onChange={(e) => setNewPrescription(e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 outline-none focus:border-sky-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-medium mb-1">Clinical Notes & Findings *</label>
+                  <textarea
+                    required
+                    rows={2}
+                    placeholder="Enter procedure details, X-ray observations, or patient feedback..."
+                    value={newNotes}
+                    onChange={(e) => setNewNotes(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white p-3 outline-none focus:border-sky-400"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowNoteDropdown(false)}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-slate-600 hover:bg-slate-50 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-[#7da3b3] px-4 py-1 text-white font-semibold hover:bg-[#6b92a2]"
+                  >
+                    Save Note
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Treatment History List */}
+            <div className="space-y-3">
+              {selectedPatient.history.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                  No treatment records on file for this patient.
                 </div>
               ) : (
-                paginatedPatients.map((patient) => {
-                  const isSelected = selectedPatient?.id === patient.id;
-                  const latestService = patient.history[0]?.service || "General Checkup";
-
-                  return (
-                    <div
-                      key={patient.id}
-                      onClick={() => handleSelectPatient(patient)}
-                      className={`group cursor-pointer p-3.5 transition-all flex items-center justify-between ${
-                        isSelected
-                          ? "bg-sky-50/60 border-l-4 border-l-[#7da3b3]"
-                          : "hover:bg-slate-50 border-l-4 border-l-transparent"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 shrink-0 rounded-full bg-slate-100 border border-slate-200/80 flex items-center justify-center text-slate-600 font-bold group-hover:bg-sky-100 group-hover:text-sky-700 transition-colors">
-                          <User className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <h4 className="text-xs font-bold text-slate-900 group-hover:text-[#7da3b3] transition-colors">
-                              {patient.name}
-                            </h4>
-                            <span className="text-[0.62rem] font-semibold text-slate-400">
-                              ({patient.id})
-                            </span>
-                          </div>
-                          <p className="text-[0.68rem] text-slate-500 mt-0.5">
-                            {patient.phone} • {patient.age}y/o {patient.gender}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="text-right flex flex-col items-end gap-1">
-                        <div className="flex items-center gap-1 text-[0.68rem] font-semibold text-sky-700 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded">
-                          <Stethoscope className="h-3 w-3 text-sky-600" />
-                          <span className="truncate max-w-[100px]">{latestService}</span>
-                        </div>
-                        <span className="text-[0.62rem] text-slate-400 flex items-center gap-1">
-                          <Calendar className="h-2.5 w-2.5" /> {patient.lastVisit}
-                        </span>
-                      </div>
+                selectedPatient.history.map((record) => (
+                  <div key={record.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2 text-xs">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <span className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                        <FileText className="h-4 w-4 text-[#7da3b3]" /> {record.service}
+                      </span>
+                      <span className="text-[0.7rem] font-semibold text-slate-400 flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5 text-slate-400" /> {record.date}
+                      </span>
                     </div>
-                  );
-                })
+
+                    <p className="text-slate-700 leading-relaxed">{record.notes}</p>
+
+                    {record.prescription && (
+                      <div className="mt-2 rounded-lg bg-sky-50/70 p-2.5 text-[0.75rem] border border-sky-100 text-sky-900 font-medium">
+                        <strong>Prescription:</strong> {record.prescription}
+                      </div>
+                    )}
+                  </div>
+                ))
               )}
             </div>
-          </div>
 
-          {/* Front-Desk Pagination Controls */}
-          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-4 py-3 text-xs">
-            <span className="text-[0.7rem] text-slate-500 font-medium">
-              Showing <strong className="text-slate-800">{filteredPatients.length > 0 ? startIndex + 1 : 0}</strong> to{" "}
-              <strong className="text-slate-800">
-                {Math.min(startIndex + itemsPerPage, filteredPatients.length)}
-              </strong>{" "}
-              of <strong className="text-slate-800">{filteredPatients.length}</strong>
-            </span>
-
-            <div className="flex items-center gap-1">
+            {/* Modal Footer */}
+            <div className="flex justify-end pt-4 border-t border-slate-100">
               <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                onClick={() => setSelectedPatient(null)}
+                className="rounded-xl border border-slate-200 bg-white px-5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                <button
-                  key={pageNum}
-                  onClick={() => handlePageChange(pageNum)}
-                  className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${
-                    currentPage === pageNum
-                      ? "bg-[#7da3b3] text-white shadow-sm"
-                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              ))}
-
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages || totalPages === 0}
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
+                Close Medical File
               </button>
             </div>
           </div>
         </div>
-
-        {/* Right Column: Detailed Medical History & Notes View */}
-        <div className="lg:col-span-7">
-          {selectedPatient ? (
-            <div className="rounded-xl border border-slate-200/80 bg-white p-6 shadow-sm space-y-6">
-              {/* Header Info Banner */}
-              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-5">
-                <div className="flex items-center gap-3.5">
-                  <div className="h-11 w-11 shrink-0 rounded-full bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-700 font-bold">
-                    <User className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-slate-900">{selectedPatient.name}</h3>
-                      <span className="text-[0.65rem] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                        {selectedPatient.id}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {selectedPatient.gender}, {selectedPatient.age} yrs • Phone: {selectedPatient.phone}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Dropdown Toggle Button */}
-                <button
-                  onClick={() => setShowNoteDropdown(!showNoteDropdown)}
-                  className="flex items-center gap-1.5 rounded-lg bg-[#7da3b3] px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#6b92a2] transition-colors"
-                >
-                  <PlusCircle className="h-4 w-4" /> Add Note
-                  <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${showNoteDropdown ? "rotate-180" : ""}`} />
-                </button>
-              </div>
-
-              {/* Inline Add Note Form */}
-              {showNoteDropdown && (
-                <form
-                  onSubmit={handleAddTreatmentNote}
-                  className="rounded-xl border border-sky-200 bg-sky-50/40 p-4 shadow-sm space-y-3 transition-all duration-300"
-                >
-                  <div className="flex items-center justify-between border-b border-sky-100 pb-2">
-                    <h4 className="text-xs font-bold text-sky-900">New Clinical Entry</h4>
-                    <button
-                      type="button"
-                      onClick={() => setShowNoteDropdown(false)}
-                      className="text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3 text-xs">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Service / Procedure</label>
-                      <input
-                        type="text"
-                        required
-                        value={newService}
-                        onChange={(e) => setNewService(e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#7da3b3]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Clinical Notes & Observations</label>
-                      <textarea
-                        required
-                        rows={2}
-                        value={newNotes}
-                        onChange={(e) => setNewNotes(e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#7da3b3]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Prescription / Instructions (Optional)</label>
-                      <input
-                        type="text"
-                        value={newPrescription}
-                        onChange={(e) => setNewPrescription(e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#7da3b3]"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 pt-1">
-                      <div>
-                        <label className="block font-semibold text-slate-700 mb-1">Add Allergies</label>
-                        <input
-                          type="text"
-                          value={newAllergiesInput}
-                          onChange={(e) => setNewAllergiesInput(e.target.value)}
-                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#7da3b3]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-semibold text-slate-700 mb-1">Add Medical History</label>
-                        <input
-                          type="text"
-                          value={newMedicalHistoryInput}
-                          onChange={(e) => setNewMedicalHistoryInput(e.target.value)}
-                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#7da3b3]"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-2 border-t border-sky-100">
-                    <button
-                      type="button"
-                      onClick={() => setShowNoteDropdown(false)}
-                      className="rounded-lg px-4 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="rounded-lg bg-[#7da3b3] px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#6b92a2]"
-                    >
-                      Save Record
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Alerts & History Cards */}
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="rounded-xl bg-amber-50/50 border border-amber-200/60 p-3 space-y-1">
-                  <p className="font-bold text-amber-800 flex items-center gap-1.5 text-[0.68rem] uppercase tracking-wider">
-                    <AlertCircle className="h-3.5 w-3.5 text-amber-600" /> Allergies
-                  </p>
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {selectedPatient.allergies.map((allergy, i) => (
-                      <span key={i} className="bg-amber-100/80 text-amber-900 font-semibold px-2 py-0.5 rounded text-[0.68rem]">
-                        {allergy}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-1">
-                  <p className="font-bold text-slate-700 flex items-center gap-1.5 text-[0.68rem] uppercase tracking-wider">
-                    <Stethoscope className="h-3.5 w-3.5 text-sky-600" /> Medical History
-                  </p>
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {selectedPatient.medicalHistory.map((cond, i) => (
-                      <span key={i} className="bg-white text-slate-700 font-semibold border border-slate-200 px-2 py-0.5 rounded text-[0.68rem]">
-                        {cond}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Timeline Section */}
-              <div className="space-y-4 pt-2">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <History className="h-3.5 w-3.5 text-[#7da3b3]" /> Treatment History
-                </h4>
-
-                <div className="relative border-l-2 border-slate-100 pl-4 space-y-4 ml-2">
-                  {selectedPatient.history.map((record) => (
-                    <div key={record.id} className="relative group">
-                      <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-[#7da3b3] ring-4 ring-white" />
-
-                      <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3.5 space-y-2 text-xs">
-                        <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-                          <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                            <Stethoscope className="h-3.5 w-3.5 text-sky-600" /> {record.service}
-                          </span>
-                          <span className="text-[0.68rem] text-slate-400 font-medium flex items-center gap-1">
-                            <Calendar className="h-3 w-3" /> {record.date}
-                          </span>
-                        </div>
-
-                        <div>
-                          <p className="font-semibold text-slate-500 text-[0.68rem]">Clinical Notes:</p>
-                          <p className="text-slate-700 mt-0.5 leading-relaxed">{record.notes}</p>
-                        </div>
-
-                        {record.prescription && (
-                          <div className="rounded-lg bg-sky-50 border border-sky-100 p-2 mt-2">
-                            <p className="font-bold text-sky-900 text-[0.68rem] flex items-center gap-1">
-                              <FileText className="h-3 w-3 text-sky-600" /> Prescription:
-                            </p>
-                            <p className="text-sky-800 mt-0.5 font-medium">{record.prescription}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 p-16 text-center h-full flex flex-col items-center justify-center min-h-[580px]">
-              <FileText className="h-10 w-10 text-slate-300 mb-3" />
-              <p className="text-sm font-semibold text-slate-600">Select a Patient</p>
-              <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                Click on any patient row from the directory on the left to view their detailed medical history and records.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
