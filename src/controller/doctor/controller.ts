@@ -1023,3 +1023,5 @@ export async function getDoctorNameAndId(
     };
   }
 }
+
+// get appoment for a doctor which status in confirm 
