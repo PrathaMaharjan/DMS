@@ -846,7 +846,7 @@ export async function updateAppointment(
     }
     const data = parsed.data;
 
-    // Same tenant-scoped lookup pattern as updateAppointmentStatus/reassign.
+
     const existing = await db
       .select({
         id: appointments.id,

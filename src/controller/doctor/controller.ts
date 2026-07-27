@@ -18,8 +18,10 @@ import { sendStaffWelcomeEmail } from "@/lib/email/sendWelComeMail";
 import {
   createDoctorSchema,
   updateDoctorSchema,
+  UpdateScheduleInput,
+  updateScheduleSchema,
 } from "@/lib/validators/doctor";
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, ne, sql } from "drizzle-orm";
 
 export type DoctorErrorCode =
   | "UNAUTHORIZED"
