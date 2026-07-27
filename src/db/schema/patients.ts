@@ -15,7 +15,7 @@ import { appointments } from "./scheduling";
 import { ledgerEntries } from "./billing";
 import { odontogramEntries } from "./clinical";
 import { number } from "zod";
-// import { bloodGroupEnum } from "./tenancy";
+
 export const bloodEnum = pgEnum("blood_group", [
   "A+",
   "A-",
