@@ -18,8 +18,10 @@ import { sendStaffWelcomeEmail } from "@/lib/email/sendWelComeMail";
 import {
   createDoctorSchema,
   updateDoctorSchema,
+  UpdateScheduleInput,
+  updateScheduleSchema,
 } from "@/lib/validators/doctor";
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, ne, sql } from "drizzle-orm";
 
 export type DoctorErrorCode =
   | "UNAUTHORIZED"
@@ -719,9 +721,6 @@ export async function getDoctor(doctorId: string): Promise<GetDoctorResult> {
       code: "SERVER_ERROR",
     };
   }
-<<<<<<< HEAD
-}
-=======
 }
 
 // -------------------------------- updateSchedule -----------------------------------------
@@ -1013,4 +1012,3 @@ export async function getDoctorNameAndId(
 }
 
 // get appoment for a doctor which status in confirm 
->>>>>>> c027d472ad4c6e16b2676ce9a14a29796c24fdf8
