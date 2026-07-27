@@ -12,6 +12,8 @@ import {
   desc,
 } from "drizzle-orm";
 import { db } from "@/db";
+
+import { z } from "zod";
 import {
   patients,
   appointments,
@@ -804,6 +806,214 @@ export async function assignAppointmentToPatient(
     return {
       success: false,
       error: "Something went wrong booking the appointment.",
+      code: "SERVER_ERROR",
+    };
+  }
+}
+
+
+
+
+// ------------------------- update appointment -----------------------------
+
+const updateAppointmentSchema = z.object({
+  patientName: z.string().min(1).optional(),
+  patientPhone: z.string().min(1).optional(),
+  treatmentId: z.string().uuid().optional(),
+  date: z.string().optional(), // YYYY-MM-DD
+  time: z.string().optional(), // HH:MM
+  notes: z.string().optional(),
+});
+
+export type UpdateAppointmentResult =
+  | { success: true }
+  | { success: false; error: string; code: BookAppointmentErrorCode };
+
+export async function updateAppointment(
+  appointmentId: string,
+  input: unknown,
+): Promise<UpdateAppointmentResult> {
+  try {
+    const session = await requireSession();
+
+    const parsed = updateAppointmentSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: parsed.error.issues[0]?.message ?? "Invalid input.",
+        code: "VALIDATION",
+      };
+    }
+    const data = parsed.data;
+
+    // Same tenant-scoped lookup pattern as updateAppointmentStatus/reassign.
+    const existing = await db
+      .select({
+        id: appointments.id,
+        patientId: appointments.patientId,
+        providerId: appointments.providerId,
+        treatmentId: appointments.treatmentId,
+        startTime: appointments.startTime,
+        endTime: appointments.endTime,
+      })
+      .from(appointments)
+      .innerJoin(locations, eq(appointments.locationId, locations.id))
+      .where(
+        and(
+          eq(appointments.id, appointmentId),
+          eq(locations.orgId, session.orgId),
+        ),
+      )
+      .limit(1);
+
+    const current = existing[0];
+    if (!current) {
+      return {
+        success: false,
+        error: "Appointment not found.",
+        code: "NOT_FOUND",
+      };
+    }
+
+    // Resolve which treatment's duration to use - the newly chosen one,
+    // or whatever's already on the appointment if it isn't changing.
+    const treatmentId = data.treatmentId ?? current.treatmentId;
+    const treatment = await db.query.treatments.findFirst({
+      where: eq(treatments.id, treatmentId),
+    });
+    if (!treatment) {
+      return {
+        success: false,
+        error: "Selected treatment could not be found.",
+        code: "NOT_FOUND",
+      };
+    }
+
+    // Only recompute start/end if date or time actually changed.
+    let startTime = current.startTime;
+    let endTime = current.endTime;
+    if (data.date || data.time) {
+      const existingDate = current.startTime.toISOString().slice(0, 10);
+      const existingTime = current.startTime.toTimeString().slice(0, 5);
+      const nextDate = data.date ?? existingDate;
+      const nextTime = data.time ?? existingTime;
+
+      startTime = new Date(`${nextDate}T${nextTime}:00`);
+      endTime = new Date(
+        startTime.getTime() + treatment.durationMinutes * 60_000,
+      );
+
+      // Same double-booking guard as reassignAppointmentDoctor - exclude
+      // this appointment, since it's already booked against itself.
+      const conflict = await db.query.appointments.findFirst({
+        where: and(
+          eq(appointments.providerId, current.providerId),
+          ne(appointments.id, appointmentId),
+          ne(appointments.status, "cancelled"),
+          lt(appointments.startTime, endTime),
+          gt(appointments.endTime, startTime),
+        ),
+      });
+      if (conflict) {
+        return {
+          success: false,
+          error: "This dentist is already booked at that time.",
+          code: "DOUBLE_BOOKED",
+        };
+      }
+    }
+
+    await db.transaction(async (tx) => {
+      if (data.patientName || data.patientPhone) {
+        const patientUpdates: Record<string, string> = {};
+        if (data.patientName) {
+          const trimmed = data.patientName.trim();
+          const [firstName, ...rest] = trimmed.split(" ");
+          patientUpdates.firstName = firstName;
+          patientUpdates.lastName = rest.join(" ") || "-";
+        }
+        if (data.patientPhone) {
+          patientUpdates.phone = data.patientPhone;
+        }
+        await tx
+          .update(patients)
+          .set(patientUpdates)
+          .where(eq(patients.id, current.patientId));
+      }
+
+      await tx
+        .update(appointments)
+        .set({
+          treatmentId,
+          startTime,
+          endTime,
+          ...(data.notes !== undefined ? { notes: data.notes } : {}),
+        })
+        .where(eq(appointments.id, appointmentId));
+    });
+
+    return { success: true };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return {
+      success: false,
+      error: "Something went wrong updating the appointment.",
+      code: "SERVER_ERROR",
+    };
+  }
+}
+
+// ------------------------- delete appointment ------------------------------
+
+export type DeleteAppointmentResult =
+  | { success: true }
+  | { success: false; error: string; code: BookAppointmentErrorCode };
+
+export async function deleteAppointment(
+  appointmentId: string,
+): Promise<DeleteAppointmentResult> {
+  try {
+    const session = await requireSession();
+
+    // Same tenant-scoped existence check as the other mutation endpoints.
+    const existing = await db
+      .select({ id: appointments.id })
+      .from(appointments)
+      .innerJoin(locations, eq(appointments.locationId, locations.id))
+      .where(
+        and(
+          eq(appointments.id, appointmentId),
+          eq(locations.orgId, session.orgId),
+        ),
+      )
+      .limit(1);
+
+    if (existing.length === 0) {
+      return {
+        success: false,
+        error: "Appointment not found.",
+        code: "NOT_FOUND",
+      };
+    }
+
+    // Hard delete - there's no deletedAt column on appointments the way
+    // there is on patients/users, and "cancelled" already serves as the
+    // soft-delete equivalent for this table. Swap this for a status
+    // update to "cancelled" instead if you'd rather keep the row.
+    await db.delete(appointments).where(eq(appointments.id, appointmentId));
+
+    return { success: true };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return {
+      success: false,
+      error: "Something went wrong deleting the appointment.",
       code: "SERVER_ERROR",
     };
   }

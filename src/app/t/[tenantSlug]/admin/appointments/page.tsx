@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import {
   Search,
-  Plus,
   CalendarClock,
   CalendarCheck2,
   CalendarX2,
@@ -16,7 +16,6 @@ import {
   Phone,
   Stethoscope,
   Cross,
-  Syringe,
   HeartPulse,
   Pill,
   Activity,
@@ -27,27 +26,13 @@ import {
   XCircle,
   Hourglass,
   BadgeCheck,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 
 const STATUSES = ["Scheduled", "Confirmed", "Completed", "Cancelled"] as const;
 type Status = (typeof STATUSES)[number];
-
-// Kept in sync with the public booking page's SERVICES and DENTISTS lists
-const TREATMENT_OPTIONS = [
-  "Routine Checkup & Cleaning",
-  "Teeth Whitening",
-  "Root Canal Treatment",
-  "Dental Implants",
-  "Braces & Aligners",
-  "Emergency Care",
-];
-
-const DOCTOR_OPTIONS = [
-  "Pratha Maharjan",
-  "Sophan Shrestha",
-  "Suprasidhhi Pradhan",
-  "Pragun Maskey",
-];
 
 const STATUS_ICONS: Record<Status, typeof Hourglass> = {
   Scheduled: Hourglass,
@@ -63,12 +48,15 @@ const STATUS_COLORS: Record<Status, string> = {
   Cancelled: "bg-rose-100 text-rose-700",
 };
 
-const STATUS_DOT: Record<Status, string> = {
-  Scheduled: "bg-amber-400",
-  Confirmed: "bg-sky-400",
-  Completed: "bg-emerald-400",
-  Cancelled: "bg-rose-400",
-};
+interface DoctorOption {
+  id: string;
+  name: string;
+}
+
+interface TreatmentOption {
+  id: string;
+  name: string;
+}
 
 type Appointment = {
   id: string;
@@ -76,131 +64,16 @@ type Appointment = {
   patientName: string;
   patientPhone: string;
   treatment: string;
+  treatmentId?: string;
   doctor: string;
+  doctorId: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:MM
-  duration: string;
   status: Status;
+  rawStatus: string;
   notes?: string;
   createdDate?: string;
 };
-
-const TODAY = "2026-07-20";
-
-const INITIAL_APPOINTMENTS: Appointment[] = [
-  {
-    id: "1",
-    appointmentId: "APT-1001",
-    patientName: "Sabina Karki",
-    patientPhone: "98410 22314",
-    treatment: "Routine Checkup & Cleaning",
-    doctor: "Pratha Maharjan",
-    date: TODAY,
-    time: "09:30",
-    duration: "30 mins",
-    status: "Confirmed",
-    notes: "Routine six-month cleaning. Patient prefers morning slots.",
-    createdDate: "2026-07-10 11:20",
-  },
-  {
-    id: "2",
-    appointmentId: "APT-1002",
-    patientName: "Anish Rai",
-    patientPhone: "98023 44121",
-    treatment: "Root Canal Treatment",
-    doctor: "Sophan Shrestha",
-    date: TODAY,
-    time: "11:00",
-    duration: "60 mins",
-    status: "Scheduled",
-    notes: "Second sitting for molar root canal. Confirm anaesthesia stock.",
-    createdDate: "2026-07-12 09:05",
-  },
-  {
-    id: "3",
-    appointmentId: "APT-1003",
-    patientName: "Priya Shrestha",
-    patientPhone: "98112 90887",
-    treatment: "Braces & Aligners",
-    doctor: "Suprasidhhi Pradhan",
-    date: TODAY,
-    time: "14:15",
-    duration: "20 mins",
-    status: "Scheduled",
-    notes: "Tighten upper arch wire. Review elastic wear compliance.",
-    createdDate: "2026-07-14 16:40",
-  },
-  {
-    id: "4",
-    appointmentId: "APT-1004",
-    patientName: "Bikash Adhikari",
-    patientPhone: "97701 55890",
-    treatment: "Teeth Whitening",
-    doctor: "Pragun Maskey",
-    date: "2026-07-21",
-    time: "10:00",
-    duration: "45 mins",
-    status: "Confirmed",
-    notes: "First whitening session, discuss sensitivity beforehand.",
-    createdDate: "2026-07-15 12:00",
-  },
-  {
-    id: "5",
-    appointmentId: "APT-1005",
-    patientName: "Nisha Tamang",
-    patientPhone: "98450 67231",
-    treatment: "Routine Checkup & Cleaning",
-    doctor: "Pratha Maharjan",
-    date: "2026-07-19",
-    time: "16:30",
-    duration: "25 mins",
-    status: "Completed",
-    notes: "No cavities found. Recommended fluoride varnish next visit.",
-    createdDate: "2026-07-05 08:30",
-  },
-  {
-    id: "6",
-    appointmentId: "APT-1006",
-    patientName: "Rojina Magar",
-    patientPhone: "98603 12980",
-    treatment: "Emergency Care",
-    doctor: "Sophan Shrestha",
-    date: "2026-07-18",
-    time: "13:00",
-    duration: "40 mins",
-    status: "Cancelled",
-    notes: "Patient rescheduled due to travel, follow up for new date.",
-    createdDate: "2026-07-02 10:15",
-  },
-  {
-    id: "7",
-    appointmentId: "APT-1007",
-    patientName: "Suresh Poudel",
-    patientPhone: "98212 45509",
-    treatment: "Dental Implants",
-    doctor: "Pragun Maskey",
-    date: "2026-07-22",
-    time: "09:00",
-    duration: "90 mins",
-    status: "Scheduled",
-    notes: "Pre-implant consultation completed, proceeding with placement.",
-    createdDate: "2026-07-16 14:50",
-  },
-];
-
-const EMPTY_FORM = {
-  patientName: "",
-  patientPhone: "",
-  treatment: TREATMENT_OPTIONS[0],
-  doctor: DOCTOR_OPTIONS[0],
-  date: TODAY,
-  time: "09:00",
-  duration: "",
-  status: "Scheduled" as Status,
-  notes: "",
-};
-
-type FormState = typeof EMPTY_FORM;
 
 const inputClass =
   "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
@@ -208,21 +81,58 @@ const inputClass =
 const textareaClass =
   "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
 
-function appointmentToForm(a: Appointment): FormState {
-  return {
-    patientName: a.patientName,
-    patientPhone: a.patientPhone,
-    treatment: a.treatment,
-    doctor: a.doctor,
-    date: a.date,
-    time: a.time,
-    duration: a.duration,
-    status: a.status,
-    notes: a.notes ?? "",
-  };
+function getTodayStr() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-function formatDateLabel(dateStr: string) {
+// Splits an ISO startTime into a YYYY-MM-DD date and HH:MM (24hr) time.
+function splitIsoStartTime(isoString: string) {
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return { date: getTodayStr(), time: "09:00" };
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return { date: `${year}-${month}-${day}`, time: `${hours}:${minutes}` };
+}
+
+// Maps backend appointment status strings to the four UI-facing statuses.
+function mapApiStatus(rawStatus: string | undefined): Status {
+  switch (rawStatus) {
+    case "completed":
+      return "Completed";
+    case "cancelled":
+    case "no_show":
+      return "Cancelled";
+    case "confirmed":
+    case "checked_in":
+      return "Confirmed";
+    case "pending":
+    default:
+      return "Scheduled";
+  }
+}
+
+// Reverse of the above — used when sending a status update back to the API.
+function statusToApiValue(status: Status): string {
+  switch (status) {
+    case "Scheduled":
+      return "pending";
+    case "Confirmed":
+      return "confirmed";
+    case "Completed":
+      return "completed";
+    case "Cancelled":
+      return "cancelled";
+  }
+}
+
+function formatDateLabel(dateStr: string, todayStr: string) {
   const d = new Date(`${dateStr}T00:00:00`);
   if (Number.isNaN(d.getTime())) return dateStr;
   const label = d.toLocaleDateString("en-US", {
@@ -230,7 +140,9 @@ function formatDateLabel(dateStr: string) {
     month: "short",
     day: "numeric",
   });
-  return dateStr === TODAY ? `Today, ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : label;
+  return dateStr === todayStr
+    ? `Today, ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+    : label;
 }
 
 function formatTimeLabel(timeStr: string) {
@@ -264,53 +176,190 @@ function getInitials(name: string) {
   return (first + last).toUpperCase();
 }
 
-const LIST_GRID = "grid grid-cols-[2fr_1.3fr_1.6fr_1.1fr_5rem] items-center gap-4";
+// name · date · time · status · actions
+const LIST_GRID = "grid grid-cols-[2fr_1.2fr_1fr_0.9fr_1fr_5rem] items-center gap-4";
 
 export default function AppointmentsPage() {
-  const [appointments, setAppointments] = useState<Appointment[]>(INITIAL_APPOINTMENTS);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [doctorsList, setDoctorsList] = useState<DoctorOption[]>([]);
+  const [treatmentsList, setTreatmentsList] = useState<TreatmentOption[]>([]);
+  const [locationId, setLocationId] = useState<string | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Appointment | null>(null);
+
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | Status>("All");
   const [dateFilter, setDateFilter] = useState<"All" | "Today" | "Upcoming">("All");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [editForm, setEditForm] = useState({
+    patientName: "",
+    patientPhone: "",
+    treatmentId: "",
+    doctorId: "",
+    date: "",
+    time: "",
+    status: "Scheduled" as Status,
+    notes: "",
+  });
+
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [profileTab, setProfileTab] = useState<"detail" | "notes">("detail");
+
+  const todayStr = getTodayStr();
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+
+      // 1. Resolve Location ID
+      let currentLocId = locationId;
+      if (!currentLocId) {
+        const [servicesRes, treatmentsRes, patientsRes] = await Promise.all([
+          axios.get("/api/services").catch(() => null),
+          axios.get("/api/treatment").catch(() => null),
+          axios.get("/api/patent").catch(() => null),
+        ]);
+
+        if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
+          currentLocId = servicesRes.data.data.services[0].locationId;
+        } else if (treatmentsRes?.data?.success && treatmentsRes.data.data.treatments?.length > 0) {
+          currentLocId = treatmentsRes.data.data.treatments[0].locationId;
+        } else if (patientsRes?.data?.success && patientsRes.data.data.patients?.length > 0) {
+          currentLocId = patientsRes.data.data.patients[0].locationId;
+        }
+
+        if (currentLocId) setLocationId(currentLocId);
+      }
+
+      if (!currentLocId) {
+        setErrorMsg("Location ID could not be identified for this session.");
+        setLoading(false);
+        return;
+      }
+
+      // 2. Fetch doctors — kept in a LOCAL variable, not just state, so the
+      // appointment-mapping step below can use it immediately instead of a
+      // stale closure value (this was why "assigned doctor" wasn't showing).
+      let docs: DoctorOption[] = [];
+      let doctorsRes = await axios
+        .get("/api/doctor", { params: { locationId: currentLocId } })
+        .catch(() => null);
+      if (!doctorsRes?.data?.success || !doctorsRes.data.data.doctors?.length) {
+        doctorsRes = await axios.get("/api/doctor").catch(() => null);
+      }
+      if (doctorsRes?.data?.success && doctorsRes.data.data.doctors) {
+        docs = doctorsRes.data.data.doctors.map((d: any) => ({ id: d.id, name: d.name }));
+        setDoctorsList(docs);
+      }
+
+      // 3. Fetch treatments (for the edit dropdown)
+      const treatmentsRes = await axios.get("/api/treatment").catch(() => null);
+      let treatments: TreatmentOption[] = [];
+      if (treatmentsRes?.data?.success && treatmentsRes.data.data.treatments) {
+        treatments = treatmentsRes.data.data.treatments.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+        }));
+        setTreatmentsList(treatments);
+      }
+
+      // 4. Fetch appointments and resolve doctor names from the local `docs` list.
+      const apptsRes = await axios.get("/api/appoments", {
+        params: { locationId: currentLocId },
+      });
+
+      if (apptsRes.data?.success && apptsRes.data.data.appointments) {
+        const mapped: Appointment[] = apptsRes.data.data.appointments.map((a: any) => {
+          const { date, time } = splitIsoStartTime(a.startTime);
+
+          const docObj = docs.find(
+            (d) =>
+              (a.providerId && d.id === a.providerId) ||
+              (a.providerName && d.name.toLowerCase() === a.providerName.toLowerCase())
+          );
+
+          return {
+            id: a.id,
+            appointmentId: a.appointmentCode || `APT-${String(a.id).slice(-4)}`,
+            patientName: a.patientName || "Patient",
+            patientPhone: a.patientPhone || "-",
+            treatment: a.treatmentName || "General Service",
+            treatmentId: a.treatmentId,
+            doctor: a.providerName || docObj?.name || "Unassigned",
+            doctorId: a.providerId || docObj?.id || "",
+            date,
+            time,
+            status: mapApiStatus(a.status),
+            rawStatus: a.status,
+            notes: a.notes || "",
+            createdDate: a.createdAt
+              ? new Date(a.createdAt).toISOString().slice(0, 16).replace("T", " ")
+              : undefined,
+          };
+        });
+
+        setAppointments(mapped);
+      } else {
+        setAppointments([]);
+      }
+    } catch (err: any) {
+      console.error("Failed to load appointments:", err);
+      setErrorMsg(err.response?.data?.error || "Failed to fetch appointments from server.");
+    } finally {
+      setLoading(false);
+    }
+  }, [locationId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   function openProfile(a: Appointment) {
     setSelected(a);
     setProfileTab("detail");
   }
 
-  function openAddModal() {
-    setModalMode("add");
-    setEditingId(null);
-    setForm(EMPTY_FORM);
-    setModalOpen(true);
-  }
-
   function openEditModal(a: Appointment) {
-    setModalMode("edit");
     setEditingId(a.id);
-    setForm(appointmentToForm(a));
-    setModalOpen(true);
+    setEditForm({
+      patientName: a.patientName,
+      patientPhone: a.patientPhone,
+      treatmentId: a.treatmentId || treatmentsList[0]?.id || "",
+      doctorId: a.doctorId,
+      date: a.date,
+      time: a.time,
+      status: a.status,
+      notes: a.notes || "",
+    });
   }
 
   function requestDelete(a: Appointment) {
     setDeleteTarget(a);
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!deleteTarget) return;
     const a = deleteTarget;
-    setDeletingId(a.id);
-    setAppointments((prev) => prev.filter((x) => x.id !== a.id));
-    setSelected((prev) => (prev?.id === a.id ? null : prev));
-    setDeletingId(null);
-    setDeleteTarget(null);
+    try {
+      setDeletingId(a.id);
+      // ADJUST: no delete endpoint confirmed yet in what's been shared —
+      // this assumes a standard REST DELETE on the appointment resource.
+      await axios.delete(`/api/appoments/${a.id}`);
+      setSelected((prev) => (prev?.id === a.id ? null : prev));
+      setDeleteTarget(null);
+      await loadData();
+    } catch (err: any) {
+      console.error("Delete error:", err);
+      alert(err.response?.data?.error || "Failed to delete appointment.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const filtered = useMemo(() => {
@@ -325,115 +374,97 @@ export default function AppointmentsPage() {
         const matchesStatus = statusFilter === "All" || a.status === statusFilter;
         const matchesDate =
           dateFilter === "All" ||
-          (dateFilter === "Today" && a.date === TODAY) ||
-          (dateFilter === "Upcoming" && a.date >= TODAY);
+          (dateFilter === "Today" && a.date === todayStr) ||
+          (dateFilter === "Upcoming" && a.date >= todayStr);
         return matchesQuery && matchesStatus && matchesDate;
       })
       .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-  }, [appointments, query, statusFilter, dateFilter]);
+  }, [appointments, query, statusFilter, dateFilter, todayStr]);
 
   const stats = useMemo(() => {
-    const todayCount = appointments.filter((a) => a.date === TODAY).length;
+    const todayCount = appointments.filter((a) => a.date === todayStr).length;
+    const confirmedToday = appointments.filter(
+      (a) => a.date === todayStr && a.status === "Confirmed"
+    ).length;
     const completed = appointments.filter((a) => a.status === "Completed").length;
     const cancelled = appointments.filter((a) => a.status === "Cancelled").length;
     return [
-      {
-        icon: CalendarClock,
-        label: "Total Appointments",
-        value: String(appointments.length),
-        trend: "+2 this week",
-        trendUp: true,
-      },
+      { icon: CalendarClock, label: "Total Appointments", value: String(appointments.length) },
       {
         icon: CalendarDays,
         label: "Today's Appointments",
         value: String(todayCount),
-        trend: "3 confirmed",
-        trendUp: true,
+        trend: `${confirmedToday} confirmed`,
       },
-      {
-        icon: CalendarCheck2,
-        label: "Completed",
-        value: String(completed),
-        trend: "On track",
-        trendUp: true,
-      },
+      { icon: CalendarCheck2, label: "Completed", value: String(completed) },
       {
         icon: CalendarX2,
         label: "Cancelled",
         value: String(cancelled),
         trend: cancelled > 0 ? "Needs follow-up" : "None this week",
-        trendUp: false,
       },
     ];
-  }, [appointments]);
+  }, [appointments, todayStr]);
 
-  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  function updateEdit<K extends keyof typeof editForm>(key: K, value: (typeof editForm)[K]) {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleEditSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!editingId) return;
 
-    const durationVal = form.duration.trim() || "30 mins";
+    const original = appointments.find((a) => a.id === editingId);
+    if (!original) return;
 
-    if (modalMode === "edit" && editingId) {
-      setAppointments((prev) =>
-        prev.map((a) =>
-          a.id === editingId
-            ? {
-                ...a,
-                patientName: form.patientName,
-                patientPhone: form.patientPhone,
-                treatment: form.treatment,
-                doctor: form.doctor,
-                date: form.date,
-                time: form.time,
-                duration: durationVal,
-                status: form.status,
-                notes: form.notes,
-              }
-            : a
-        )
-      );
-      setSelected((prev) =>
-        prev && prev.id === editingId
-          ? {
-              ...prev,
-              patientName: form.patientName,
-              patientPhone: form.patientPhone,
-              treatment: form.treatment,
-              doctor: form.doctor,
-              date: form.date,
-              time: form.time,
-              duration: durationVal,
-              status: form.status,
-              notes: form.notes,
-            }
-          : prev
-      );
-    } else {
-      const nextNumber = 1000 + appointments.length + 1;
-      const newAppointment: Appointment = {
-        id: String(Date.now()),
-        appointmentId: `APT-${nextNumber}`,
-        patientName: form.patientName,
-        patientPhone: form.patientPhone,
-        treatment: form.treatment,
-        doctor: form.doctor,
-        date: form.date,
-        time: form.time,
-        duration: durationVal,
-        status: form.status,
-        notes: form.notes,
-        createdDate: new Date().toISOString().slice(0, 16).replace("T", " "),
-      };
-      setAppointments((prev) => [newAppointment, ...prev]);
+    setSubmitting(true);
+    try {
+      // Status change → confirmed endpoint
+      if (editForm.status !== original.status) {
+        await axios.patch(`/api/appoments/${editingId}/status`, {
+          status: statusToApiValue(editForm.status),
+        });
+      }
+
+      // Doctor reassignment → confirmed endpoint
+      if (editForm.doctorId !== original.doctorId) {
+        await axios.patch(`/api/appoments/${editingId}/reassign`, {
+          providerId: editForm.doctorId,
+        });
+      }
+
+      // Everything else (name, phone, treatment, date/time, notes)
+      // ADJUST: no general "edit appointment" endpoint confirmed yet —
+      // this assumes a standard REST PATCH on the appointment resource,
+      // sending date and time as separate fields rather than one combined
+      // startTime, since that's the field shape the rest of the form uses.
+      const otherFieldsChanged =
+        editForm.patientName !== original.patientName ||
+        editForm.patientPhone !== original.patientPhone ||
+        editForm.treatmentId !== original.treatmentId ||
+        editForm.date !== original.date ||
+        editForm.time !== original.time ||
+        editForm.notes !== (original.notes || "");
+
+      if (otherFieldsChanged) {
+        await axios.patch(`/api/appoments/${editingId}`, {
+          patientName: editForm.patientName,
+          patientPhone: editForm.patientPhone,
+          treatmentId: editForm.treatmentId,
+          date: editForm.date,
+          time: editForm.time,
+          notes: editForm.notes,
+        });
+      }
+
+      await loadData();
+      setEditingId(null);
+    } catch (err: any) {
+      console.error("Save appointment error:", err);
+      alert(err.response?.data?.error || "Failed to save appointment.");
+    } finally {
+      setSubmitting(false);
     }
-
-    setForm(EMPTY_FORM);
-    setEditingId(null);
-    setModalOpen(false);
   }
 
   return (
@@ -454,6 +485,21 @@ export default function AppointmentsPage() {
       </div>
 
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
+        {errorMsg && (
+          <div className="mb-6 flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+              <span>{errorMsg}</span>
+            </div>
+            <button
+              onClick={() => loadData()}
+              className="flex items-center gap-1 font-semibold text-rose-600 hover:underline"
+            >
+              <RefreshCw className="h-3 w-3" /> Retry
+            </button>
+          </div>
+        )}
+
         {/* Stats */}
         <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => (
@@ -465,181 +511,182 @@ export default function AppointmentsPage() {
                 </div>
               </div>
               <p className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">{stat.value}</p>
+              {"trend" in stat && stat.trend && (
+                <p className="mt-1 text-xs text-slate-400">{stat.trend}</p>
+              )}
             </div>
           ))}
         </div>
 
         <div className="mt-10 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search patient, treatment, doctor..."
-                  className="w-64 rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-4 text-[0.9rem] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#7da3b3]"
-                />
-              </div>
-
-              <div className="relative">
-                <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as "All" | Status)}
-                  className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
-                >
-                  <option value="All">All statuses</option>
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="relative">
-                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value as "All" | "Today" | "Upcoming")}
-                  className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
-                >
-                  <option value="All">All dates</option>
-                  <option value="Today">Today</option>
-                  <option value="Upcoming">Upcoming</option>
-                </select>
-              </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search patient, treatment, doctor..."
+                className="w-64 rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-4 text-[0.9rem] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#7da3b3]"
+              />
             </div>
 
-            <button
-              onClick={openAddModal}
-              className="inline-flex items-center gap-2 rounded-full bg-[#749fb1] px-5 py-2.5 text-[0.9rem] font-medium text-white shadow-sm transition-colors hover:bg-[#345263]"
-            >
-              <Plus className="h-4 w-4" strokeWidth={2} />
-              Add Appointment
-            </button>
+            <div className="relative">
+              <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as "All" | Status)}
+                className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
+              >
+                <option value="All">All statuses</option>
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="relative">
+              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value as "All" | "Today" | "Upcoming")}
+                className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
+              >
+                <option value="All">All dates</option>
+                <option value="Today">Today</option>
+                <option value="Upcoming">Upcoming</option>
+              </select>
+            </div>
           </div>
 
           {/* List */}
           <div className="mt-6 overflow-hidden rounded-2xl border border-slate-900/5">
-            {/* Header row */}
             <div
               className={`${LIST_GRID} hidden bg-slate-50 px-5 py-3 text-[0.75rem] font-medium uppercase tracking-wide text-slate-500 sm:grid`}
             >
               <span>Name</span>
               <span>Doctor</span>
-              <span>Date &amp; Time</span>
+              <span>Date</span>
+              <span>Time</span>
               <span>Status</span>
               <span className="text-right">Actions</span>
             </div>
 
-            <div className="divide-y divide-slate-900/5">
-              {filtered.map((a) => {
-                const StatusIcon = STATUS_ICONS[a.status];
-                const statusColor = STATUS_COLORS[a.status];
-                const avatarColor = avatarColorFor(a.patientName);
+            {loading ? (
+              <div className="flex flex-col items-center justify-center gap-2 bg-white p-12 text-center text-xs text-slate-400">
+                <Loader2 className="h-6 w-6 animate-spin text-[#7da3b3]" />
+                <span>Loading appointments from database...</span>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-900/5">
+                {filtered.map((a) => {
+                  const StatusIcon = STATUS_ICONS[a.status];
+                  const statusColor = STATUS_COLORS[a.status];
+                  const avatarColor = avatarColorFor(a.patientName);
 
-                return (
-                  <div
-                    key={a.id}
-                    onClick={() => openProfile(a)}
-                    className={`${LIST_GRID} group cursor-pointer flex-wrap gap-y-3 bg-white px-5 py-4 transition-colors hover:bg-[#7da3b3]/[0.06] max-sm:flex`}
-                  >
-                    <div className="flex min-w-[10rem] items-center gap-3">
-                      <div
-                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[0.8rem] font-semibold ${avatarColor}`}
-                      >
-                        {getInitials(a.patientName)}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-[0.95rem] font-semibold text-slate-900">{a.patientName}</p>
-                        <p className="truncate text-[0.8rem] text-slate-500">{a.treatment}</p>
-                      </div>
-                    </div>
-
-                    <div className="min-w-[8rem] text-[0.85rem] text-slate-600">
-                      <p className="flex items-center gap-1.5">
-                        <User className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                        {a.doctor}
-                      </p>
-                    </div>
-
-                    <div className="min-w-[10rem] text-[0.85rem] text-slate-600">
-                      <p className="flex items-center gap-1.5">
-                        <CalendarDays className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                        {formatDateLabel(a.date)}
-                      </p>
-                      <p className="mt-0.5 flex items-center gap-1.5 text-slate-500">
-                        <Clock className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                        {formatTimeLabel(a.time)} · {a.duration}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.78rem] font-medium ${statusColor}`}
+                  return (
+                    <div
+                      key={a.id}
+                      onClick={() => openProfile(a)}
+                      className={`${LIST_GRID} group cursor-pointer flex-wrap gap-y-3 bg-white px-5 py-4 transition-colors hover:bg-[#7da3b3]/[0.06] max-sm:flex`}
                     >
-                      <StatusIcon className="h-3.5 w-3.5" strokeWidth={2} />
-                      {a.status}
-                    </span>
+                      <div className="flex min-w-[10rem] items-center gap-3">
+                        <div
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[0.8rem] font-semibold ${avatarColor}`}
+                        >
+                          {getInitials(a.patientName)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-[0.95rem] font-semibold text-slate-900">{a.patientName}</p>
+                          <p className="truncate text-[0.8rem] text-slate-500">{a.treatment}</p>
+                        </div>
+                      </div>
 
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(a);
-                        }}
-                        aria-label="Edit appointment"
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                      <div className="min-w-[8rem] text-[0.85rem] text-slate-600">
+                        <p className="flex items-center gap-1.5">
+                          <User className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                          {a.doctor}
+                        </p>
+                      </div>
+
+                      <div className="min-w-[7rem] text-[0.85rem] text-slate-600">
+                        <p className="flex items-center gap-1.5">
+                          <CalendarDays className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                          {formatDateLabel(a.date, todayStr)}
+                        </p>
+                      </div>
+
+                      <div className="min-w-[6rem] text-[0.85rem] text-slate-600">
+                        <p className="flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                          {formatTimeLabel(a.time)}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.78rem] font-medium ${statusColor}`}
                       >
-                        <SquarePen className="h-4 w-4" strokeWidth={2} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          requestDelete(a);
-                        }}
-                        disabled={deletingId === a.id}
-                        aria-label="Delete appointment"
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-50"
-                      >
-                        <Trash2 className="h-4 w-4" strokeWidth={2} />
-                      </button>
+                        <StatusIcon className="h-3.5 w-3.5" strokeWidth={2} />
+                        {a.status}
+                      </span>
+
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(a);
+                          }}
+                          aria-label="Edit appointment"
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                        >
+                          <SquarePen className="h-4 w-4" strokeWidth={2} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            requestDelete(a);
+                          }}
+                          disabled={deletingId === a.id}
+                          aria-label="Delete appointment"
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" strokeWidth={2} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
 
-              {filtered.length === 0 && (
-                <div className="bg-white py-16 text-center text-slate-500">
-                  No appointments match your filters.
-                </div>
-              )}
-            </div>
+                {filtered.length === 0 && (
+                  <div className="bg-white py-16 text-center text-slate-500">
+                    No appointments match your filters.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Add / Edit modal */}
-      {modalOpen && (
+      {/* Edit modal */}
+      {editingId && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40">
-          <div onClick={() => setModalOpen(false)} className="absolute inset-0" aria-hidden />
+          <div onClick={() => setEditingId(null)} className="absolute inset-0" aria-hidden />
           <div className="relative flex h-full w-full max-w-xl flex-col overflow-y-auto bg-slate-50 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-900/5 bg-slate-50 px-6 py-4">
               <button
-                onClick={() => setModalOpen(false)}
+                onClick={() => setEditingId(null)}
                 className="inline-flex items-center gap-1.5 text-[0.9rem] font-medium text-slate-600 transition-colors hover:text-slate-900"
               >
                 <ChevronLeft className="h-4 w-4" strokeWidth={2} />
                 Back
               </button>
-              <h2 className="text-[0.95rem] font-semibold text-slate-900">
-                {modalMode === "edit" ? "Edit Appointment" : "Add Appointment"}
-              </h2>
+              <h2 className="text-[0.95rem] font-semibold text-slate-900">Edit Appointment</h2>
             </div>
 
             <div className="px-6 py-6">
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleEditSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <label className="block">
                     <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
@@ -649,9 +696,8 @@ export default function AppointmentsPage() {
                     <input
                       required
                       type="text"
-                      value={form.patientName}
-                      onChange={(e) => update("patientName", e.target.value)}
-                      placeholder="Sabina Karki"
+                      value={editForm.patientName}
+                      onChange={(e) => updateEdit("patientName", e.target.value)}
                       className={inputClass}
                     />
                   </label>
@@ -663,9 +709,8 @@ export default function AppointmentsPage() {
                     <input
                       required
                       type="tel"
-                      value={form.patientPhone}
-                      onChange={(e) => update("patientPhone", e.target.value)}
-                      placeholder="98410 22314"
+                      value={editForm.patientPhone}
+                      onChange={(e) => updateEdit("patientPhone", e.target.value)}
                       className={inputClass}
                     />
                   </label>
@@ -678,12 +723,14 @@ export default function AppointmentsPage() {
                       Treatment
                     </span>
                     <select
-                      value={form.treatment}
-                      onChange={(e) => update("treatment", e.target.value)}
+                      value={editForm.treatmentId}
+                      onChange={(e) => updateEdit("treatmentId", e.target.value)}
                       className={inputClass}
                     >
-                      {TREATMENT_OPTIONS.map((t) => (
-                        <option key={t}>{t}</option>
+                      {treatmentsList.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
                       ))}
                     </select>
                   </label>
@@ -693,12 +740,17 @@ export default function AppointmentsPage() {
                       Doctor
                     </span>
                     <select
-                      value={form.doctor}
-                      onChange={(e) => update("doctor", e.target.value)}
+                      value={editForm.doctorId}
+                      onChange={(e) => updateEdit("doctorId", e.target.value)}
                       className={inputClass}
                     >
-                      {DOCTOR_OPTIONS.map((d) => (
-                        <option key={d}>{d}</option>
+                      <option value="" disabled>
+                        Select doctor
+                      </option>
+                      {doctorsList.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
                       ))}
                     </select>
                   </label>
@@ -713,8 +765,8 @@ export default function AppointmentsPage() {
                     <input
                       required
                       type="date"
-                      value={form.date}
-                      onChange={(e) => update("date", e.target.value)}
+                      value={editForm.date}
+                      onChange={(e) => updateEdit("date", e.target.value)}
                       className={inputClass}
                     />
                   </label>
@@ -726,43 +778,28 @@ export default function AppointmentsPage() {
                     <input
                       required
                       type="time"
-                      value={form.time}
-                      onChange={(e) => update("time", e.target.value)}
+                      value={editForm.time}
+                      onChange={(e) => updateEdit("time", e.target.value)}
                       className={inputClass}
                     />
                   </label>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                      <Clock className="h-3.5 w-3.5" strokeWidth={2} />
-                      Duration
-                    </span>
-                    <input
-                      type="text"
-                      value={form.duration}
-                      onChange={(e) => update("duration", e.target.value)}
-                      placeholder="30 mins"
-                      className={inputClass}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                      <BadgeCheck className="h-3.5 w-3.5" strokeWidth={2} />
-                      Status
-                    </span>
-                    <select
-                      value={form.status}
-                      onChange={(e) => update("status", e.target.value as Status)}
-                      className={inputClass}
-                    >
-                      {STATUSES.map((s) => (
-                        <option key={s}>{s}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
+                <label className="block">
+                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                    <BadgeCheck className="h-3.5 w-3.5" strokeWidth={2} />
+                    Status
+                  </span>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => updateEdit("status", e.target.value as Status)}
+                    className={inputClass}
+                  >
+                    {STATUSES.map((s) => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </select>
+                </label>
 
                 <label className="block">
                   <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
@@ -771,9 +808,8 @@ export default function AppointmentsPage() {
                   </span>
                   <textarea
                     rows={3}
-                    value={form.notes}
-                    onChange={(e) => update("notes", e.target.value)}
-                    placeholder="Any relevant notes for this appointment"
+                    value={editForm.notes}
+                    onChange={(e) => updateEdit("notes", e.target.value)}
                     className={textareaClass}
                   />
                 </label>
@@ -781,13 +817,16 @@ export default function AppointmentsPage() {
                 <div className="flex items-center gap-3 pt-2">
                   <button
                     type="submit"
-                    className="rounded-full bg-[#7da3b3] px-6 py-2.5 text-[0.9rem] font-medium text-white transition-colors hover:bg-[#345263]"
+                    disabled={submitting}
+                    className="inline-flex items-center gap-2 rounded-full bg-[#7da3b3] px-6 py-2.5 text-[0.9rem] font-medium text-white transition-colors hover:bg-[#345263] disabled:opacity-60"
                   >
-                    {modalMode === "edit" ? "Save Changes" : "Add Appointment"}
+                    {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Save Changes
                   </button>
                   <button
                     type="button"
-                    onClick={() => setModalOpen(false)}
+                    onClick={() => setEditingId(null)}
+                    disabled={submitting}
                     className="rounded-full px-5 py-2.5 text-[0.9rem] font-medium text-slate-500 transition-colors hover:text-slate-800"
                   >
                     Cancel
@@ -838,7 +877,7 @@ export default function AppointmentsPage() {
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.85rem] text-slate-500">
                     <span>{selected.treatment}</span>
                     <span className="text-slate-300">|</span>
-                    <span>{formatDateLabel(selected.date)}</span>
+                    <span>{formatDateLabel(selected.date, todayStr)}</span>
                     <span className="text-slate-300">|</span>
                     <span className="font-medium text-slate-700">{formatTimeLabel(selected.time)}</span>
                   </div>
@@ -855,7 +894,6 @@ export default function AppointmentsPage() {
                 </div>
               </div>
 
-              {/* Tabs */}
               <div className="mt-6 flex items-center gap-6 border-b border-slate-900/10">
                 {(
                   [
@@ -903,13 +941,6 @@ export default function AppointmentsPage() {
                         Phone
                       </p>
                       <p className="mt-1 font-medium text-slate-800">{selected.patientPhone}</p>
-                    </div>
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <Clock className="h-3.5 w-3.5" strokeWidth={2} />
-                        Duration
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">{selected.duration}</p>
                     </div>
                     <div>
                       <p className="flex items-center gap-1.5 text-slate-400">

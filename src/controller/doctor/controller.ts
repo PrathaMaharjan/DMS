@@ -719,9 +719,6 @@ export async function getDoctor(doctorId: string): Promise<GetDoctorResult> {
       code: "SERVER_ERROR",
     };
   }
-<<<<<<< HEAD
-}
-=======
 }
 
 // -------------------------------- updateSchedule -----------------------------------------
@@ -853,16 +850,16 @@ export async function updateDoctorSchedule(
 // ------------------ get schedule information ----------------------------------
 export type ScheduleStatusResult =
   | {
-      success: true;
-      doctors: {
-        id: string;
-        name: string;
-        startTime: string | null;
-        endTime: string | null;
-        status: "available" | "on_leave" | "not_scheduled";
-        openSlots: number;
-      }[];
-    }
+    success: true;
+    doctors: {
+      id: string;
+      name: string;
+      startTime: string | null;
+      endTime: string | null;
+      status: "available" | "on_leave" | "not_scheduled";
+      openSlots: number;
+    }[];
+  }
   | { success: false; error: string; code: DoctorErrorCode };
 export async function getDoctorScheduleStatus(
   locationId: string,
@@ -905,20 +902,20 @@ export async function getDoctorScheduleStatus(
     const dayEnd = new Date(`${date}T23:59:59`);
     const bookedRows = doctorIds.length
       ? await db
-          .select({
-            providerId: appointments.providerId,
-            count: sql<number>`count(*)::int`,
-          })
-          .from(appointments)
-          .where(
-            and(
-              inArray(appointments.providerId, doctorIds),
-              ne(appointments.status, "cancelled"),
-              gt(appointments.startTime, dayStart),
-              lt(appointments.startTime, dayEnd),
-            ),
-          )
-          .groupBy(appointments.providerId)
+        .select({
+          providerId: appointments.providerId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(appointments)
+        .where(
+          and(
+            inArray(appointments.providerId, doctorIds),
+            ne(appointments.status, "cancelled"),
+            gt(appointments.startTime, dayStart),
+            lt(appointments.startTime, dayEnd),
+          ),
+        )
+        .groupBy(appointments.providerId)
       : [];
     const bookedByDoctor = new Map(
       bookedRows.map((b) => [b.providerId, b.count]),
@@ -963,12 +960,12 @@ export async function getDoctorScheduleStatus(
 // ------------------------- get doctor name and id ---------------------------------------
 export type GetDoctorNameAndIdResult =
   | {
-      success: true;
-      doctors: {
-        id: string;
-        name: string;
-      }[];
-    }
+    success: true;
+    doctors: {
+      id: string;
+      name: string;
+    }[];
+  }
   | { success: false; error: string; code: DoctorErrorCode };
 
 export async function getDoctorNameAndId(
@@ -978,17 +975,17 @@ export async function getDoctorNameAndId(
     const session = await requireSession();
     const whereClause = locationId
       ? and(
-          eq(userLocationRoles.role, "clinical"),
-          eq(userLocationRoles.locationId, locationId),
-          eq(users.orgId, session.orgId),
-          isNull(users.deletedAt),
-        )
+        eq(userLocationRoles.role, "clinical"),
+        eq(userLocationRoles.locationId, locationId),
+        eq(users.orgId, session.orgId),
+        isNull(users.deletedAt),
+      )
       : and(
-          eq(userLocationRoles.role, "clinical"),
-          eq(users.orgId, session.orgId),
-          eq(users.isActive, true),
-          isNull(users.deletedAt),
-        );
+        eq(userLocationRoles.role, "clinical"),
+        eq(users.orgId, session.orgId),
+        eq(users.isActive, true),
+        isNull(users.deletedAt),
+      );
     const result = await db
       .select({
         id: users.id,
@@ -1013,4 +1010,3 @@ export async function getDoctorNameAndId(
 }
 
 // get appoment for a doctor which status in confirm 
->>>>>>> c027d472ad4c6e16b2676ce9a14a29796c24fdf8

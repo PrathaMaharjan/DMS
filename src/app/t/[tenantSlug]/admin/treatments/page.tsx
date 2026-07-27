@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import axios from "axios";
 import {
   Search,
@@ -10,7 +9,6 @@ import {
   CalendarCheck,
   TrendingUp,
   TrendingDown,
-  ImagePlus,
   Syringe,
   HeartPulse,
   Cross,
@@ -69,7 +67,6 @@ type Treatment = {
   duration: string;
   price: number;
   description: string;
-  imageUrl?: string;
   treatmentId?: string;
   sessions?: string;
   recoveryTime?: string;
@@ -85,7 +82,6 @@ const EMPTY_FORM = {
   duration: "",
   price: "",
   description: "",
-  imageUrl: "",
   sessions: "",
   recoveryTime: "",
   anesthesia: ANESTHESIA_OPTIONS[0],
@@ -108,7 +104,6 @@ function treatmentToForm(t: Treatment): FormState {
     duration: t.duration,
     price: String(t.price),
     description: t.description,
-    imageUrl: t.imageUrl ?? "",
     sessions: t.sessions ?? "",
     recoveryTime: t.recoveryTime ?? "",
     anesthesia: t.anesthesia ?? ANESTHESIA_OPTIONS[0],
@@ -161,7 +156,6 @@ export default function TreatmentsPage() {
           duration: `${t.durationMinutes} mins`,
           price: t.priceCents / 100,
           description: t.description || "",
-          imageUrl: undefined,
           treatmentId: `TRT-${1000 + index + 1}`,
           sessions: String(t.sessions || 1),
           recoveryTime: t.recoveryTime || "",
@@ -248,14 +242,6 @@ export default function TreatmentsPage() {
 
   function update<K extends keyof FormState>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const url = URL.createObjectURL(file);
-    update("imageUrl", url);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -360,7 +346,6 @@ export default function TreatmentsPage() {
               duration: `${newTreatment.durationMinutes} mins`,
               price: newTreatment.priceCents / 100,
               description: newTreatment.description || "",
-              imageUrl: undefined,
               sessions: String(newTreatment.sessions || 1),
               recoveryTime: newTreatment.recoveryTime || "",
               anesthesia: newTreatment.anesthesia ? (newTreatment.anesthesia.charAt(0).toUpperCase() + newTreatment.anesthesia.slice(1)) : "None",
@@ -514,23 +499,11 @@ export default function TreatmentsPage() {
                     className="group cursor-pointer rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#7da3b3]/30 hover:shadow-lg"
                   >
                     <div className="relative -m-6 mb-5">
-                      {t.imageUrl ? (
-                        <div className="relative h-44 w-full overflow-hidden rounded-t-2xl">
-                          <Image
-                            src={t.imageUrl}
-                            alt={t.name}
-                            fill
-                            unoptimized
-                            className="object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                        </div>
-                      ) : (
-                        <div
-                          className={`flex h-44 w-full items-center justify-center rounded-t-2xl ${color}`}
-                        >
-                          <CategoryIcon className="h-14 w-14" strokeWidth={2} />
-                        </div>
-                      )}
+                      <div
+                        className={`flex h-44 w-full items-center justify-center rounded-t-2xl ${color}`}
+                      >
+                        <CategoryIcon className="h-14 w-14" strokeWidth={2} />
+                      </div>
 
                       <div className="absolute right-3 top-3 flex items-center gap-2">
                         <button
@@ -618,31 +591,6 @@ export default function TreatmentsPage() {
 
             <div className="px-6 py-6">
             <form onSubmit={handleSubmit} className="space-y-4">
-
-              <div className="flex items-center gap-4">
-                <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-400">
-                  {form.imageUrl ? (
-                    <Image
-                      src={form.imageUrl}
-                      alt="Treatment preview"
-                      fill
-                      unoptimized
-                      className="object-cover"
-                    />
-                  ) : (
-                    <ImagePlus className="h-6 w-6" strokeWidth={1.8} />
-                  )}
-                </div>
-                <label className="cursor-pointer rounded-full border border-slate-900/10 px-4 py-2 text-[0.85rem] font-medium text-slate-700 transition-colors hover:bg-slate-50">
-                  Upload photo
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="hidden"
-                  />
-                </label>
-              </div>
 
               <label className="block">
                 <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
@@ -849,32 +797,20 @@ export default function TreatmentsPage() {
             <div className="px-6 py-6">
               {/* Identity */}
               <div className="flex items-start gap-4">
-                {selectedTreatment.imageUrl ? (
-                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full ring-4 ring-white">
-                    <Image
-                      src={selectedTreatment.imageUrl}
-                      alt={selectedTreatment.name}
-                      fill
-                      unoptimized
-                      className="object-cover"
-                    />
-                  </div>
-                ) : (
-                  (() => {
-                    const CategoryIcon =
-                      CATEGORY_ICONS[selectedTreatment.category] ?? Sparkles;
-                    const color =
-                      CATEGORY_COLORS[selectedTreatment.category] ??
-                      "bg-slate-100 text-slate-700";
-                    return (
-                      <div
-                        className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full ring-4 ring-white ${color}`}
-                      >
-                        <CategoryIcon className="h-7 w-7" strokeWidth={2} />
-                      </div>
-                    );
-                  })()
-                )}
+                {(() => {
+                  const CategoryIcon =
+                    CATEGORY_ICONS[selectedTreatment.category] ?? Sparkles;
+                  const color =
+                    CATEGORY_COLORS[selectedTreatment.category] ??
+                    "bg-slate-100 text-slate-700";
+                  return (
+                    <div
+                      className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full ring-4 ring-white ${color}`}
+                    >
+                      <CategoryIcon className="h-7 w-7" strokeWidth={2} />
+                    </div>
+                  );
+                })()}
 
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900">
