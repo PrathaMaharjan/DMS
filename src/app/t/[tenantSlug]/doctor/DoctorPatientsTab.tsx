@@ -330,18 +330,18 @@ export default function DoctorPatientsTab() {
         </div>
       </div>
 
-      {/* Grid: Left Patient Table/Roster | Right Medical Record Detail */}
+
       <div className="grid gap-6 lg:grid-cols-12">
-        {/* Left Column: Front-Desk Style Patient Roster */}
+
         <div className="lg:col-span-5 flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white shadow-sm overflow-hidden min-h-[580px]">
           <div>
-            {/* Table Header Style */}
+
             <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-3 text-[0.7rem] font-bold uppercase tracking-wider text-slate-500">
               <span>Patient Directory</span>
               <span>Last Visit / Service</span>
             </div>
 
-            {/* Patient Cards List */}
+
             <div className="divide-y divide-slate-100">
               {loading ? (
                 <div className="p-12 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
@@ -450,7 +450,7 @@ export default function DoctorPatientsTab() {
           )}
         </div>
 
-        {/* Right Column: Detailed Medical History & Notes View */}
+
         <div className="lg:col-span-7">
           {selectedPatient ? (
             <div className="rounded-xl border border-slate-200/80 bg-white p-6 shadow-sm space-y-6">
@@ -472,7 +472,7 @@ export default function DoctorPatientsTab() {
                   </div>
                 </div>
 
-                {/* Dropdown Toggle Button */}
+
                 <button
                   onClick={() => setShowNoteDropdown(!showNoteDropdown)}
                   className="flex items-center gap-1.5 rounded-lg bg-[#7da3b3] px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#6b92a2] transition-colors"
@@ -485,7 +485,6 @@ export default function DoctorPatientsTab() {
                 </button>
               </div>
 
-              {/* Inline Add Note Form */}
               {showNoteDropdown && (
                 <form
                   onSubmit={handleAddTreatmentNote}
@@ -599,7 +598,7 @@ export default function DoctorPatientsTab() {
                 </form>
               )}
 
-              {/* Alerts & History Cards */}
+
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="rounded-xl bg-amber-50/50 border border-amber-200/60 p-3 space-y-1">
                   <p className="font-bold text-amber-800 flex items-center gap-1.5 text-[0.68rem] uppercase tracking-wider">

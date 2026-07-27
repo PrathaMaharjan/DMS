@@ -83,7 +83,7 @@ export default function DoctorAppointmentsTab() {
       setLoading(true);
       setErrorMsg(null);
 
-      // 1. Multi-endpoint fallback to resolve Location ID
+
       let currentLocId = locationId;
       if (!currentLocId) {
         const [servicesRes, treatmentsRes, patientsRes] = await Promise.all([
@@ -106,7 +106,7 @@ export default function DoctorAppointmentsTab() {
       }
 
       if (currentLocId) {
-        // 2. Fetch appointments for location
+
         const apptsRes = await axios.get("/api/appoments", {
           params: { locationId: currentLocId },
         });
@@ -168,7 +168,7 @@ export default function DoctorAppointmentsTab() {
     id: string,
     statusValue: string
   ) => {
-    // Optimistically update UI local state
+
     setAppointments((prev) =>
       prev.map((item) => {
         if (item.id === id) {
@@ -401,11 +401,10 @@ export default function DoctorAppointmentsTab() {
                   setFilterPeriod(tab);
                   setCurrentPage(1);
                 }}
-                className={`rounded-md px-3 py-1.5 font-semibold capitalize transition-all ${
-                  filterPeriod === tab
+                className={`rounded-md px-3 py-1.5 font-semibold capitalize transition-all ${filterPeriod === tab
                     ? "bg-white text-slate-900 shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
-                }`}
+                  }`}
               >
                 {tab.replace("-", " ")}
               </button>
@@ -453,9 +452,8 @@ export default function DoctorAppointmentsTab() {
                   paginatedAppointments.map((item) => (
                     <tr
                       key={item.id}
-                      className={`hover:bg-slate-50/50 transition-colors ${
-                        item.status === "Completed" ? "bg-slate-50/40" : ""
-                      }`}
+                      className={`hover:bg-slate-50/50 transition-colors ${item.status === "Completed" ? "bg-slate-50/40" : ""
+                        }`}
                     >
                       <td className="p-4 pl-6">
                         <div className="flex items-center gap-3">
@@ -466,9 +464,7 @@ export default function DoctorAppointmentsTab() {
                             <p className="font-semibold text-slate-900 text-xs">
                               {item.patientName}
                             </p>
-                            <span className="text-[0.65rem] font-semibold text-slate-400 truncate max-w-[120px] block">
-                              {item.id}
-                            </span>
+
                           </div>
                         </div>
                       </td>
@@ -502,11 +498,10 @@ export default function DoctorAppointmentsTab() {
 
                       <td className="p-4 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center rounded-md px-2 py-0.5 text-[0.65rem] font-bold ${
-                            item.status === "Completed"
+                          className={`inline-flex items-center rounded-md px-2 py-0.5 text-[0.65rem] font-bold ${item.status === "Completed"
                               ? "bg-slate-100 text-slate-600 border border-slate-200"
                               : "bg-sky-50 text-sky-700 border border-sky-200"
-                          }`}
+                            }`}
                         >
                           {item.status}
                         </span>
@@ -521,12 +516,12 @@ export default function DoctorAppointmentsTab() {
                             (item.status === "Completed"
                               ? "completed"
                               : item.status === "Cancelled"
-                              ? "cancelled"
-                              : item.attendance === "Checked In"
-                              ? "checked_in"
-                              : item.attendance === "No Show"
-                              ? "no_show"
-                              : "confirmed")
+                                ? "cancelled"
+                                : item.attendance === "Checked In"
+                                  ? "checked_in"
+                                  : item.attendance === "No Show"
+                                    ? "no_show"
+                                    : "confirmed")
                           }
                           onChange={(e) =>
                             handleMarkAttendance(
@@ -534,13 +529,12 @@ export default function DoctorAppointmentsTab() {
                               e.target.value
                             )
                           }
-                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold outline-none transition-all cursor-pointer disabled:opacity-50 ${
-                            item.attendance === "Checked In" || item.status === "Completed"
+                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold outline-none transition-all cursor-pointer disabled:opacity-50 ${item.attendance === "Checked In" || item.status === "Completed"
                               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                               : item.attendance === "No Show" || item.status === "Cancelled"
-                              ? "border-rose-200 bg-rose-50 text-rose-700"
-                              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                          }`}
+                                ? "border-rose-200 bg-rose-50 text-rose-700"
+                                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                            }`}
                         >
                           <option value="confirmed">Confirmed (Pending)</option>
                           <option value="checked_in">Checked In</option>
@@ -618,11 +612,10 @@ export default function DoctorAppointmentsTab() {
                 <button
                   key={pageNum}
                   onClick={() => handlePageChange(pageNum)}
-                  className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${
-                    currentPage === pageNum
+                  className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
                       ? "bg-[#7da3b3] text-white shadow-sm"
                       : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                  }`}
+                    }`}
                 >
                   {pageNum}
                 </button>

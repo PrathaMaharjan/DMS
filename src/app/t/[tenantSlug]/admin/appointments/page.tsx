@@ -89,7 +89,7 @@ function getTodayStr() {
   return `${year}-${month}-${day}`;
 }
 
-// Splits an ISO startTime into a YYYY-MM-DD date and HH:MM (24hr) time.
+
 function splitIsoStartTime(isoString: string) {
   const d = new Date(isoString);
   if (isNaN(d.getTime())) return { date: getTodayStr(), time: "09:00" };
@@ -101,7 +101,7 @@ function splitIsoStartTime(isoString: string) {
   return { date: `${year}-${month}-${day}`, time: `${hours}:${minutes}` };
 }
 
-// Maps backend appointment status strings to the four UI-facing statuses.
+
 function mapApiStatus(rawStatus: string | undefined): Status {
   switch (rawStatus) {
     case "completed":
@@ -118,7 +118,7 @@ function mapApiStatus(rawStatus: string | undefined): Status {
   }
 }
 
-// Reverse of the above — used when sending a status update back to the API.
+
 function statusToApiValue(status: Status): string {
   switch (status) {
     case "Scheduled":
@@ -176,7 +176,7 @@ function getInitials(name: string) {
   return (first + last).toUpperCase();
 }
 
-// name · date · time · status · actions
+
 const LIST_GRID = "grid grid-cols-[2fr_1.2fr_1fr_0.9fr_1fr_5rem] items-center gap-4";
 
 export default function AppointmentsPage() {
@@ -217,7 +217,7 @@ export default function AppointmentsPage() {
       setLoading(true);
       setErrorMsg(null);
 
-      // 1. Resolve Location ID
+
       let currentLocId = locationId;
       if (!currentLocId) {
         const [servicesRes, treatmentsRes, patientsRes] = await Promise.all([
@@ -243,9 +243,6 @@ export default function AppointmentsPage() {
         return;
       }
 
-      // 2. Fetch doctors — kept in a LOCAL variable, not just state, so the
-      // appointment-mapping step below can use it immediately instead of a
-      // stale closure value (this was why "assigned doctor" wasn't showing).
       let docs: DoctorOption[] = [];
       let doctorsRes = await axios
         .get("/api/doctor", { params: { locationId: currentLocId } })
@@ -258,7 +255,7 @@ export default function AppointmentsPage() {
         setDoctorsList(docs);
       }
 
-      // 3. Fetch treatments (for the edit dropdown)
+
       const treatmentsRes = await axios.get("/api/treatment").catch(() => null);
       let treatments: TreatmentOption[] = [];
       if (treatmentsRes?.data?.success && treatmentsRes.data.data.treatments) {
@@ -269,7 +266,7 @@ export default function AppointmentsPage() {
         setTreatmentsList(treatments);
       }
 
-      // 4. Fetch appointments and resolve doctor names from the local `docs` list.
+
       const apptsRes = await axios.get("/api/appoments", {
         params: { locationId: currentLocId },
       });
@@ -348,8 +345,7 @@ export default function AppointmentsPage() {
     const a = deleteTarget;
     try {
       setDeletingId(a.id);
-      // ADJUST: no delete endpoint confirmed yet in what's been shared —
-      // this assumes a standard REST DELETE on the appointment resource.
+
       await axios.delete(`/api/appoments/${a.id}`);
       setSelected((prev) => (prev?.id === a.id ? null : prev));
       setDeleteTarget(null);
@@ -419,25 +415,21 @@ export default function AppointmentsPage() {
 
     setSubmitting(true);
     try {
-      // Status change → confirmed endpoint
+
       if (editForm.status !== original.status) {
         await axios.patch(`/api/appoments/${editingId}/status`, {
           status: statusToApiValue(editForm.status),
         });
       }
 
-      // Doctor reassignment → confirmed endpoint
+
       if (editForm.doctorId !== original.doctorId) {
         await axios.patch(`/api/appoments/${editingId}/reassign`, {
           providerId: editForm.doctorId,
         });
       }
 
-      // Everything else (name, phone, treatment, date/time, notes)
-      // ADJUST: no general "edit appointment" endpoint confirmed yet —
-      // this assumes a standard REST PATCH on the appointment resource,
-      // sending date and time as separate fields rather than one combined
-      // startTime, since that's the field shape the rest of the form uses.
+
       const otherFieldsChanged =
         editForm.patientName !== original.patientName ||
         editForm.patientPhone !== original.patientPhone ||
@@ -904,11 +896,10 @@ export default function AppointmentsPage() {
                   <button
                     key={tab.key}
                     onClick={() => setProfileTab(tab.key)}
-                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${
-                      profileTab === tab.key
-                        ? "border-[#3f6274] text-[#3f6274]"
-                        : "border-transparent text-slate-500 hover:text-slate-700"
-                    }`}
+                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${profileTab === tab.key
+                      ? "border-[#3f6274] text-[#3f6274]"
+                      : "border-transparent text-slate-500 hover:text-slate-700"
+                      }`}
                   >
                     {tab.label}
                   </button>

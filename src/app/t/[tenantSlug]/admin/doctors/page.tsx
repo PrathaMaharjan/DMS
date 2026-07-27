@@ -26,6 +26,7 @@ import {
   PhoneCall,
   Filter,
   ChevronLeft,
+  ChevronRight,
   SquarePen,
   MapPin,
   IdCard,
@@ -92,8 +93,9 @@ type Doctor = {
   bloodGroup?: string;
   gender?: string;
   dob?: string;
-  createdDate?: string;
+  dateOfBirth?: string;
   address?: string;
+  location?: string;
   education?: string[];
   experienceNotes?: string[];
 };
@@ -123,7 +125,7 @@ const inputClass =
 const textareaClass =
   "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
 
-// Turn a Doctor record into editable form fields (arrays -> newline text).
+
 function doctorToForm(doc: Doctor): FormState {
   return {
     name: doc.name,
@@ -150,6 +152,16 @@ function linesToArray(value: string): string[] {
     .filter(Boolean);
 }
 
+
+function pickField(raw: any, ...keys: string[]): string {
+  for (const key of keys) {
+    if (raw?.[key] !== undefined && raw?.[key] !== null && raw?.[key] !== "") {
+      return String(raw[key]);
+    }
+  }
+  return "";
+}
+
 export default function DoctorsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [locationId, setLocationId] = useState<string | null>(null);
@@ -160,6 +172,8 @@ export default function DoctorsPage() {
   const [doctorToDelete, setDoctorToDelete] = useState<Doctor | null>(null);
   const [query, setQuery] = useState("");
   const [specializationFilter, setSpecializationFilter] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -168,7 +182,7 @@ export default function DoctorsPage() {
   const [profileTab, setProfileTab] = useState<"detail" | "patients" | "appointments">(
     "detail"
   );
-  
+
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
@@ -178,7 +192,7 @@ export default function DoctorsPage() {
   async function loadData() {
     try {
       setLoading(true);
-      // Fetch locations/services first to get locationId
+
       const servicesRes = await axios.get("/api/services");
       let locId: string | null = null;
       if (servicesRes.data?.success && servicesRes.data.data.services?.length > 0) {
@@ -186,7 +200,7 @@ export default function DoctorsPage() {
         setLocationId(locId);
       }
 
-      // Fetch doctors
+
       const res = await axios.get("/api/doctor", {
         params: locId ? { locationId: locId } : undefined,
       });
@@ -207,9 +221,8 @@ export default function DoctorsPage() {
           age: d.age || "30",
           bloodGroup: d.bloodGroup || "O+",
           gender: d.gender || "Female",
-          dob: d.dob || "",
-          createdDate: d.createdAt ? new Date(d.createdAt).toISOString().slice(0, 16).replace("T", " ") : "",
-          address: d.address || "",
+          dob: pickField(d, "dateOfBirth", "dob", "date_of_birth"),
+          address: pickField(d, "address", "location", "doctorAddress", "residenceAddress"),
           education: d.education ? [d.education] : [],
           experienceNotes: d.bio ? [d.bio] : [],
         }));
@@ -277,8 +290,8 @@ export default function DoctorsPage() {
           age: fullDoc.age || doc.age,
           bloodGroup: fullDoc.bloodGroup || doc.bloodGroup,
           gender: fullDoc.gender || doc.gender,
-          dob: fullDoc.dateOfBirth || doc.dob,
-          address: fullDoc.address || doc.address,
+          dob: pickField(fullDoc, "dateOfBirth", "dob", "date_of_birth") || doc.dob,
+          address: pickField(fullDoc, "address", "location", "doctorAddress", "residenceAddress") || doc.address,
         };
         setSelectedDoctor((prev) => (prev && prev.id === doc.id ? mergedDoc : prev));
         setDoctors((prev) => prev.map((d) => (d.id === doc.id ? mergedDoc : d)));
@@ -318,8 +331,8 @@ export default function DoctorsPage() {
           age: fullDoc.age || doc.age,
           bloodGroup: fullDoc.bloodGroup || doc.bloodGroup,
           gender: fullDoc.gender || doc.gender,
-          dob: fullDoc.dateOfBirth || doc.dob,
-          address: fullDoc.address || doc.address,
+          dob: pickField(fullDoc, "dateOfBirth", "dob", "date_of_birth") || doc.dob,
+          address: pickField(fullDoc, "address", "location", "doctorAddress", "residenceAddress") || doc.address,
         };
         setForm(doctorToForm(mergedDoc));
         setDoctors((prev) => prev.map((d) => (d.id === doc.id ? mergedDoc : d)));
@@ -329,12 +342,12 @@ export default function DoctorsPage() {
     }
   }
 
-  // Opens the themed confirmation modal for a given doctor.
+
   function requestDeleteDoctor(doc: Doctor) {
     setDoctorToDelete(doc);
   }
 
-  // Runs the actual delete once the user confirms in the modal.
+
   async function confirmDeleteDoctor() {
     if (!doctorToDelete) return;
     const doc = doctorToDelete;
@@ -372,6 +385,17 @@ export default function DoctorsPage() {
     });
   }, [doctors, query, specializationFilter]);
 
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedDoctors = filtered.slice(startIndex, startIndex + itemsPerPage);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
   const avgRating = useMemo(() => {
     if (doctors.length === 0) return 0;
     return doctors.reduce((sum, d) => sum + d.rating, 0) / doctors.length;
@@ -400,8 +424,7 @@ export default function DoctorsPage() {
 
     try {
       if (modalMode === "edit" && editingId) {
-        // Build the same shape of payload the backend's updateDoctor()
-        // controller expects. Only send fields the form actually has.
+
         const payload: Record<string, unknown> = {
           name: form.name,
           email: form.email,
@@ -426,11 +449,11 @@ export default function DoctorsPage() {
             prev.map((d) =>
               d.id === editingId
                 ? {
-                    ...d,
-                    ...rest,
-                    education: educationList,
-                    experienceNotes: experienceNotesList,
-                  }
+                  ...d,
+                  ...rest,
+                  education: educationList,
+                  experienceNotes: experienceNotesList,
+                }
                 : d
             )
           );
@@ -457,7 +480,7 @@ export default function DoctorsPage() {
           employmentType: "full_time",
         };
 
-        // Only include optional fields if they have values
+
         if (form.phone.trim()) payload.phone = form.phone.trim();
         if (form.imageUrl) payload.photoKey = form.imageUrl;
         if (form.qualification) payload.qualification = form.qualification;
@@ -477,7 +500,6 @@ export default function DoctorsPage() {
               rating: 5,
               patients: 0,
               doctorId: `DOC-${1000 + prev.length + 1}`,
-              createdDate: new Date().toISOString().slice(0, 16).replace("T", " "),
               name: newDoc.name,
               email: newDoc.email,
               phone: form.phone,
@@ -495,6 +517,7 @@ export default function DoctorsPage() {
             },
             ...prev,
           ]);
+          setCurrentPage(1);
         }
       }
 
@@ -537,6 +560,12 @@ export default function DoctorsPage() {
       trendUp: true,
     },
   ];
+
+  const formatDOB = (dobStr?: string) => {
+    if (!dobStr) return "—";
+    const date = new Date(dobStr);
+    return isNaN(date.getTime()) ? dobStr : date.toLocaleDateString();
+  };
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-50">
@@ -593,7 +622,10 @@ export default function DoctorsPage() {
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
                 <input
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   placeholder="Search doctors..."
                   className="w-56 rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-4 text-[0.9rem] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#7da3b3]"
                 />
@@ -603,7 +635,10 @@ export default function DoctorsPage() {
                 <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
                 <select
                   value={specializationFilter}
-                  onChange={(e) => setSpecializationFilter(e.target.value)}
+                  onChange={(e) => {
+                    setSpecializationFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
                 >
                   <option value="All">All specializations</option>
@@ -632,7 +667,7 @@ export default function DoctorsPage() {
                 <p className="mt-4 text-[0.9rem]">Loading doctors...</p>
               </div>
             ) : (
-              filtered.map((doc, i) => {
+              paginatedDoctors.map((doc, i) => {
                 const initials = doc.name
                   .replace("Dr.", "")
                   .trim()
@@ -724,6 +759,52 @@ export default function DoctorsPage() {
               </div>
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {!loading && filtered.length > 0 && (
+            <div className="mt-6 flex items-center justify-between border-t border-slate-100 px-1 pt-4 text-xs">
+              <span className="text-[0.7rem] text-slate-500 font-medium">
+                Showing{" "}
+                <strong className="text-slate-800">{startIndex + 1}</strong>{" "}
+                to{" "}
+                <strong className="text-slate-800">
+                  {Math.min(startIndex + itemsPerPage, filtered.length)}
+                </strong>{" "}
+                of <strong className="text-slate-800">{filtered.length}</strong> doctors
+              </span>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
+                      ? "bg-[#7da3b3] text-white shadow-sm"
+                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      }`}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1070,8 +1151,8 @@ export default function DoctorsPage() {
                         <Star
                           key={i}
                           className={`h-3.5 w-3.5 ${i < Math.round(selectedDoctor.rating)
-                              ? "fill-amber-400 text-amber-400"
-                              : "fill-slate-200 text-slate-200"
+                            ? "fill-amber-400 text-amber-400"
+                            : "fill-slate-200 text-slate-200"
                             }`}
                         />
                       ))}
@@ -1084,7 +1165,7 @@ export default function DoctorsPage() {
                   <div className="mt-3 space-y-1 text-[0.85rem] text-slate-600">
                     <div className="flex items-center gap-1.5">
                       <MapPin className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                      {selectedDoctor.address ?? "Address not provided"}
+                      {selectedDoctor.address || selectedDoctor.location || "Address not provided"}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Phone className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
@@ -1111,8 +1192,8 @@ export default function DoctorsPage() {
                     key={tab.key}
                     onClick={() => setProfileTab(tab.key)}
                     className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${profileTab === tab.key
-                        ? "border-[#3f6274] text-[#3f6274]"
-                        : "border-transparent text-slate-500 hover:text-slate-700"
+                      ? "border-[#3f6274] text-[#3f6274]"
+                      : "border-transparent text-slate-500 hover:text-slate-700"
                       }`}
                   >
                     {tab.label}
@@ -1176,16 +1257,7 @@ export default function DoctorsPage() {
                             Date of Birth
                           </p>
                           <p className="mt-1 font-medium text-slate-800">
-                            {selectedDoctor.dob ?? "—"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="flex items-center gap-1.5 text-slate-400">
-                            <Clock className="h-3.5 w-3.5" strokeWidth={2} />
-                            Created Date
-                          </p>
-                          <p className="mt-1 font-medium text-slate-800">
-                            {selectedDoctor.createdDate ?? "—"}
+                            {formatDOB(selectedDoctor.dob || selectedDoctor.dateOfBirth)}
                           </p>
                         </div>
                       </div>
@@ -1255,11 +1327,10 @@ export default function DoctorsPage() {
                             <p className="text-[0.8rem] text-slate-600 font-medium">
                               {visit.startTime ? new Date(visit.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : "—"}
                             </p>
-                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-medium capitalize mt-1 ${
-                              visit.status === "completed" ? "bg-emerald-100 text-emerald-700" :
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-medium capitalize mt-1 ${visit.status === "completed" ? "bg-emerald-100 text-emerald-700" :
                               visit.status === "pending" || visit.status === "scheduled" ? "bg-amber-100 text-amber-700" :
-                              "bg-rose-100 text-rose-700"
-                            }`}>
+                                "bg-rose-100 text-rose-700"
+                              }`}>
                               {visit.status}
                             </span>
                           </div>
@@ -1305,11 +1376,10 @@ export default function DoctorsPage() {
                               <p className="text-[0.8rem] text-slate-600 font-medium">
                                 {dateStr} at {timeStr}
                               </p>
-                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-medium capitalize mt-1 ${
-                                appt.status === "completed" ? "bg-emerald-100 text-emerald-700" :
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-medium capitalize mt-1 ${appt.status === "completed" ? "bg-emerald-100 text-emerald-700" :
                                 appt.status === "pending" || appt.status === "scheduled" ? "bg-amber-100 text-amber-700" :
-                                "bg-rose-100 text-rose-700"
-                              }`}>
+                                  "bg-rose-100 text-rose-700"
+                                }`}>
                                 {appt.status}
                               </span>
                             </div>

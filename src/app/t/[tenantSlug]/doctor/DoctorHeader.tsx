@@ -63,10 +63,10 @@ export default function DoctorHeader({
     setIsLoggingOut(true);
 
     try {
-      // Call the Next.js API route located at src/app/api/auth/logout/route.ts
+
       await axios.post("/api/auth/logout");
-      
-      // Execute optional callback if provided
+
+
       if (onLogout) {
         onLogout();
       }
@@ -74,7 +74,7 @@ export default function DoctorHeader({
       console.error("Failed to log out", err);
     } finally {
       setIsLoggingOut(false);
-     
+
       const loginPath = tenantSlug ? `/t/${tenantSlug}/login` : "/login";
       router.push(loginPath);
       router.refresh();
@@ -83,7 +83,7 @@ export default function DoctorHeader({
 
   return (
     <div className="relative w-full flex flex-col items-center justify-center gap-6 border-b border-slate-900/5 pb-8 text-center">
-    
+
       <div className="absolute top-0 right-0">
         <button
           onClick={handleLogout}
@@ -109,33 +109,30 @@ export default function DoctorHeader({
       <div className="inline-flex w-full max-w-lg items-center gap-1 rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60">
         <button
           onClick={() => setActiveTab("appointments")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${
-            activeTab === "appointments"
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "appointments"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <CalendarDays className="h-3.5 w-3.5" />
           Appointments
         </button>
         <button
           onClick={() => setActiveTab("patients")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${
-            activeTab === "patients"
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "patients"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <Users className="h-3.5 w-3.5" />
           Patient Records
         </button>
         <button
           onClick={() => setActiveTab("schedule")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${
-            activeTab === "schedule"
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "schedule"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <Clock className="h-3.5 w-3.5" />
           My Availability

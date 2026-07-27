@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import axios from "axios";
 import {
   Search,
   Plus,
   Filter,
   SquarePen,
+  Trash2,
   ChevronLeft,
+  ChevronRight,
   Users,
   UserPlus,
   CalendarCheck,
@@ -24,6 +27,7 @@ import {
   Pill,
   ImagePlus,
   User,
+  Loader2,
 } from "lucide-react";
 
 const STATUSES = ["Active", "Inactive"] as const;
@@ -53,77 +57,6 @@ type Patient = {
   medicalHistory?: string[];
   medications?: string[];
 };
-
-const INITIAL_PATIENTS: Patient[] = [
-  {
-    id: "1",
-    patientId: "PAT-1001",
-    name: "Sita Rai",
-    age: "28",
-    gender: "Female",
-    bloodGroup: "O+",
-    phone: "9801112233",
-    email: "sita.rai@email.com",
-    address: "Bharatpur-10, Chitwan, Nepal",
-    assignedDoctor: "Dr. Anisha Sharma",
-    lastVisit: "2026-07-02",
-    status: "Active",
-    allergies: ["Penicillin"],
-    medicalHistory: ["No major conditions reported"],
-    medications: [],
-  },
-  {
-    id: "2",
-    patientId: "PAT-1002",
-    name: "Bikash Thapa",
-    age: "41",
-    gender: "Male",
-    bloodGroup: "B+",
-    phone: "9802223344",
-    email: "bikash.thapa@email.com",
-    address: "Narayangarh-4, Chitwan, Nepal",
-    assignedDoctor: "Dr. Rajiv Thapa",
-    lastVisit: "2026-06-18",
-    status: "Active",
-    allergies: [],
-    medicalHistory: ["Type 2 diabetes"],
-    medications: ["Metformin 500mg"],
-  },
-  {
-    id: "3",
-    patientId: "PAT-1003",
-    name: "Kamala Gurung",
-    age: "6",
-    gender: "Female",
-    bloodGroup: "A+",
-    phone: "9803334455",
-    email: "kamala.parent@email.com",
-    address: "Ratnanagar-2, Chitwan, Nepal",
-    assignedDoctor: "Dr. Priya Gurung",
-    lastVisit: "2026-05-27",
-    status: "Active",
-    allergies: [],
-    medicalHistory: [],
-    medications: [],
-  },
-  {
-    id: "4",
-    patientId: "PAT-1004",
-    name: "Hari Karki",
-    age: "63",
-    gender: "Male",
-    bloodGroup: "AB+",
-    phone: "9804445566",
-    email: "hari.karki@email.com",
-    address: "Bharatpur-6, Chitwan, Nepal",
-    assignedDoctor: "Dr. Suresh Karki",
-    lastVisit: "2026-03-11",
-    status: "Inactive",
-    allergies: ["Latex"],
-    medicalHistory: ["Hypertension"],
-    medications: ["Amlodipine 5mg"],
-  },
-];
 
 function initialsOf(name: string) {
   return name
@@ -187,6 +120,27 @@ function linesToArray(value: string): string[] {
     .filter(Boolean);
 }
 
+function apiPatientToPatient(p: any): Patient {
+  return {
+    id: p.id,
+    patientId: p.patientId || `PAT-${String(p.id).slice(-4)}`,
+    name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
+    age: p.age != null ? String(p.age) : "",
+    gender: p.gender || "Other",
+    bloodGroup: p.bloodGroup || "-",
+    phone: p.phone || "-",
+    email: p.email || "-",
+    address: p.address || "",
+    assignedDoctor: p.assignedDoctorName || "Unassigned",
+    lastVisit: p.lastVisit || p.updatedAt || p.createdAt || "",
+    status: p.treatmentCompleted ? "Inactive" : "Active",
+    imageUrl: p.imageUrl || undefined,
+    allergies: p.allergies || [],
+    medicalHistory: p.medicalHistory || [],
+    medications: p.medications || [],
+  };
+}
+
 const cellInputClass =
   "w-full rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3] focus:bg-white";
 
@@ -235,10 +189,16 @@ const FORM_SECTIONS: { title: string; fields: FieldDef[] }[] = [
 ];
 
 export default function PatientsPage() {
-  const [patients, setPatients] = useState<Patient[]>(INITIAL_PATIENTS);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const [query, setQuery] = useState("");
   const [doctorFilter, setDoctorFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [profileTab, setProfileTab] = useState<"detail" | "medical" | "appointments">(
     "detail"
@@ -247,6 +207,32 @@ export default function PatientsPage() {
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPatients() {
+      try {
+        setLoading(true);
+        setLoadError(null);
+        const res = await axios.get("/api/patent");
+        if (!cancelled && res.data?.success && res.data.data?.patients) {
+          const mapped: Patient[] = res.data.data.patients.map(apiPatientToPatient);
+          setPatients(mapped);
+        }
+      } catch (err) {
+        console.error("Failed to load patients:", err);
+        if (!cancelled) setLoadError("Failed to load patients from database.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadPatients();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function update<K extends keyof FormState>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -285,24 +271,24 @@ export default function PatientsPage() {
         prev.map((p) =>
           p.id === editingId
             ? {
-                ...p,
-                ...rest,
-                allergies: allergiesList,
-                medicalHistory: medicalHistoryList,
-                medications: medicationsList,
-              }
+              ...p,
+              ...rest,
+              allergies: allergiesList,
+              medicalHistory: medicalHistoryList,
+              medications: medicationsList,
+            }
             : p
         )
       );
       setSelectedPatient((prev) =>
         prev && prev.id === editingId
           ? {
-              ...prev,
-              ...rest,
-              allergies: allergiesList,
-              medicalHistory: medicalHistoryList,
-              medications: medicationsList,
-            }
+            ...prev,
+            ...rest,
+            allergies: allergiesList,
+            medicalHistory: medicalHistoryList,
+            medications: medicationsList,
+          }
           : prev
       );
     } else {
@@ -324,6 +310,33 @@ export default function PatientsPage() {
     setModalOpen(false);
   }
 
+  async function handleDeletePatient(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+
+    const confirmed = window.confirm("Delete this patient? This action cannot be undone.");
+    if (!confirmed) return;
+
+    const previous = patients;
+    setDeletingId(id);
+    // Optimistically remove from the list
+    setPatients((prev) => prev.filter((p) => p.id !== id));
+
+    try {
+      const res = await axios.delete(`/api/patent/${id}`);
+      if (!res.data?.success) {
+        throw new Error(res.data?.error || "Delete failed");
+      }
+      if (selectedPatient?.id === id) setSelectedPatient(null);
+    } catch (err) {
+      console.error("Failed to delete patient:", err);
+      // Roll back on failure
+      setPatients(previous);
+      window.alert("Failed to delete patient. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return patients.filter((p) => {
@@ -338,6 +351,17 @@ export default function PatientsPage() {
       return matchesQuery && matchesDoctor && matchesStatus;
     });
   }, [patients, query, doctorFilter, statusFilter]);
+
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedPatients = filtered.slice(startIndex, startIndex + itemsPerPage);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
 
   const newThisMonth = useMemo(() => {
     const now = new Date();
@@ -382,7 +406,7 @@ export default function PatientsPage() {
           ))}
         </div>
 
-  
+
         <div className="mt-10 overflow-hidden rounded-2xl border border-slate-900/5 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4 p-6">
             <div className="flex flex-wrap items-center gap-3">
@@ -390,28 +414,34 @@ export default function PatientsPage() {
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
                 <input
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   placeholder="Search patients..."
                   className="w-56 rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-4 text-[0.9rem] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#7da3b3]"
                 />
               </div>
 
 
-            <div className="relative">
+              <div className="relative">
                 <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="appearance-none rounded-full border border-slate-900/10 bg-white pl-9 pr-4 py-2.5 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
-              >
-                <option value="All">All statuses</option>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="appearance-none rounded-full border border-slate-900/10 bg-white pl-9 pr-4 py-2.5 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
+                >
+                  <option value="All">All statuses</option>
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <button
@@ -460,78 +490,116 @@ export default function PatientsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p, i) => {
-                  const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
-                  return (
-                    <tr
-                      key={p.id}
-                      onClick={() => openProfile(p)}
-                      className="cursor-pointer border-b border-slate-900/5 transition-colors last:border-b-0 hover:bg-[#7da3b3]/[0.04]"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          {p.imageUrl ? (
-                            <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full">
-                              <Image src={p.imageUrl} alt={p.name} fill unoptimized className="object-cover" />
-                            </div>
-                          ) : (
-                            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[0.75rem] font-semibold ${color}`}>
-                              {initialsOf(p.name)}
-                            </div>
-                          )}
-                          <div>
-                            <p className="text-[0.9rem] font-medium text-slate-900">{p.name}</p>
+                {loading && (
+                  <tr>
+                    <td colSpan={10} className="px-6 py-16 text-center text-slate-500">
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-[#7da3b3]" />
+                        Loading patients...
+                      </span>
+                    </td>
+                  </tr>
+                )}
 
+                {!loading && loadError && (
+                  <tr>
+                    <td colSpan={10} className="px-6 py-16 text-center text-rose-500">
+                      {loadError}
+                    </td>
+                  </tr>
+                )}
+
+                {!loading &&
+                  !loadError &&
+                  paginatedPatients.map((p, i) => {
+                    const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
+                    const isDeleting = deletingId === p.id;
+                    return (
+                      <tr
+                        key={p.id}
+                        onClick={() => openProfile(p)}
+                        className="cursor-pointer border-b border-slate-900/5 transition-colors last:border-b-0 hover:bg-[#7da3b3]/[0.04]"
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            {p.imageUrl ? (
+                              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full">
+                                <Image src={p.imageUrl} alt={p.name} fill unoptimized className="object-cover" />
+                              </div>
+                            ) : (
+                              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[0.75rem] font-semibold ${color}`}>
+                                {initialsOf(p.name)}
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-[0.9rem] font-medium text-slate-900">{p.name}</p>
+
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-[0.85rem] text-slate-600">{p.age}yrs</td>
-                      <td className="px-4 py-4 text-[0.85rem] text-slate-600">{p.gender}</td>
-                      <td className="px-4 py-4 text-[0.85rem] text-slate-700">{p.phone}</td>
-                      <td className="px-4 py-4 text-[0.85rem] text-slate-500">{p.email}</td>
-                      <td className="px-4 py-4">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-[0.75rem] font-medium text-rose-600">
-                          <Droplet className="h-3 w-3" strokeWidth={2} />
-                          {p.bloodGroup}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-[0.85rem] text-slate-600">{p.assignedDoctor}</td>
-                      <td className="px-4 py-4 text-[0.85rem] text-slate-600">
-                        {new Date(p.lastVisit).toLocaleDateString("en-GB", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </td>
-                      <td className="px-4 py-4">
-                        <span
-                          className={[
-                            "inline-flex items-center rounded-full px-2.5 py-1 text-[0.75rem] font-medium",
-                            p.status === "Active"
-                              ? "bg-emerald-50 text-emerald-600"
-                              : "bg-slate-100 text-slate-500",
-                          ].join(" ")}
-                        >
-                          {p.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditModal(p);
-                          }}
-                          aria-label="Edit patient"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-slate-100 hover:text-[#3f6274]"
-                        >
-                          <SquarePen className="h-3.5 w-3.5" strokeWidth={2} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-600">{p.age}yrs</td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-600">{p.gender}</td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-700">{p.phone}</td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-500">{p.email}</td>
+                        <td className="px-4 py-4">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-[0.75rem] font-medium text-rose-600">
+                            <Droplet className="h-3 w-3" strokeWidth={2} />
+                            {p.bloodGroup}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-600">{p.assignedDoctor}</td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-600">
+                          {p.lastVisit
+                            ? new Date(p.lastVisit).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })
+                            : "-"}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span
+                            className={[
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-[0.75rem] font-medium",
+                              p.status === "Active"
+                                ? "bg-emerald-50 text-emerald-600"
+                                : "bg-slate-100 text-slate-500",
+                            ].join(" ")}
+                          >
+                            {p.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditModal(p);
+                              }}
+                              aria-label="Edit patient"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-slate-100 hover:text-[#3f6274]"
+                            >
+                              <SquarePen className="h-3.5 w-3.5" strokeWidth={2} />
+                            </button>
+                            <button
+                              onClick={(e) => handleDeletePatient(p.id, e)}
+                              disabled={isDeleting}
+                              aria-label="Delete patient"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                            >
+                              {isDeleting ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
 
-                {filtered.length === 0 && (
+                {!loading && !loadError && filtered.length === 0 && (
                   <tr>
                     <td colSpan={10} className="px-6 py-16 text-center text-slate-500">
                       No patients match your filters.
@@ -541,10 +609,56 @@ export default function PatientsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!loading && !loadError && filtered.length > 0 && (
+            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-6 py-4 text-xs">
+              <span className="text-[0.7rem] text-slate-500 font-medium">
+                Showing{" "}
+                <strong className="text-slate-800">{startIndex + 1}</strong>{" "}
+                to{" "}
+                <strong className="text-slate-800">
+                  {Math.min(startIndex + itemsPerPage, filtered.length)}
+                </strong>{" "}
+                of <strong className="text-slate-800">{filtered.length}</strong> patients
+              </span>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
+                        ? "bg-[#7da3b3] text-white shadow-sm"
+                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      }`}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-  
+
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40">
           <div onClick={() => setModalOpen(false)} className="absolute inset-0" aria-hidden />
@@ -722,11 +836,10 @@ export default function PatientsPage() {
                   <button
                     key={tab.key}
                     onClick={() => setProfileTab(tab.key)}
-                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${
-                      profileTab === tab.key
+                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${profileTab === tab.key
                         ? "border-[#3f6274] text-[#3f6274]"
                         : "border-transparent text-slate-500 hover:text-slate-700"
-                    }`}
+                      }`}
                   >
                     {tab.label}
                   </button>
@@ -780,11 +893,13 @@ export default function PatientsPage() {
                         Last Visit
                       </p>
                       <p className="mt-1 font-medium text-slate-800">
-                        {new Date(selectedPatient.lastVisit).toLocaleDateString("en-GB", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
+                        {selectedPatient.lastVisit
+                          ? new Date(selectedPatient.lastVisit).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                          : "-"}
                       </p>
                     </div>
                   </div>
@@ -854,4 +969,5 @@ export default function PatientsPage() {
       )}
     </div>
   );
+
 }

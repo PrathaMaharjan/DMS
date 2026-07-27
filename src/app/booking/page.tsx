@@ -149,7 +149,7 @@ export default function BookingPage() {
                     type="email"
                     value={form.email}
                     onChange={(e) => update("email", e.target.value)}
-                    placeholder="demo@gamil.com"
+                    placeholder="demo@gmail.com"
                     className={inputClass}
                   />
                 </label>

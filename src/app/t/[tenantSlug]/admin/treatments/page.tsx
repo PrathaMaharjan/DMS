@@ -16,6 +16,7 @@ import {
   Activity,
   Filter,
   ChevronLeft,
+  ChevronRight,
   SquarePen,
   IdCard,
   Clock,
@@ -41,15 +42,6 @@ const CATEGORIES = [
 ];
 
 const ANESTHESIA_OPTIONS = ["None", "Local", "Sedation", "General"];
-
-const CATEGORY_ICONS: Record<string, typeof Sparkles> = {
-  Preventive: ShieldCheck,
-  Restorative: Layers,
-  Cosmetic: Sparkles,
-  Orthodontic: Activity,
-  Surgical: Scissors,
-  Pediatric: HeartPulse,
-};
 
 const CATEGORY_COLORS: Record<string, string> = {
   Preventive: "bg-emerald-100 text-emerald-700",
@@ -127,6 +119,8 @@ export default function TreatmentsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Treatment | null>(null);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -235,6 +229,17 @@ export default function TreatmentsPage() {
     });
   }, [treatments, query, categoryFilter]);
 
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedTreatments = filtered.slice(startIndex, startIndex + itemsPerPage);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
   const avgPrice = useMemo(() => {
     if (treatments.length === 0) return 0;
     return treatments.reduce((sum, t) => sum + t.price, 0) / treatments.length;
@@ -279,26 +284,7 @@ export default function TreatmentsPage() {
             prev.map((t) =>
               t.id === editingId
                 ? {
-                    ...t,
-                    name: updatedTreatment.name,
-                    category: CATEGORIES.find(c => c.toLowerCase() === updatedTreatment.category) || updatedTreatment.category,
-                    duration: `${updatedTreatment.durationMinutes} mins`,
-                    price: updatedTreatment.priceCents / 100,
-                    description: updatedTreatment.description || "",
-                    sessions: String(updatedTreatment.sessions || 1),
-                    recoveryTime: updatedTreatment.recoveryTime || "",
-                    anesthesia: updatedTreatment.anesthesia ? (updatedTreatment.anesthesia.charAt(0).toUpperCase() + updatedTreatment.anesthesia.slice(1)) : "None",
-                    procedureSteps: updatedTreatment.procedureSteps || [],
-                    aftercare: updatedTreatment.aftercareInstructions || [],
-                  }
-                : t
-            )
-          );
-
-          setSelectedTreatment((prev) =>
-            prev && prev.id === editingId
-              ? {
-                  ...prev,
+                  ...t,
                   name: updatedTreatment.name,
                   category: CATEGORIES.find(c => c.toLowerCase() === updatedTreatment.category) || updatedTreatment.category,
                   duration: `${updatedTreatment.durationMinutes} mins`,
@@ -310,6 +296,25 @@ export default function TreatmentsPage() {
                   procedureSteps: updatedTreatment.procedureSteps || [],
                   aftercare: updatedTreatment.aftercareInstructions || [],
                 }
+                : t
+            )
+          );
+
+          setSelectedTreatment((prev) =>
+            prev && prev.id === editingId
+              ? {
+                ...prev,
+                name: updatedTreatment.name,
+                category: CATEGORIES.find(c => c.toLowerCase() === updatedTreatment.category) || updatedTreatment.category,
+                duration: `${updatedTreatment.durationMinutes} mins`,
+                price: updatedTreatment.priceCents / 100,
+                description: updatedTreatment.description || "",
+                sessions: String(updatedTreatment.sessions || 1),
+                recoveryTime: updatedTreatment.recoveryTime || "",
+                anesthesia: updatedTreatment.anesthesia ? (updatedTreatment.anesthesia.charAt(0).toUpperCase() + updatedTreatment.anesthesia.slice(1)) : "None",
+                procedureSteps: updatedTreatment.procedureSteps || [],
+                aftercare: updatedTreatment.aftercareInstructions || [],
+              }
               : prev
           );
         }
@@ -354,6 +359,7 @@ export default function TreatmentsPage() {
             },
             ...prev,
           ]);
+          setCurrentPage(1);
         }
       }
 
@@ -449,7 +455,10 @@ export default function TreatmentsPage() {
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
                 <input
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   placeholder="Search treatments..."
                   className="w-56 rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-4 text-[0.9rem] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#7da3b3]"
                 />
@@ -459,7 +468,10 @@ export default function TreatmentsPage() {
                 <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
                 <select
                   value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  onChange={(e) => {
+                    setCategoryFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
                 >
                   <option value="All">All categories</option>
@@ -481,88 +493,152 @@ export default function TreatmentsPage() {
             </button>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4">
-            {loading ? (
-              <div className="col-span-full py-16 text-center text-slate-500">
-                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-[#7da3b3]" />
-                <p className="mt-4 text-[0.9rem]">Loading treatments...</p>
-              </div>
-            ) : (
-              filtered.map((t) => {
-                const CategoryIcon = CATEGORY_ICONS[t.category] ?? Sparkles;
-                const color = CATEGORY_COLORS[t.category] ?? "bg-slate-100 text-slate-700";
-
-                return (
-                  <div
-                    key={t.id}
-                    onClick={() => openProfile(t)}
-                    className="group cursor-pointer rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#7da3b3]/30 hover:shadow-lg"
-                  >
-                    <div className="relative -m-6 mb-5">
-                      <div
-                        className={`flex h-44 w-full items-center justify-center rounded-t-2xl ${color}`}
-                      >
-                        <CategoryIcon className="h-14 w-14" strokeWidth={2} />
+          {/* Table */}
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-900/5">
+            <table className="w-full min-w-[860px] border-collapse text-left">
+              <thead>
+                <tr className="bg-slate-50 text-[0.75rem] font-medium uppercase tracking-wide text-slate-500">
+                  <th className="px-5 py-3 font-medium">Treatment</th>
+                  <th className="px-5 py-3 font-medium">Category</th>
+                  <th className="px-5 py-3 font-medium">Duration</th>
+                  <th className="px-5 py-3 font-medium">Price</th>
+                  <th className="px-5 py-3 font-medium">Sessions</th>
+                  <th className="px-5 py-3 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-900/5 bg-white">
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="p-12 text-center text-xs text-slate-400">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-[#7da3b3]" />
+                        <span>Loading treatments...</span>
                       </div>
+                    </td>
+                  </tr>
+                ) : (
+                  <>
+                    {paginatedTreatments.map((t) => {
+                      const color = CATEGORY_COLORS[t.category] ?? "bg-slate-100 text-slate-700";
 
-                      <div className="absolute right-3 top-3 flex items-center gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditModal(t);
-                          }}
-                          aria-label="Edit treatment"
-                          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow transition hover:bg-white"
+                      return (
+                        <tr
+                          key={t.id}
+                          onClick={() => openProfile(t)}
+                          className="cursor-pointer transition-colors hover:bg-[#7da3b3]/[0.06]"
                         >
-                          <SquarePen className="h-4 w-4 text-slate-600" strokeWidth={2} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            requestDeleteTreatment(t);
-                          }}
-                          disabled={deletingId === t.id}
-                          aria-label="Delete treatment"
-                          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-50"
-                        >
-                          <Trash2 className="h-4 w-4 text-slate-600" strokeWidth={2} />
-                        </button>
-                      </div>
-                    </div>
+                          <td className="px-5 py-4 text-[0.9rem] font-semibold text-slate-900">
+                            {t.name}
+                          </td>
+                          <td className="px-5 py-4">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.75rem] font-medium ${color}`}
+                            >
+                              {t.category}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-[0.85rem] text-slate-600">
+                            <p className="flex items-center gap-1.5">
+                              <Clock className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                              {t.duration}
+                            </p>
+                          </td>
+                          <td className="px-5 py-4 text-[0.85rem] text-slate-700">
+                            <p className="flex items-center gap-1">
+                              <Banknote className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                              NPR {t.price.toLocaleString()}
+                            </p>
+                          </td>
+                          <td className="px-5 py-4 text-[0.85rem] text-slate-500">
+                            {t.sessions ?? "1"} session{t.sessions === "1" ? "" : "s"}
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditModal(t);
+                                }}
+                                aria-label="Edit treatment"
+                                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <SquarePen className="h-4 w-4" strokeWidth={2} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  requestDeleteTreatment(t);
+                                }}
+                                disabled={deletingId === t.id}
+                                aria-label="Delete treatment"
+                                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-50"
+                              >
+                                <Trash2 className="h-4 w-4" strokeWidth={2} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
 
-                    <p className="mt-4 text-[1.02rem] font-semibold text-slate-900">{t.name}</p>
-
-                    <span className="mt-2 inline-flex items-center rounded-full bg-[#7da3b3]/10 px-2.5 py-1 text-[0.75rem] font-medium text-[#3f6274]">
-                      {t.category}
-                    </span>
-
-                    <div className="mt-3 flex items-center gap-1.5 text-[0.8rem] text-slate-500">
-                      <Clock className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                      {t.duration}
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between border-t border-slate-900/5 pt-4">
-                      <div className="flex items-center gap-1">
-                        <Banknote className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                        <span className="text-[0.85rem] font-medium text-slate-700">
-                          NPR {t.price.toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-[0.8rem] text-slate-500">
-                        {t.sessions ?? "1"} session{t.sessions === "1" ? "" : "s"}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-
-            {filtered.length === 0 && !loading && (
-              <div className="col-span-full rounded-2xl border border-dashed border-slate-900/15 bg-white py-16 text-center text-slate-500">
-                No treatments match your filters.
-              </div>
-            )}
+                    {filtered.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="bg-white py-16 text-center text-slate-500">
+                          No treatments match your filters.
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                )}
+              </tbody>
+            </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!loading && filtered.length > 0 && (
+            <div className="mt-4 flex items-center justify-between border-t border-slate-100 px-1 pt-4 text-xs">
+              <span className="text-[0.7rem] text-slate-500 font-medium">
+                Showing{" "}
+                <strong className="text-slate-800">{startIndex + 1}</strong>{" "}
+                to{" "}
+                <strong className="text-slate-800">
+                  {Math.min(startIndex + itemsPerPage, filtered.length)}
+                </strong>{" "}
+                of <strong className="text-slate-800">{filtered.length}</strong> treatments
+              </span>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
+                        ? "bg-[#7da3b3] text-white shadow-sm"
+                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      }`}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -590,176 +666,176 @@ export default function TreatmentsPage() {
             </div>
 
             <div className="px-6 py-6">
-            <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4">
 
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <Tag className="h-3.5 w-3.5" strokeWidth={2} />
-                  Treatment name
-                </span>
-                <input
-                  required
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => update("name", e.target.value)}
-                  placeholder="Teeth Whitening"
-                  className={inputClass}
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-4">
                 <label className="block">
                   <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <Layers className="h-3.5 w-3.5" strokeWidth={2} />
-                    Category
-                  </span>
-                  <select
-                    value={form.category}
-                    onChange={(e) => update("category", e.target.value)}
-                    className={inputClass}
-                  >
-                    {CATEGORIES.map((c) => (
-                      <option key={c}>{c}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <Timer className="h-3.5 w-3.5" strokeWidth={2} />
-                    Duration
+                    <Tag className="h-3.5 w-3.5" strokeWidth={2} />
+                    Treatment name
                   </span>
                   <input
                     required
                     type="text"
-                    value={form.duration}
-                    onChange={(e) => update("duration", e.target.value)}
-                    placeholder="45 mins"
+                    value={form.name}
+                    onChange={(e) => update("name", e.target.value)}
+                    placeholder="Teeth Whitening"
                     className={inputClass}
                   />
                 </label>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <Layers className="h-3.5 w-3.5" strokeWidth={2} />
+                      Category
+                    </span>
+                    <select
+                      value={form.category}
+                      onChange={(e) => update("category", e.target.value)}
+                      className={inputClass}
+                    >
+                      {CATEGORIES.map((c) => (
+                        <option key={c}>{c}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <Timer className="h-3.5 w-3.5" strokeWidth={2} />
+                      Duration
+                    </span>
+                    <input
+                      required
+                      type="text"
+                      value={form.duration}
+                      onChange={(e) => update("duration", e.target.value)}
+                      placeholder="45 mins"
+                      className={inputClass}
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <Banknote className="h-3.5 w-3.5" strokeWidth={2} />
+                      Price (NPR)
+                    </span>
+                    <input
+                      required
+                      type="number"
+                      min={0}
+                      value={form.price}
+                      onChange={(e) => update("price", e.target.value)}
+                      placeholder="6500"
+                      className={inputClass}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <ListChecks className="h-3.5 w-3.5" strokeWidth={2} />
+                      Sessions
+                    </span>
+                    <input
+                      type="text"
+                      value={form.sessions}
+                      onChange={(e) => update("sessions", e.target.value)}
+                      placeholder="1"
+                      className={inputClass}
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <Syringe className="h-3.5 w-3.5" strokeWidth={2} />
+                      Anesthesia
+                    </span>
+                    <select
+                      value={form.anesthesia}
+                      onChange={(e) => update("anesthesia", e.target.value)}
+                      className={inputClass}
+                    >
+                      {ANESTHESIA_OPTIONS.map((a) => (
+                        <option key={a}>{a}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                      <Clock className="h-3.5 w-3.5" strokeWidth={2} />
+                      Recovery time
+                    </span>
+                    <input
+                      type="text"
+                      value={form.recoveryTime}
+                      onChange={(e) => update("recoveryTime", e.target.value)}
+                      placeholder="2-3 days"
+                      className={inputClass}
+                    />
+                  </label>
+                </div>
+
                 <label className="block">
                   <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <Banknote className="h-3.5 w-3.5" strokeWidth={2} />
-                    Price (NPR)
+                    <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
+                    Description
                   </span>
-                  <input
+                  <textarea
                     required
-                    type="number"
-                    min={0}
-                    value={form.price}
-                    onChange={(e) => update("price", e.target.value)}
-                    placeholder="6500"
-                    className={inputClass}
+                    rows={3}
+                    value={form.description}
+                    onChange={(e) => update("description", e.target.value)}
+                    placeholder="Brief overview of what this treatment involves"
+                    className={textareaClass}
                   />
                 </label>
+
                 <label className="block">
                   <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
                     <ListChecks className="h-3.5 w-3.5" strokeWidth={2} />
-                    Sessions
+                    Procedure steps (one per line)
                   </span>
-                  <input
-                    type="text"
-                    value={form.sessions}
-                    onChange={(e) => update("sessions", e.target.value)}
-                    placeholder="1"
-                    className={inputClass}
+                  <textarea
+                    rows={3}
+                    value={form.procedureSteps}
+                    onChange={(e) => update("procedureSteps", e.target.value)}
+                    placeholder={"Shade assessment and gum protection\nApplication of whitening agent"}
+                    className={textareaClass}
                   />
                 </label>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
                 <label className="block">
                   <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <Syringe className="h-3.5 w-3.5" strokeWidth={2} />
-                    Anesthesia
+                    <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} />
+                    Aftercare (one per line)
                   </span>
-                  <select
-                    value={form.anesthesia}
-                    onChange={(e) => update("anesthesia", e.target.value)}
-                    className={inputClass}
+                  <textarea
+                    rows={3}
+                    value={form.aftercare}
+                    onChange={(e) => update("aftercare", e.target.value)}
+                    placeholder={"Avoid coffee and tea for 48 hours\nUse a sensitivity toothpaste if needed"}
+                    className={textareaClass}
+                  />
+                </label>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="submit"
+                    className="rounded-full bg-[#7da3b3] px-6 py-2.5 text-[0.9rem] font-medium text-white transition-colors  hover:bg-[#345263]"
                   >
-                    {ANESTHESIA_OPTIONS.map((a) => (
-                      <option key={a}>{a}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <Clock className="h-3.5 w-3.5" strokeWidth={2} />
-                    Recovery time
-                  </span>
-                  <input
-                    type="text"
-                    value={form.recoveryTime}
-                    onChange={(e) => update("recoveryTime", e.target.value)}
-                    placeholder="2-3 days"
-                    className={inputClass}
-                  />
-                </label>
-              </div>
-
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
-                  Description
-                </span>
-                <textarea
-                  required
-                  rows={3}
-                  value={form.description}
-                  onChange={(e) => update("description", e.target.value)}
-                  placeholder="Brief overview of what this treatment involves"
-                  className={textareaClass}
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <ListChecks className="h-3.5 w-3.5" strokeWidth={2} />
-                  Procedure steps (one per line)
-                </span>
-                <textarea
-                  rows={3}
-                  value={form.procedureSteps}
-                  onChange={(e) => update("procedureSteps", e.target.value)}
-                  placeholder={"Shade assessment and gum protection\nApplication of whitening agent"}
-                  className={textareaClass}
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} />
-                  Aftercare (one per line)
-                </span>
-                <textarea
-                  rows={3}
-                  value={form.aftercare}
-                  onChange={(e) => update("aftercare", e.target.value)}
-                  placeholder={"Avoid coffee and tea for 48 hours\nUse a sensitivity toothpaste if needed"}
-                  className={textareaClass}
-                />
-              </label>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="submit"
-                  className="rounded-full bg-[#7da3b3] px-6 py-2.5 text-[0.9rem] font-medium text-white transition-colors  hover:bg-[#345263]"
-                >
-                  {modalMode === "edit" ? "Save Changes" : "Add Treatment"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="rounded-full px-5 py-2.5 text-[0.9rem] font-medium text-slate-500 transition-colors hover:text-slate-800"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+                    {modalMode === "edit" ? "Save Changes" : "Add Treatment"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalOpen(false)}
+                    className="rounded-full px-5 py-2.5 text-[0.9rem] font-medium text-slate-500 transition-colors hover:text-slate-800"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -796,40 +872,23 @@ export default function TreatmentsPage() {
 
             <div className="px-6 py-6">
               {/* Identity */}
-              <div className="flex items-start gap-4">
-                {(() => {
-                  const CategoryIcon =
-                    CATEGORY_ICONS[selectedTreatment.category] ?? Sparkles;
-                  const color =
-                    CATEGORY_COLORS[selectedTreatment.category] ??
-                    "bg-slate-100 text-slate-700";
-                  return (
-                    <div
-                      className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full ring-4 ring-white ${color}`}
-                    >
-                      <CategoryIcon className="h-7 w-7" strokeWidth={2} />
-                    </div>
-                  );
-                })()}
-
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">
-                    {selectedTreatment.name}
-                  </h2>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.85rem] text-slate-500">
-                    <span>{selectedTreatment.category}</span>
-                    <span className="text-slate-300">|</span>
-                    <span>{selectedTreatment.duration}</span>
-                    <span className="text-slate-300">|</span>
-                    <span className="font-medium text-slate-700">
-                      NPR {selectedTreatment.price.toLocaleString()}
-                    </span>
-                  </div>
-
-                  <p className="mt-3 text-[0.85rem] leading-relaxed text-slate-600">
-                    {selectedTreatment.description}
-                  </p>
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">
+                  {selectedTreatment.name}
+                </h2>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.85rem] text-slate-500">
+                  <span>{selectedTreatment.category}</span>
+                  <span className="text-slate-300">|</span>
+                  <span>{selectedTreatment.duration}</span>
+                  <span className="text-slate-300">|</span>
+                  <span className="font-medium text-slate-700">
+                    NPR {selectedTreatment.price.toLocaleString()}
+                  </span>
                 </div>
+
+                <p className="mt-3 text-[0.85rem] leading-relaxed text-slate-600">
+                  {selectedTreatment.description}
+                </p>
               </div>
 
               {/* Tabs */}
@@ -844,11 +903,10 @@ export default function TreatmentsPage() {
                   <button
                     key={tab.key}
                     onClick={() => setProfileTab(tab.key)}
-                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${
-                      profileTab === tab.key
+                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${profileTab === tab.key
                         ? "border-[#3f6274] text-[#3f6274]"
                         : "border-transparent text-slate-500 hover:text-slate-700"
-                    }`}
+                      }`}
                   >
                     {tab.label}
                   </button>
@@ -917,7 +975,7 @@ export default function TreatmentsPage() {
                     Procedure Steps
                   </p>
                   {selectedTreatment.procedureSteps &&
-                  selectedTreatment.procedureSteps.length > 0 ? (
+                    selectedTreatment.procedureSteps.length > 0 ? (
                     <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-[0.85rem] text-slate-600">
                       {selectedTreatment.procedureSteps.map((item) => (
                         <li key={item}>{item}</li>

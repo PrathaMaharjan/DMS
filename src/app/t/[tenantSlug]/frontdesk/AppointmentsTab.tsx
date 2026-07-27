@@ -145,7 +145,7 @@ export default function AppointmentsTab() {
       setLoading(true);
       setErrorMsg(null);
 
-      // 1. Resolve Location ID
+   
       let currentLocId = locationId;
       if (!currentLocId) {
         const [servicesRes, treatmentsRes, patientsRes] = await Promise.all([
@@ -167,7 +167,7 @@ export default function AppointmentsTab() {
         }
       }
 
-      // 2. Fetch Doctors
+  
       let doctorsRes = await axios
         .get("/api/doctor", {
           params: currentLocId ? { locationId: currentLocId } : undefined,
@@ -186,7 +186,6 @@ export default function AppointmentsTab() {
         setDoctorsList(docs);
       }
 
-      // 3. Fetch Treatments
       const treatmentsRes = await axios.get("/api/treatment").catch(() => null);
       if (treatmentsRes?.data?.success && treatmentsRes.data.data.treatments) {
         const trts = treatmentsRes.data.data.treatments.map((t: any) => ({
@@ -200,7 +199,7 @@ export default function AppointmentsTab() {
         }
       }
 
-      // 4. Fetch Patients for search
+      
       const patientsRes = await axios.get("/api/patent").catch(() => null);
       if (patientsRes?.data?.success && patientsRes.data.data.patients) {
         const pts: Patient[] = patientsRes.data.data.patients.map((p: any) => ({
@@ -217,7 +216,6 @@ export default function AppointmentsTab() {
         setPatientsList(pts);
       }
 
-      // 5. Fetch Confirmed Appointments
       if (currentLocId) {
         const apptsRes = await axios
           .get("/api/appoments", {
@@ -385,7 +383,7 @@ export default function AppointmentsTab() {
     setSubmitting(true);
     try {
       if (selectedPatient?.id) {
-        // Assign existing patient
+
         const payload = {
           patientId: selectedPatient.id,
           locationId: activeLocId,
@@ -402,7 +400,7 @@ export default function AppointmentsTab() {
           return;
         }
       } else {
-        // Create patient via /api/patent if new patient info was entered
+
         let targetPatientId: string | null = null;
         if (registerForm.firstName && registerForm.lastName) {
           const createPatientRes = await axios
@@ -439,7 +437,7 @@ export default function AppointmentsTab() {
             return;
           }
         } else {
-          // Fallback to /api/appoments
+       
           const fullName = selectedPatient
             ? selectedPatient.name
             : `${registerForm.firstName.trim()} ${registerForm.lastName.trim()}`.trim();
@@ -576,7 +574,6 @@ export default function AppointmentsTab() {
     }
   }
 
-  // Filter Logic — main list shows Confirmed appointments
   const filteredAppointments = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return appointments.filter((appt) => {

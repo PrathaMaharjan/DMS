@@ -38,18 +38,18 @@ export default function DoctorScheduleTab() {
     },
   ]);
 
-  // Default to July 2026
+
   const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1));
   const [selectedDate, setSelectedDate] = useState<string>("2026-07-22");
 
-  // Availability / Break Controls state
+
   const [customizeByHours, setCustomizeByHours] = useState(true);
   const [breakIntervals, setBreakIntervals] = useState<TimeSlot[]>([
     { id: "b-1", start: "09:00", end: "12:00" },
     { id: "b-2", start: "13:00", end: "18:00" },
   ]);
 
-  // Date Calculation Helpers
+
   const daysInMonth = (date: Date) =>
     new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 
@@ -111,12 +111,11 @@ export default function DoctorScheduleTab() {
   };
 
   const monthDays = daysInMonth(currentDate);
-  const startDay = firstDayOfMonth(currentDate); // 0 = Sun, 3 = Wed for July 2026
-
+  const startDay = firstDayOfMonth(currentDate);
   return (
     <div className="w-full space-y-6">
       <div className="grid gap-6 lg:grid-cols-12">
-        {/* Calendar & Time Settings Card */}
+
         <div className="lg:col-span-7 rounded-2xl border border-[#7da3b3]/20 bg-white/90 p-6 shadow-sm backdrop-blur-sm space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
@@ -160,7 +159,7 @@ export default function DoctorScheduleTab() {
               </div>
             </div>
 
-            {/* Weekday Headers (Standard Sunday -> Saturday Layout) */}
+
             <div className="grid grid-cols-7 text-center text-xs font-semibold text-slate-400">
               {WEEKDAYS.map((day) => (
                 <span key={day}>{day}</span>
@@ -169,7 +168,7 @@ export default function DoctorScheduleTab() {
 
             {/* Calendar Grid */}
             <div className="grid grid-cols-7 gap-1.5 text-xs">
-              {/* Padding offset days before start of month */}
+
               {Array.from({ length: startDay }).map((_, i) => (
                 <div key={`empty-${i}`} className="h-9" />
               ))}
@@ -180,7 +179,7 @@ export default function DoctorScheduleTab() {
                 const formattedDate = `${currentDate.getFullYear()}-${String(
                   currentDate.getMonth() + 1
                 ).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
-                
+
                 const isSelected = selectedDate === formattedDate;
                 const hasOverride = overrides.some(
                   (o) => o.date === formattedDate
@@ -191,11 +190,10 @@ export default function DoctorScheduleTab() {
                     key={dayNum}
                     type="button"
                     onClick={() => setSelectedDate(formattedDate)}
-                    className={`relative h-9 w-full rounded-xl flex items-center justify-center font-medium transition-all ${
-                      isSelected
+                    className={`relative h-9 w-full rounded-xl flex items-center justify-center font-medium transition-all ${isSelected
                         ? "bg-[#7da3b3] text-white font-bold shadow-md scale-105"
                         : "text-slate-700 bg-white border border-slate-200/60 hover:border-[#7da3b3] hover:text-[#7da3b3]"
-                    }`}
+                      }`}
                   >
                     {dayNum}
                     {hasOverride && !isSelected && (
@@ -218,14 +216,12 @@ export default function DoctorScheduleTab() {
               <button
                 type="button"
                 onClick={() => setCustomizeByHours(!customizeByHours)}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                  customizeByHours ? "bg-[#7da3b3]" : "bg-slate-200"
-                }`}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${customizeByHours ? "bg-[#7da3b3]" : "bg-slate-200"
+                  }`}
               >
                 <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    customizeByHours ? "translate-x-5" : "translate-x-0"
-                  }`}
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${customizeByHours ? "translate-x-5" : "translate-x-0"
+                    }`}
                 />
               </button>
             </div>
@@ -328,11 +324,10 @@ export default function DoctorScheduleTab() {
                           {ov.date}
                         </span>
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[0.65rem] font-bold ${
-                            ov.type === "FULL_DAY_OFF"
+                          className={`px-2 py-0.5 rounded-full text-[0.65rem] font-bold ${ov.type === "FULL_DAY_OFF"
                               ? "bg-rose-50 text-rose-700 border border-rose-200"
                               : "bg-[#7da3b3]/15 text-[#6b92a2] border border-[#7da3b3]/30"
-                          }`}
+                            }`}
                         >
                           {ov.type === "FULL_DAY_OFF"
                             ? "Closed Full Day"
