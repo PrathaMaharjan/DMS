@@ -1,5 +1,5 @@
 // src/app/api/appointments/[id]/route.ts
-import { BookAppointmentErrorCode, getAppointment } from "@/controller/appoments/controller";
+import { BookAppointmentErrorCode, deleteAppointment, getAppointment, updateAppointment } from "@/controller/appoments/controller";
 import { NextRequest, NextResponse } from "next/server";
 
 const STATUS_BY_CODE: Record<BookAppointmentErrorCode, number> = {
@@ -19,4 +19,26 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ success: false, statusCode: status, error: result.error, code: result.code }, { status });
   }
   return NextResponse.json({ success: true, statusCode: 200, data: { appointment: result.appointment } });
+}
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const body = await request.json().catch(() => null);
+  const result = await updateAppointment(id, body);
+
+  if (!result.success) {
+    const status = STATUS_BY_CODE[result.code];
+    return NextResponse.json({ success: false, statusCode: status, error: result.error, code: result.code }, { status });
+  }
+  return NextResponse.json({ success: true, statusCode: 200, data: {} });
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const result = await deleteAppointment(id);
+  if (!result.success) {
+    const status = STATUS_BY_CODE[result.code];
+    return NextResponse.json({ success: false, statusCode: status, error: result.error, code: result.code }, { status });
+  }
+  return NextResponse.json({ success: true, statusCode: 200, data: {} });
 }
