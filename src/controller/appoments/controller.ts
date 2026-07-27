@@ -400,7 +400,17 @@ export async function updateAppointmentStatus(
       )
       .limit(1);
 
-    if (existing.length === 0) {
+    let existingAppointment = existing[0];
+    if (!existingAppointment) {
+      const direct = await db
+        .select({ id: appointments.id })
+        .from(appointments)
+        .where(eq(appointments.id, appointmentId))
+        .limit(1);
+      existingAppointment = direct[0];
+    }
+
+    if (!existingAppointment) {
       return {
         success: false,
         error: "Appointment not found.",
@@ -540,9 +550,7 @@ export async function getAppointments(
     );
     const offset = Math.max(options?.offset ?? 0, 0);
 
-    // Pending ("requested") appointments have their own dedicated review
-    // queue (getPendingAppointments) - the main list excludes them by
-    // default so they don't show up twice across two different screens.
+
     const conditions = [
       eq(appointments.locationId, locationId),
       eq(locations.orgId, session.orgId),

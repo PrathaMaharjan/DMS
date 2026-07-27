@@ -29,6 +29,7 @@ export interface DoctorAppointment {
   rawStartTime: string;
   status: "Confirmed" | "In Progress" | "Completed" | "Cancelled";
   attendance: "Pending" | "Checked In" | "No Show";
+  rawStatus?: string;
 }
 
 function formatTimeDisplay(isoString: string) {
@@ -516,7 +517,8 @@ export default function DoctorAppointmentsTab() {
                         <select
                           disabled={updatingId === item.id}
                           value={
-                            item.status === "Completed"
+                            item.rawStatus ||
+                            (item.status === "Completed"
                               ? "completed"
                               : item.status === "Cancelled"
                               ? "cancelled"
@@ -524,7 +526,7 @@ export default function DoctorAppointmentsTab() {
                               ? "checked_in"
                               : item.attendance === "No Show"
                               ? "no_show"
-                              : "confirmed"
+                              : "confirmed")
                           }
                           onChange={(e) =>
                             handleMarkAttendance(

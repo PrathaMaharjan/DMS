@@ -3,45 +3,39 @@
 import { useMemo, useState } from "react";
 import { Clock, Coffee, ChevronDown, ChevronUp, CheckCircle2, XCircle } from "lucide-react";
 
-/* ----------------------------------------------------------------------- */
-/*  TYPES                                                                    */
-/* ----------------------------------------------------------------------- */
+
 
 interface Break {
   label: string;
-  start: string; // "HH:mm" 24hr
-  end: string;   // "HH:mm" 24hr
+  start: string;
+  end: string;
 }
 
 interface DoctorSchedule {
   id: string;
   name: string;
   specialty: string;
-  workingHours: { start: string; end: string }; // "HH:mm" 24hr
+  workingHours: { start: string; end: string };
   breaks: Break[];
   isClosedFullDay?: boolean;
 }
 
-// Minimal shape needed from your appointments data.
-// Swap this for your real DoctorAppointment type once you add a doctorId field.
+
 interface BookedAppointment {
   doctorId: string;
-  date: string;   // "YYYY-MM-DD"
-  time: string;   // "HH:mm" 24hr, start time
+  date: string;
+  time: string;
   durationMinutes: number;
   status: "Confirmed" | "In Progress" | "Completed" | "Cancelled";
 }
 
 interface Slot {
-  start: string; // "HH:mm"
-  end: string;   // "HH:mm"
+  start: string;
+  end: string;
   status: "free" | "booked" | "break";
-  label?: string; // patient name or break label, if relevant
+  label?: string;
 }
 
-/* ----------------------------------------------------------------------- */
-/*  MOCK DATA — replace with real API data                                  */
-/* ----------------------------------------------------------------------- */
 
 const DOCTORS_DATA: DoctorSchedule[] = [
   {
@@ -111,9 +105,7 @@ function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: numbe
   return aStart < bEnd && bStart < aEnd;
 }
 
-/* ----------------------------------------------------------------------- */
-/*  SLOT COMPUTATION                                                        */
-/* ----------------------------------------------------------------------- */
+
 
 function computeSlots(
   doctor: DoctorSchedule,
@@ -163,9 +155,7 @@ function currentStatus(slots: Slot[]): "Available" | "On Break" | "Full Day Off"
   return "Available";
 }
 
-/* ----------------------------------------------------------------------- */
-/*  COMPONENT                                                               */
-/* ----------------------------------------------------------------------- */
+
 
 export default function DoctorAvailabilityTab() {
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
@@ -226,11 +216,10 @@ export default function DoctorAvailabilityTab() {
                     <p className="text-xs text-slate-400">{doc.specialty}</p>
                   </div>
                   <span
-                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      status === "Full Day Off" || status === "Fully Booked"
-                        ? "bg-rose-50 text-rose-700 border border-rose-200"
-                        : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                    }`}
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${status === "Full Day Off" || status === "Fully Booked"
+                      ? "bg-rose-50 text-rose-700 border border-rose-200"
+                      : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      }`}
                   >
                     {status}
                   </span>
@@ -245,17 +234,16 @@ export default function DoctorAvailabilityTab() {
                       : `${doc.workingHours.start} - ${doc.workingHours.end}`}
                   </div>
                   <span
-                    className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-lg ${
-                      freeSlots.length > 0
-                        ? "text-[#6b92a2] bg-[#7da3b3]/15"
-                        : "text-slate-400 bg-slate-100"
-                    }`}
+                    className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-lg ${freeSlots.length > 0
+                      ? "text-[#6b92a2] bg-[#7da3b3]/15"
+                      : "text-slate-400 bg-slate-100"
+                      }`}
                   >
                     {freeSlots.length} open {freeSlots.length === 1 ? "slot" : "slots"}
                   </span>
                 </div>
 
-                {/* Timeline Visual Indicator — proportional to real slot data */}
+
                 {!doc.isClosedFullDay && slots.length > 0 && (
                   <div className="mt-4 space-y-1.5">
                     <div className="flex justify-between text-[0.65rem] font-bold text-slate-400">
@@ -267,13 +255,12 @@ export default function DoctorAvailabilityTab() {
                       {slots.map((slot, i) => (
                         <div
                           key={i}
-                          className={`h-full ${
-                            slot.status === "free"
-                              ? "bg-emerald-400"
-                              : slot.status === "booked"
+                          className={`h-full ${slot.status === "free"
+                            ? "bg-emerald-400"
+                            : slot.status === "booked"
                               ? "bg-sky-400"
                               : "bg-amber-400"
-                          }`}
+                            }`}
                           style={{ width: `${100 / slots.length}%` }}
                           title={`${slot.start} - ${slot.end}: ${slot.status}`}
                         />
@@ -306,25 +293,23 @@ export default function DoctorAvailabilityTab() {
                       slots.map((slot, i) => (
                         <div
                           key={i}
-                          className={`flex items-center justify-between p-2 rounded-lg border ${
-                            slot.status === "free"
-                              ? "bg-white border-emerald-200"
-                              : slot.status === "booked"
+                          className={`flex items-center justify-between p-2 rounded-lg border ${slot.status === "free"
+                            ? "bg-white border-emerald-200"
+                            : slot.status === "booked"
                               ? "bg-white border-sky-200"
                               : "bg-white border-amber-200"
-                          }`}
+                            }`}
                         >
                           <span className="font-medium text-slate-800">
                             {slot.start} - {slot.end}
                           </span>
                           <span
-                            className={`flex items-center gap-1 font-bold px-2 py-0.5 rounded-md ${
-                              slot.status === "free"
-                                ? "text-emerald-700 bg-emerald-50"
-                                : slot.status === "booked"
+                            className={`flex items-center gap-1 font-bold px-2 py-0.5 rounded-md ${slot.status === "free"
+                              ? "text-emerald-700 bg-emerald-50"
+                              : slot.status === "booked"
                                 ? "text-sky-700 bg-sky-50"
                                 : "text-amber-700 bg-amber-50"
-                            }`}
+                              }`}
                           >
                             {slot.status === "free" && <CheckCircle2 className="h-3 w-3" />}
                             {slot.status === "booked" && <XCircle className="h-3 w-3" />}
@@ -332,8 +317,8 @@ export default function DoctorAvailabilityTab() {
                             {slot.status === "free"
                               ? "Free"
                               : slot.status === "booked"
-                              ? "Booked"
-                              : slot.label || "Break"}
+                                ? "Booked"
+                                : slot.label || "Break"}
                           </span>
                         </div>
                       ))
