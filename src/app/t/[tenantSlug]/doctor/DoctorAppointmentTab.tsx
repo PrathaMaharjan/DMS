@@ -63,7 +63,7 @@ function getTodayStr() {
 export default function DoctorAppointmentsTab() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPeriod, setFilterPeriod] = useState<
-    "all" | "today" | "upcoming" | "checked-in" | "completed"
+    "all" | "today" | "upcoming" | "checked_in" | "completed"
   >("all");
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -281,7 +281,7 @@ export default function DoctorAppointmentsTab() {
     if (filterPeriod === "today") return appt.date === todayStr;
     if (filterPeriod === "upcoming")
       return appt.date >= todayStr && appt.status !== "Completed";
-    if (filterPeriod === "checked-in")
+    if (filterPeriod === "checked_in")
       return appt.attendance === "Checked In" && appt.status !== "Completed";
     if (filterPeriod === "completed") return appt.status === "Completed";
     return true;
@@ -393,7 +393,7 @@ export default function DoctorAppointmentsTab() {
 
         {/* Tab Filters */}
         <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 border border-slate-200 text-xs">
-          {(["all", "today", "upcoming", "checked-in", "completed"] as const).map(
+          {(["all", "today", "upcoming", "checked_in", "completed"] as const).map(
             (tab) => (
               <button
                 key={tab}
