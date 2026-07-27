@@ -704,6 +704,7 @@ export async function getAppointment(
 export type AssignAppointmentResult =
   | { success: true; appointmentId: string }
   | { success: false; error: string; code: BookAppointmentErrorCode };
+  
 export async function assignAppointmentToPatient(
   input: unknown,
 ): Promise<AssignAppointmentResult> {
