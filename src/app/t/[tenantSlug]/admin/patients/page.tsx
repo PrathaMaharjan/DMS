@@ -162,6 +162,7 @@ const FORM_SECTIONS: { title: string; fields: FieldDef[] }[] = [
     fields: [
       { key: "name", label: "Full name", icon: User, type: "text", placeholder: "Sita Rai", required: true },
       { key: "gender", label: "Gender", icon: VenusAndMars, type: "select", options: ["Female", "Male", "Other"] },
+      { key: "dob", label: "Date of birth", icon: Cake, type: "date" },
       { key: "age", label: "Age", icon: Cake, type: "number", placeholder: "28" },
       { key: "bloodGroup", label: "Blood group", icon: Droplet, type: "select", options: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] },
     ],
@@ -234,7 +235,30 @@ export default function PatientsPage() {
   }, []);
 
   function update<K extends keyof FormState>(key: K, value: string) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === "dob" && value) {
+        const birthDate = new Date(value);
+        if (!isNaN(birthDate.getTime())) {
+          const today = new Date();
+          let age = today.getFullYear() - birthDate.getFullYear();
+          const m = today.getMonth() - birthDate.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+          }
+          if (age >= 0) {
+            next.age = String(age);
+          }
+        }
+      } else if (key === "age" && value && !prev.dob) {
+        const ageNum = parseInt(value, 10);
+        if (!isNaN(ageNum) && ageNum >= 0) {
+          const birthYear = new Date().getFullYear() - ageNum;
+          next.dob = `${birthYear}-01-01`;
+        }
+      }
+      return next;
+    });
   }
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {

@@ -21,6 +21,8 @@ export type PatientListResult =
         firstName: string;
         lastName: string;
         age: number | null;
+        dob: string | null;
+        createdAt: Date | null;
         gender: string | null;
         phone: string | null;
         email: string | null;
@@ -71,6 +73,8 @@ export async function getPatients(options?: {
           firstName: patients.firstName,
           lastName: patients.lastName,
           age: patients.age,
+          dob: patients.dob,
+          createdAt: patients.createdAt,
           gender: patients.gender,
           phone: patients.phone,
           email: patients.email,

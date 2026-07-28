@@ -4,7 +4,7 @@ export const patientSchema = z.object({
   locationId: z.string().uuid("Missing or invalid location"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  age : z.number(),
+  age: z.number().optional(),
   dob: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email("Please enter a valid email address").optional().or(z.literal("")),
@@ -23,8 +23,7 @@ export type PatientInput = z.infer<typeof patientSchema>;
 export const updatePatientSchema = z.object({
   firstName: z.string().min(1, "First name is required").optional(),
   lastName: z.string().min(1, "Last name is required").optional(),
-  age : z.number(),
-
+  age: z.number().optional(),
   dob: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email("Please enter a valid email address").optional().or(z.literal("")),

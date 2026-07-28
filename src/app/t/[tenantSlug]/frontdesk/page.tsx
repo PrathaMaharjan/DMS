@@ -6,9 +6,10 @@ import FrontDeskHeader from "./FrontDeskHeader";
 import AppointmentsTab from "./AppointmentsTab";
 import PatientsTab from "./PatientsTab";
 import DoctorAvailabilityTab from "./DoctorAvailabilityTab";
+import SettingsTab from "./SettingsTab";
 
 export default function FrontDeskPage() {
-  const [activeTab, setActiveTab] = useState<"appointments" | "patients" | "availability">("appointments");
+  const [activeTab, setActiveTab] = useState<"appointments" | "patients" | "availability" | "settings">("appointments");
 
   return (
     <section className="relative min-h-screen overflow-x-hidden bg-gradient-to-b from-sky-50 via-white to-white text-slate-900">
@@ -21,6 +22,7 @@ export default function FrontDeskPage() {
           {activeTab === "appointments" && <AppointmentsTab />}
           {activeTab === "patients" && <PatientsTab />}
           {activeTab === "availability" && <DoctorAvailabilityTab />}
+          {activeTab === "settings" && <SettingsTab />}
         </div>
       </div>
     </section>
