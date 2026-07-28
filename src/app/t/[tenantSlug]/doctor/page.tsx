@@ -6,6 +6,7 @@ import DoctorHeader, { DoctorTabType } from "./DoctorHeader";
 import DoctorScheduleTab from "./DoctorScheduleTab";
 import DoctorAppointmentsTab from "./DoctorAppointmentTab";
 import DoctorPatientsTab from "./DoctorPatientsTab";
+import DoctorSettingsTab from "./DoctorSettingsTab";
 
 export default function DoctorPage() {
   const [activeTab, setActiveTab] = useState<DoctorTabType>("appointments");
@@ -21,6 +22,7 @@ export default function DoctorPage() {
           {activeTab === "appointments" && <DoctorAppointmentsTab />}
           {activeTab === "patients" && <DoctorPatientsTab />}
           {activeTab === "schedule" && <DoctorScheduleTab />}
+          {activeTab === "settings" && <DoctorSettingsTab />}
         </div>
       </div>
     </section>

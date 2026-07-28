@@ -35,6 +35,9 @@ import {
   Clock,
   VenusAndMars,
   Trash2,
+  Lock,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 const SPECIALIZATIONS = [
@@ -115,6 +118,8 @@ const EMPTY_FORM = {
   address: "",
   education: "",
   experienceNotes: "",
+  password: "",
+  confirmPassword: "",
 };
 
 type FormState = typeof EMPTY_FORM;
@@ -142,6 +147,8 @@ function doctorToForm(doc: Doctor): FormState {
     address: doc.address ?? "",
     education: (doc.education ?? []).join("\n"),
     experienceNotes: (doc.experienceNotes ?? []).join("\n"),
+    password: "",
+    confirmPassword: "",
   };
 }
 
@@ -178,6 +185,8 @@ export default function DoctorsPage() {
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [profileTab, setProfileTab] = useState<"detail" | "patients" | "appointments">(
     "detail"
@@ -307,6 +316,8 @@ export default function DoctorsPage() {
     setModalMode("add");
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     setSubmitError(null);
     setModalOpen(true);
   }
@@ -315,6 +326,8 @@ export default function DoctorsPage() {
     setModalMode("edit");
     setEditingId(doc.id);
     setForm(doctorToForm(doc));
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     setSubmitError(null);
     setModalOpen(true);
 
@@ -416,6 +429,18 @@ export default function DoctorsPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitError(null);
+
+    if (modalMode === "add") {
+      if (!form.password || form.password.length < 8) {
+        setSubmitError("Password must be at least 8 characters.");
+        return;
+      }
+      if (form.password !== form.confirmPassword) {
+        setSubmitError("Password and confirmation do not match.");
+        return;
+      }
+    }
+
     setSubmitting(true);
 
     const { education, experienceNotes, ...rest } = form;
@@ -474,7 +499,7 @@ export default function DoctorsPage() {
           locationId,
           name: form.name,
           email: form.email,
-          password: "Password123!",
+          password: form.password,
           specialization: SPECIALIZATION_MAP_BACKEND[form.specialization] || "general_dentistry",
           yearsOfExperience: parseInt(form.experience, 10) || 0,
           employmentType: "full_time",
@@ -902,6 +927,57 @@ export default function DoctorsPage() {
                     />
                   </label>
                 </div>
+
+                {modalMode === "add" && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <label className="block">
+                      <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                        <Lock className="h-3.5 w-3.5" strokeWidth={2} />
+                        Password
+                      </span>
+                      <div className="relative">
+                        <input
+                          required
+                          type={showPassword ? "text" : "password"}
+                          placeholder="At least 8 characters"
+                          value={form.password}
+                          onChange={(e) => update("password", e.target.value)}
+                          className={`${inputClass} pr-10`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((v) => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                        <Lock className="h-3.5 w-3.5" strokeWidth={2} />
+                        Confirm password
+                      </span>
+                      <div className="relative">
+                        <input
+                          required
+                          type={showConfirmPassword ? "text" : "password"}
+                          placeholder="Re-enter password"
+                          value={form.confirmPassword}
+                          onChange={(e) => update("confirmPassword", e.target.value)}
+                          className={`${inputClass} pr-10`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword((v) => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </label>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <label className="block">

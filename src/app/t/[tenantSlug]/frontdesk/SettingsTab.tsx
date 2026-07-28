@@ -139,7 +139,8 @@ export default function SettingsTab() {
     const reader = new FileReader();
     reader.onload = () => setAvatarPreview(reader.result as string);
     reader.readAsDataURL(file);
-
+    // Note: this only previews locally. Wire up an /api/settings/frontdesk/avatar
+    // endpoint if you want the image persisted server-side.
   }
 
   async function handleSaveProfile(e: React.FormEvent) {
@@ -244,18 +245,11 @@ export default function SettingsTab() {
             <span>Loading your profile...</span>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-3xl border border-slate-900/5 bg-white/90 shadow-[0_20px_60px_-15px_rgba(15,23,42,0.15)] backdrop-blur-sm">
-            {/* Header: details on the left, avatar on the right */}
-            <div className="flex items-center justify-between gap-5 px-8 pb-8 pt-9 sm:px-10">
-              <div className="min-w-0">
-                <h2 className="truncate text-xl font-semibold text-slate-900">{fullName}</h2>
-                <p className="truncate text-xs font-medium text-slate-500">
-                  {profile.email || "No email on file yet"}
-                </p>
-              </div>
-
+          <div className="overflow-hidden rounded-2xl border border-slate-900/5 bg-white shadow-sm">
+            {/* Identity header: avatar on the left, details on the right */}
+            <div className="flex items-center gap-4 border-b border-slate-900/5 p-6 sm:p-7">
               <div className="relative shrink-0">
-                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-900/10 bg-slate-100 text-xl font-bold text-slate-500 shadow-sm">
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-[#7da3b3]/15 text-[1.3rem] font-semibold text-[#3f6274] ring-4 ring-slate-50">
                   {avatarPreview ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={avatarPreview} alt="Profile avatar" className="h-full w-full object-cover" />
@@ -278,6 +272,13 @@ export default function SettingsTab() {
                   onChange={handleAvatarPick}
                   className="hidden"
                 />
+              </div>
+
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-semibold text-slate-900">{fullName}</h2>
+                <p className="mt-0.5 truncate text-[0.85rem] text-slate-500">
+                  {profile.email || "No email on file yet"}
+                </p>
               </div>
             </div>
 
