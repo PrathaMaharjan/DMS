@@ -136,17 +136,15 @@ export async function createPatient(input: unknown): Promise<CreatePatientResult
         where: and(eq(patients.orgId, session.orgId), isNull(patients.deletedAt), or(...matchConditions)),
       });
       if (existing) {
+        const matchedField = data.phone && existing.phone === data.phone ? "phone number" : "email";
         return {
           success: false,
-          error: `A patient with this ${data.phone ? "phone number" : "email"} already exists: ${existing.firstName} ${existing.lastName}.`,
+          error: `A patient with this ${matchedField} already exists: ${existing.firstName} ${existing.lastName}.`,
           code: "DUPLICATE",
         };
       }
     }
 
-    // Medical fields no longer live on patients itself - inserted into
-    // patient_medical_records after the patient row exists, since each
-    // row needs a real patientId to point at.
     const [patient] = await db
       .insert(patients)
       .values({
@@ -154,7 +152,6 @@ export async function createPatient(input: unknown): Promise<CreatePatientResult
         locationId: data.locationId,
         firstName: data.firstName,
         lastName: data.lastName,
-        age : data.age,
         dob: data.dob || null,
         phone: data.phone || null,
         email: data.email || null,
