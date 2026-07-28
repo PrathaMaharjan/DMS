@@ -338,6 +338,13 @@ export default function SettingsTab() {
                   className="hidden"
                 />
               </div>
+
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-semibold text-slate-900">{fullName}</h2>
+                <p className="mt-0.5 truncate text-[0.85rem] text-slate-500">
+                  {profile.email || "No email on file yet"}
+                </p>
+              </div>
             </div>
 
             <form onSubmit={handleSaveProfile} className="border-t border-slate-100 p-8 sm:p-10">
