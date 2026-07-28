@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
-import { Calendar, Users, Eye, LogOut } from "lucide-react";
+import { Calendar, Users, Eye, LogOut, Settings } from "lucide-react";
 
-export type FrontDeskTabType = "appointments" | "patients" | "availability";
+export type FrontDeskTabType = "appointments" | "patients" | "availability" | "settings";
 
 interface FrontDeskHeaderProps {
   activeTab: FrontDeskTabType;
@@ -103,7 +103,7 @@ export default function FrontDeskHeader({
       </div>
 
       {/* Centered, Light Theme Navigation Container */}
-      <div className="inline-flex w-full max-w-lg items-center gap-1 rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60">
+      <div className="inline-flex w-full max-w-2xl items-center gap-1 rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60">
         <button
           onClick={() => setActiveTab("appointments")}
           className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${
@@ -138,6 +138,18 @@ export default function FrontDeskHeader({
         >
           <Eye className="h-3.5 w-3.5" />
           Schedules
+        </button>
+
+        <button
+          onClick={() => setActiveTab("settings")}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${
+            activeTab === "settings"
+              ? "bg-[#7da3b3] text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+          }`}
+        >
+          <Settings className="h-3.5 w-3.5" />
+          Settings
         </button>
       </div>
     </div>
