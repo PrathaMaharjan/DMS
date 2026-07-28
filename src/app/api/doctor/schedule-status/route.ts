@@ -1,18 +1,17 @@
-// src/app/api/doctor/schedule-status/route.ts
-import { getDoctorScheduleStatus } from "@/controller/doctor/controller";
+// src/app/api/doctors/schedule-timeline/route.ts
+import { getAllDoctorsScheduleTimeline } from "@/controller/doctor/controller";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const locationId = sp.get("locationId");
-  const date = sp.get("date");
+  const date = sp.get("date") ?? new Date().toISOString().slice(0, 10);
 
-  if (!locationId || !date) {
-    return NextResponse.json({ success: false, error: "locationId and date are required" }, { status: 400 });
+  if (!locationId) {
+    return NextResponse.json({ success: false, error: "locationId is required" }, { status: 400 });
   }
 
-  const result = await getDoctorScheduleStatus(locationId, date);
-
+  const result = await getAllDoctorsScheduleTimeline(locationId, date);
   if (!result.success) {
     return NextResponse.json({ success: false, error: result.error, code: result.code }, { status: 400 });
   }
