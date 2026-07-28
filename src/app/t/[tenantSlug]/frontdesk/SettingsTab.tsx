@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import axios from "axios";
 import {
   User,
@@ -17,6 +18,7 @@ import {
   ShieldCheck,
   Camera,
 } from "lucide-react";
+import { uploadConfig } from "@/lib/cloudinary/storage";
 
 const inputClass =
   "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-sky-400";
@@ -26,6 +28,7 @@ interface ProfileSettings {
   lastName: string;
   email: string;
   phone: string;
+  photoUrl: string | null;
 }
 
 interface PasswordForm {
@@ -39,6 +42,7 @@ const DEFAULT_PROFILE: ProfileSettings = {
   lastName: "",
   email: "",
   phone: "",
+  photoUrl: null,
 };
 
 const DEFAULT_PASSWORD_FORM: PasswordForm = {
@@ -47,13 +51,7 @@ const DEFAULT_PASSWORD_FORM: PasswordForm = {
   confirmPassword: "",
 };
 
-function FieldLabel({
-  icon,
-  children,
-}: {
-  icon?: React.ReactNode;
-  children: React.ReactNode;
-}) {
+function FieldLabel({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
       {icon}
@@ -99,8 +97,11 @@ function SwapButton({
 }
 
 export default function SettingsTab() {
+  const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [savingSection, setSavingSection] = useState<"profile" | "password" | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -117,12 +118,20 @@ export default function SettingsTab() {
       setLoading(true);
       setErrorMsg(null);
 
-      const res = await axios.get("/api/settings/frontdesk").catch(() => null);
-      if (res?.data?.success && res.data.data?.profile) {
-        setProfile({ ...DEFAULT_PROFILE, ...res.data.data.profile });
+      const res = await axios.get("/api/user-details").catch(() => null);
+      if (res?.data?.success && res.data.data?.user) {
+        const u = res.data.data.user;
+        const [firstName, ...rest] = (u.name ?? "").split(" ");
+        setProfile({
+          firstName: firstName ?? "",
+          lastName: rest.join(" "),
+          email: u.email ?? "",
+          phone: u.phone ?? "",
+          photoUrl: u.photoUrl ?? null,
+        });
       }
     } catch (err) {
-      console.error("Failed to load frontdesk settings:", err);
+      console.error("Failed to load settings:", err);
       setErrorMsg("Failed to load settings from server.");
     } finally {
       setLoading(false);
@@ -133,13 +142,41 @@ export default function SettingsTab() {
     loadSettings();
   }, [loadSettings]);
 
-  function handleAvatarPick(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAvatarPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = () => setAvatarPreview(reader.result as string);
     reader.readAsDataURL(file);
 
+    setUploadingPhoto(true);
+    setErrorMsg(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", uploadConfig.cloudinary.uploadPreset!);
+      formData.append("folder", "dental/staff");
+
+      const cloudinaryRes = await axios.post(
+        `https://api.cloudinary.com/v1_1/${uploadConfig.cloudinary.cloudName}/image/upload`,
+        formData
+      );
+      const photoKey: string = cloudinaryRes.data.public_id;
+
+      const { data: responseBody } = await axios.patch("/api/user-details", { photoKey });
+      if (!responseBody?.success) {
+        setErrorMsg(responseBody?.error ?? "Failed to upload photo.");
+        return;
+      }
+      setProfile((prev) => ({ ...prev, photoUrl: responseBody.data.user.photoUrl }));
+      setSuccessMsg("Profile photo updated!");
+    } catch (err: any) {
+      console.error("Failed to upload photo:", err);
+      setErrorMsg(err.response?.data?.error ?? "Failed to upload photo.");
+    } finally {
+      setUploadingPhoto(false);
+    }
   }
 
   async function handleSaveProfile(e: React.FormEvent) {
@@ -154,15 +191,21 @@ export default function SettingsTab() {
 
     setSavingSection("profile");
     try {
-      const res = await axios.patch("/api/settings/frontdesk/profile", profile);
-      if (res.data?.success === false) {
-        setErrorMsg(res.data?.error || "Failed to update profile.");
+      const { data: responseBody } = await axios.patch("/api/user-details", {
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        email: profile.email,
+        phone: profile.phone,
+      });
+
+      if (!responseBody?.success) {
+        setErrorMsg(responseBody?.error ?? "Failed to update profile.");
       } else {
         setSuccessMsg("Profile updated successfully!");
       }
     } catch (err: any) {
       console.error("Failed to save profile:", err);
-      setErrorMsg(err.response?.data?.error || "Failed to update profile.");
+      setErrorMsg(err.response?.data?.error ?? "Failed to update profile.");
     } finally {
       setSavingSection(null);
     }
@@ -188,19 +231,28 @@ export default function SettingsTab() {
 
     setSavingSection("password");
     try {
-      const res = await axios.post("/api/settings/frontdesk/change-password", {
+      const { data: responseBody } = await axios.patch("/api/user-details/password", {
         currentPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword,
       });
-      if (res.data?.success === false) {
-        setErrorMsg(res.data?.error || "Failed to change password.");
-      } else {
-        setSuccessMsg("Password changed successfully!");
-        setPasswordForm(DEFAULT_PASSWORD_FORM);
+
+      if (!responseBody?.success) {
+        setErrorMsg(responseBody?.error ?? "Failed to change password.");
+        return;
       }
+
+      // changeMyPassword revokes every refresh token on success - the
+      // session is already dead server-side, so redirect to login rather
+      // than leaving the person here expecting to keep working normally.
+      setSuccessMsg("Password changed! Redirecting you to log in again...");
+      setPasswordForm(DEFAULT_PASSWORD_FORM);
+      setTimeout(() => {
+        router.push("/login");
+      }, 2000);
     } catch (err: any) {
       console.error("Failed to change password:", err);
-      setErrorMsg(err.response?.data?.error || "Failed to change password.");
+      setErrorMsg(err.response?.data?.error ?? "Failed to change password.");
     } finally {
       setSavingSection(null);
     }
@@ -208,8 +260,7 @@ export default function SettingsTab() {
 
   const initials =
     `${profile.firstName?.[0] || ""}${profile.lastName?.[0] || ""}`.toUpperCase() || "FD";
-  const fullName =
-    `${profile.firstName || ""} ${profile.lastName || ""}`.trim() || "Your Name";
+  const fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim() || "Your Name";
 
   return (
     <div className="w-full py-6">
@@ -245,7 +296,6 @@ export default function SettingsTab() {
           </div>
         ) : (
           <div className="overflow-hidden rounded-3xl border border-slate-900/5 bg-white/90 shadow-[0_20px_60px_-15px_rgba(15,23,42,0.15)] backdrop-blur-sm">
-            {/* Header: details on the left, avatar on the right */}
             <div className="flex items-center justify-between gap-5 px-8 pb-8 pt-9 sm:px-10">
               <div className="min-w-0">
                 <h2 className="truncate text-xl font-semibold text-slate-900">{fullName}</h2>
@@ -256,9 +306,13 @@ export default function SettingsTab() {
 
               <div className="relative shrink-0">
                 <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-900/10 bg-slate-100 text-xl font-bold text-slate-500 shadow-sm">
-                  {avatarPreview ? (
+                  {avatarPreview || profile.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={avatarPreview} alt="Profile avatar" className="h-full w-full object-cover" />
+                    <img
+                      src={avatarPreview ?? profile.photoUrl!}
+                      alt="Profile avatar"
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     initials
                   )}
@@ -266,10 +320,15 @@ export default function SettingsTab() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingPhoto}
                   title="Change photo"
-                  className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#345263] text-white shadow-sm transition-colors hover:bg-[#2a4351]"
+                  className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#345263] text-white shadow-sm transition-colors hover:bg-[#2a4351] disabled:opacity-50"
                 >
-                  <Camera className="h-3.5 w-3.5" />
+                  {uploadingPhoto ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Camera className="h-3.5 w-3.5" />
+                  )}
                 </button>
                 <input
                   ref={fileInputRef}
@@ -281,18 +340,14 @@ export default function SettingsTab() {
               </div>
             </div>
 
-            {/* Personal Information */}
             <form onSubmit={handleSaveProfile} className="border-t border-slate-100 p-8 sm:p-10">
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-slate-900">Personal information</h3>
-
               </div>
 
               <div className="grid gap-6 sm:grid-cols-2">
                 <label className="block">
-                  <FieldLabel icon={<User className="h-3.5 w-3.5" strokeWidth={2} />}>
-                    First name
-                  </FieldLabel>
+                  <FieldLabel icon={<User className="h-3.5 w-3.5" strokeWidth={2} />}>First name</FieldLabel>
                   <input
                     required
                     type="text"
@@ -304,9 +359,7 @@ export default function SettingsTab() {
                 </label>
 
                 <label className="block">
-                  <FieldLabel icon={<User className="h-3.5 w-3.5" strokeWidth={2} />}>
-                    Last name
-                  </FieldLabel>
+                  <FieldLabel icon={<User className="h-3.5 w-3.5" strokeWidth={2} />}>Last name</FieldLabel>
                   <input
                     required
                     type="text"
@@ -318,9 +371,7 @@ export default function SettingsTab() {
                 </label>
 
                 <label className="block sm:col-span-2">
-                  <FieldLabel icon={<Mail className="h-3.5 w-3.5" strokeWidth={2} />}>
-                    Email address
-                  </FieldLabel>
+                  <FieldLabel icon={<Mail className="h-3.5 w-3.5" strokeWidth={2} />}>Email address</FieldLabel>
                   <input
                     type="email"
                     placeholder="you@clinic.com"
@@ -331,9 +382,7 @@ export default function SettingsTab() {
                 </label>
 
                 <label className="block sm:col-span-2">
-                  <FieldLabel icon={<Phone className="h-3.5 w-3.5" strokeWidth={2} />}>
-                    Phone number
-                  </FieldLabel>
+                  <FieldLabel icon={<Phone className="h-3.5 w-3.5" strokeWidth={2} />}>Phone number</FieldLabel>
                   <input
                     type="tel"
                     placeholder="9XXXXXXXXX"
@@ -356,18 +405,14 @@ export default function SettingsTab() {
               </div>
             </form>
 
-            {/* Change Password */}
             <form onSubmit={handleChangePassword} className="border-t border-slate-100 p-8 sm:p-10">
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-slate-900">Password &amp; security</h3>
-
               </div>
 
               <div className="grid gap-6 sm:grid-cols-2">
                 <label className="block sm:col-span-2">
-                  <FieldLabel icon={<Lock className="h-3.5 w-3.5" strokeWidth={2} />}>
-                    Current password
-                  </FieldLabel>
+                  <FieldLabel icon={<Lock className="h-3.5 w-3.5" strokeWidth={2} />}>Current password</FieldLabel>
                   <div className="relative">
                     <input
                       required
@@ -375,9 +420,7 @@ export default function SettingsTab() {
                       placeholder="Current password"
                       value={passwordForm.currentPassword}
                       className={`${inputClass} pr-10`}
-                      onChange={(e) =>
-                        setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
-                      }
+                      onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
                     />
                     <button
                       type="button"
@@ -390,9 +433,7 @@ export default function SettingsTab() {
                 </label>
 
                 <label className="block">
-                  <FieldLabel icon={<Lock className="h-3.5 w-3.5" strokeWidth={2} />}>
-                    New password
-                  </FieldLabel>
+                  <FieldLabel icon={<Lock className="h-3.5 w-3.5" strokeWidth={2} />}>New password</FieldLabel>
                   <div className="relative">
                     <input
                       required
@@ -400,9 +441,7 @@ export default function SettingsTab() {
                       placeholder="At least 8 characters"
                       value={passwordForm.newPassword}
                       className={`${inputClass} pr-10`}
-                      onChange={(e) =>
-                        setPasswordForm({ ...passwordForm, newPassword: e.target.value })
-                      }
+                      onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
                     />
                     <button
                       type="button"
@@ -415,18 +454,14 @@ export default function SettingsTab() {
                 </label>
 
                 <label className="block">
-                  <FieldLabel icon={<Lock className="h-3.5 w-3.5" strokeWidth={2} />}>
-                    Confirm new password
-                  </FieldLabel>
+                  <FieldLabel icon={<Lock className="h-3.5 w-3.5" strokeWidth={2} />}>Confirm new password</FieldLabel>
                   <input
                     required
                     type={showNewPw ? "text" : "password"}
                     placeholder="Re-enter new password"
                     value={passwordForm.confirmPassword}
                     className={inputClass}
-                    onChange={(e) =>
-                      setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })
-                    }
+                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
                   />
                 </label>
               </div>
