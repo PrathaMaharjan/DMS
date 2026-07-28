@@ -64,6 +64,10 @@ export default function DoctorPatientsTab() {
   const [newAllergiesInput, setNewAllergiesInput] = useState("");
   const [newMedicalHistoryInput, setNewMedicalHistoryInput] = useState("");
 
+  const [noteableAppts, setNoteableAppts] = useState<{ id: string; treatmentName: string; startTime: string }[]>([]);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>("");
+  const [isSubmittingNote, setIsSubmittingNote] = useState(false);
+
   const [patients, setPatients] = useState<TreatedPatient[]>([]);
 
   const loadData = useCallback(async () => {
@@ -225,21 +229,76 @@ export default function DoctorPatientsTab() {
     setShowNoteDropdown(false);
 
     try {
-      const res = await axios.get(`/api/patent/${patient.id}`).catch(() => null);
-      if (res?.data?.success && res.data.data.patient) {
-        const p = res.data.data.patient;
-        setSelectedPatient((prev) =>
-          prev
-            ? {
-              ...prev,
-              name: `${p.firstName || ""} ${p.lastName || ""}`.trim(),
-              phone: p.phone || prev.phone,
-              age: p.age || prev.age,
-              gender: p.gender || prev.gender,
-            }
-            : prev
-        );
+      const [detailRes, apptsRes, historyRes, noteablesRes] = await Promise.all([
+        axios.get(`/api/patent/${patient.id}`).catch(() => null),
+        axios.get(`/api/patent/${patient.id}/appoments`).catch(() => null),
+        axios.get(`/api/patent/${patient.id}/medical-History`).catch(() => null),
+        axios.get(`/api/patent/${patient.id}/clinical-notes`).catch(() => null),
+      ]);
+
+      let updatedDetail = {
+        name: patient.name,
+        phone: patient.phone,
+        age: patient.age,
+        gender: patient.gender,
+      };
+
+      if (detailRes?.data?.success && detailRes.data.data.patient) {
+        const p = detailRes.data.data.patient;
+        updatedDetail = {
+          name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || patient.name,
+          phone: p.phone || patient.phone,
+          age: p.age || patient.age,
+          gender: p.gender || patient.gender,
+        };
       }
+
+      let historyRecords: TreatmentRecord[] = patient.history;
+      if (apptsRes?.data?.success && apptsRes.data.data.appointments) {
+        historyRecords = apptsRes.data.data.appointments.map((a: any) => {
+          const dateStr = a.startTime
+            ? new Date(a.startTime).toISOString().split("T")[0]
+            : "N/A";
+          return {
+            id: a.id,
+            date: dateStr,
+            service: a.treatmentName || "General Service",
+            notes: a.noteText || `Appointment Status: ${a.status || "Completed"}`,
+            prescription: a.prescription || a.prescriptionText || undefined,
+          };
+        });
+      }
+
+      let allergies: string[] = patient.allergies;
+      let medicalHistory: string[] = patient.medicalHistory;
+      if (historyRes?.data?.success && historyRes.data.data.medicalHistory) {
+        allergies = historyRes.data.data.medicalHistory.allergies || [];
+        medicalHistory = historyRes.data.data.medicalHistory.medicalHistory || [];
+      }
+
+      let noteables: { id: string; treatmentName: string; startTime: string }[] = [];
+      if (noteablesRes?.data?.success && noteablesRes.data.data.appointments) {
+        noteables = noteablesRes.data.data.appointments;
+      }
+      setNoteableAppts(noteables);
+      if (noteables.length > 0) {
+        setSelectedAppointmentId(noteables[0].id);
+      } else {
+        setSelectedAppointmentId("");
+      }
+
+      const updated: TreatedPatient = {
+        ...patient,
+        ...updatedDetail,
+        history: historyRecords,
+        allergies,
+        medicalHistory,
+        lastVisit: historyRecords[0]?.date || patient.lastVisit,
+        totalVisits: Math.max(1, historyRecords.length),
+      };
+
+      setSelectedPatient(updated);
+      setPatients((prev) => prev.map((p) => (p.id === patient.id ? updated : p)));
     } catch (err) {
       console.error("Error loading patient detail:", err);
     }
@@ -247,48 +306,49 @@ export default function DoctorPatientsTab() {
 
   const handleAddTreatmentNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPatient || !newService || !newNotes) return;
+    if (!selectedPatient || !newNotes) return;
 
-    const newRecord: TreatmentRecord = {
-      id: `TR-${Date.now()}`,
-      date: new Date().toISOString().split("T")[0],
-      service: newService,
-      notes: newNotes,
-      prescription: newPrescription || undefined,
-    };
+    if (!selectedAppointmentId && noteableAppts.length > 0) {
+      setSelectedAppointmentId(noteableAppts[0].id);
+    }
 
-    const parsedAllergies = newAllergiesInput
-      ? newAllergiesInput.split(",").map((s) => s.trim()).filter(Boolean)
-      : [];
-    const updatedAllergies = Array.from(
-      new Set([...selectedPatient.allergies, ...parsedAllergies])
-    );
+    const apptIdToUse = selectedAppointmentId || noteableAppts[0]?.id;
+    if (!apptIdToUse) {
+      setErrorMsg("No appointment selected to attach this clinical note.");
+      return;
+    }
 
-    const parsedHistory = newMedicalHistoryInput
-      ? newMedicalHistoryInput.split(",").map((s) => s.trim()).filter(Boolean)
-      : [];
-    const updatedMedicalHistory = Array.from(
-      new Set([...selectedPatient.medicalHistory, ...parsedHistory])
-    );
+    try {
+      setIsSubmittingNote(true);
+      setErrorMsg(null);
 
-    const updatedPatient = {
-      ...selectedPatient,
-      allergies: updatedAllergies.length > 0 ? updatedAllergies : selectedPatient.allergies,
-      medicalHistory:
-        updatedMedicalHistory.length > 0 ? updatedMedicalHistory : selectedPatient.medicalHistory,
-      lastVisit: newRecord.date,
-      totalVisits: selectedPatient.totalVisits + 1,
-      history: [newRecord, ...selectedPatient.history],
-    };
+      const payload = {
+        appointmentId: apptIdToUse,
+        noteText: newNotes.trim(),
+        prescription: newPrescription.trim() || undefined,
+        allergy: newAllergiesInput.trim() || undefined,
+        medicalHistory: newMedicalHistoryInput.trim() || undefined,
+      };
 
-    setPatients((prev) => prev.map((p) => (p.id === selectedPatient.id ? updatedPatient : p)));
-    setSelectedPatient(updatedPatient);
-    setShowNoteDropdown(false);
-    setNewService(services[0]?.name || "");
-    setNewNotes("");
-    setNewPrescription("");
-    setNewAllergiesInput("");
-    setNewMedicalHistoryInput("");
+      const res = await axios.post(`/api/patent/${selectedPatient.id}/clinical-notes`, payload);
+
+      if (res.data?.success) {
+        setShowNoteDropdown(false);
+        setNewNotes("");
+        setNewPrescription("");
+        setNewAllergiesInput("");
+        setNewMedicalHistoryInput("");
+
+        await handleSelectPatient(selectedPatient);
+      } else {
+        setErrorMsg(res.data?.error || "Failed to save clinical note.");
+      }
+    } catch (err: any) {
+      console.error("Error saving clinical entry:", err);
+      setErrorMsg(err.response?.data?.error || "Failed to save clinical entry.");
+    } finally {
+      setIsSubmittingNote(false);
+    }
   };
 
   return (
@@ -504,29 +564,39 @@ export default function DoctorPatientsTab() {
                   <div className="space-y-3 text-xs">
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">
-                        Service / Procedure
+                        Select Appointment / Procedure
                       </label>
-                      {services.length > 0 ? (
+                      {noteableAppts.length > 0 ? (
                         <select
                           required
-                          value={newService}
-                          onChange={(e) => setNewService(e.target.value)}
+                          value={selectedAppointmentId}
+                          onChange={(e) => setSelectedAppointmentId(e.target.value)}
                           className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#7da3b3] text-xs font-medium text-slate-800"
                         >
-                          {services.map((s) => (
-                            <option key={s.id} value={s.name}>
-                              {s.name} {s.category ? `(${s.category})` : ""}
+                          {noteableAppts.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.treatmentName} ({new Date(a.startTime).toLocaleDateString()})
+                            </option>
+                          ))}
+                        </select>
+                      ) : selectedPatient.history.length > 0 ? (
+                        <select
+                          required
+                          value={selectedAppointmentId}
+                          onChange={(e) => setSelectedAppointmentId(e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#7da3b3] text-xs font-medium text-slate-800"
+                        >
+                          <option value="">Select Appointment</option>
+                          {selectedPatient.history.map((h) => (
+                            <option key={h.id} value={h.id}>
+                              {h.service} ({h.date})
                             </option>
                           ))}
                         </select>
                       ) : (
-                        <input
-                          type="text"
-                          required
-                          value={newService}
-                          onChange={(e) => setNewService(e.target.value)}
-                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#7da3b3]"
-                        />
+                        <div className="p-2 bg-amber-50 border border-amber-200 text-amber-800 text-[0.75rem] rounded-lg">
+                          No appointments found for this patient to attach clinical notes to.
+                        </div>
                       )}
                     </div>
 
@@ -590,8 +660,10 @@ export default function DoctorPatientsTab() {
                     </button>
                     <button
                       type="submit"
-                      className="rounded-lg bg-[#7da3b3] px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#6b92a2]"
+                      disabled={isSubmittingNote || (!selectedAppointmentId && noteableAppts.length === 0 && selectedPatient.history.length === 0)}
+                      className="rounded-lg bg-[#7da3b3] px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#6b92a2] disabled:opacity-50 flex items-center gap-1.5"
                     >
+                      {isSubmittingNote && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                       Save Record
                     </button>
                   </div>

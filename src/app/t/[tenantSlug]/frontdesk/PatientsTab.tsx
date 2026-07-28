@@ -38,6 +38,7 @@ interface TreatmentRecord {
   treatment: string;
   doctor: string;
   notes: string;
+  prescription?: string;
 }
 
 interface Patient {
@@ -52,6 +53,9 @@ interface Patient {
   gender: string;
   treatmentStatus: string;
   assignedDoctor: string;
+  allergies?: string[];
+  medicalHistory?: string[];
+  medications?: string[];
   history: TreatmentRecord[];
 }
 
@@ -377,12 +381,74 @@ export default function PatientsTab() {
     }
   }
 
-  const toggleExpand = (id: string) => {
+  const toggleExpand = async (id: string) => {
     if (expandedPatientId !== id) {
       setHistorySearch("");
       setFilterDate("");
+      setExpandedPatientId(id);
+
+      try {
+        const [res, historyRes] = await Promise.all([
+          axios.get(`/api/patent/${id}/appoments`).catch(() => null),
+          axios.get(`/api/patent/${id}/medical-History`).catch(() => axios.get(`/api/patent/${id}/medical-history`).catch(() => null)),
+        ]);
+
+        let historyRecords: TreatmentRecord[] = [];
+        if (res?.data?.success && res.data.data.appointments) {
+          historyRecords = res.data.data.appointments.map((a: any) => {
+            const startTimeDate = a.startTime ? new Date(a.startTime) : null;
+            const dateStr = startTimeDate ? startTimeDate.toISOString().split("T")[0] : "N/A";
+            const timeStr = startTimeDate ? startTimeDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A";
+
+            return {
+              id: a.id,
+              date: dateStr,
+              time: timeStr,
+              treatment: a.treatmentName || "General Treatment",
+              doctor: a.providerName || "Unassigned",
+              notes: a.noteText || `Status: ${a.status || "Completed"}`,
+              prescription: a.prescription || a.prescriptionText || undefined,
+            };
+          });
+        }
+
+        let allergies: string[] = [];
+        let medicalHistory: string[] = [];
+        let medications: string[] = [];
+        if (historyRes?.data?.success && historyRes.data.data.medicalHistory) {
+          const mh = historyRes.data.data.medicalHistory;
+          allergies = mh.allergies || [];
+          medicalHistory = mh.medicalHistory || [];
+          medications = mh.currentMedications || [];
+        }
+
+        const latestApptPrescription = historyRecords.find((r) => r.prescription);
+        if (latestApptPrescription && latestApptPrescription.prescription) {
+          const presText = `Latest Prescription (${latestApptPrescription.treatment} - ${latestApptPrescription.date}): ${latestApptPrescription.prescription}`;
+          if (!medications.includes(presText)) {
+            medications = [presText, ...medications];
+          }
+        }
+
+        setPatients((prev) =>
+          prev.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  history: historyRecords,
+                  allergies,
+                  medicalHistory,
+                  medications,
+                }
+              : p
+          )
+        );
+      } catch (err) {
+        console.error("Failed to load patient appointment history:", err);
+      }
+    } else {
+      setExpandedPatientId(null);
     }
-    setExpandedPatientId(expandedPatientId === id ? null : id);
   };
 
   const clearHistoryFilters = () => {
@@ -868,11 +934,65 @@ export default function PatientsTab() {
                         </div>
 
                         {isExpanded && (
-                          <div className="bg-slate-50/80 p-6 border-t border-b border-sky-100/60 shadow-inner">
+                          <div className="bg-slate-50/80 p-6 border-t border-b border-sky-100/60 shadow-inner space-y-4">
+                            {/* Medical Summary Cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                              <div className="rounded-xl bg-amber-50/60 border border-amber-200/60 p-3 space-y-1">
+                                <p className="font-bold text-amber-800 flex items-center gap-1.5 text-[0.68rem] uppercase tracking-wider">
+                                  <AlertCircle className="h-3.5 w-3.5 text-amber-600" /> Allergies
+                                </p>
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                  {patient.allergies && patient.allergies.length > 0 ? (
+                                    patient.allergies.map((allergy, i) => (
+                                      <span key={i} className="bg-amber-100/80 text-amber-900 font-semibold px-2 py-0.5 rounded text-[0.68rem]">
+                                        {allergy}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-slate-400">None recorded</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl bg-sky-50/60 border border-sky-200/60 p-3 space-y-1">
+                                <p className="font-bold text-sky-800 flex items-center gap-1.5 text-[0.68rem] uppercase tracking-wider">
+                                  <Stethoscope className="h-3.5 w-3.5 text-sky-600" /> Medical History
+                                </p>
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                  {patient.medicalHistory && patient.medicalHistory.length > 0 ? (
+                                    patient.medicalHistory.map((cond, i) => (
+                                      <span key={i} className="bg-white text-slate-700 font-semibold border border-slate-200 px-2 py-0.5 rounded text-[0.68rem]">
+                                        {cond}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-slate-400">None recorded</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl bg-emerald-50/60 border border-emerald-200/60 p-3 space-y-1">
+                                <p className="font-bold text-emerald-800 flex items-center gap-1.5 text-[0.68rem] uppercase tracking-wider">
+                                  <FileText className="h-3.5 w-3.5 text-emerald-600" /> Medications
+                                </p>
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                  {patient.medications && patient.medications.length > 0 ? (
+                                    patient.medications.map((med, i) => (
+                                      <span key={i} className="bg-emerald-100/80 text-emerald-900 font-semibold px-2 py-0.5 rounded text-[0.68rem]">
+                                        {med}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-slate-400">None recorded</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
                             <div className="bg-white p-4 rounded-xl border border-slate-200/80 space-y-4 shadow-sm">
                               <div className="flex justify-between items-center">
                                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                                  <FileText className="h-4 w-4 text-sky-600" /> Treatment History Logs
+                                  <FileText className="h-4 w-4 text-sky-600" /> Treatment History & Prescriptions
                                 </h4>
                                 <span className="text-xs text-slate-400 font-medium">
                                   {patient.history.length} Record(s)
@@ -911,34 +1031,53 @@ export default function PatientsTab() {
                                 </div>
                               )}
 
-                              <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
                                 {patient.history.length > 0 ? (
-                                  patient.history.map((record) => (
-                                    <div
-                                      key={record.id}
-                                      className="p-3.5 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors space-y-1.5"
-                                    >
-                                      <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <span className="font-semibold text-xs text-slate-900">
-                                          {record.treatment}
-                                        </span>
-                                        <div className="flex items-center gap-2 text-[0.7rem] font-medium text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200/80">
-                                          <span className="flex items-center gap-1">
-                                            <Calendar className="h-3 w-3 text-sky-600" /> {record.date}
+                                  patient.history
+                                    .filter((rec) => {
+                                      const matchText =
+                                        !historySearch ||
+                                        rec.treatment.toLowerCase().includes(historySearch.toLowerCase()) ||
+                                        rec.doctor.toLowerCase().includes(historySearch.toLowerCase()) ||
+                                        rec.notes.toLowerCase().includes(historySearch.toLowerCase()) ||
+                                        (rec.prescription && rec.prescription.toLowerCase().includes(historySearch.toLowerCase()));
+                                      const matchDate = !filterDate || rec.date === filterDate;
+                                      return matchText && matchDate;
+                                    })
+                                    .map((record) => (
+                                      <div
+                                        key={record.id}
+                                        className="p-3.5 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors space-y-1.5"
+                                      >
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <span className="font-semibold text-xs text-slate-900">
+                                            {record.treatment}
                                           </span>
-                                          <span className="text-slate-300">•</span>
-                                          <span className="flex items-center gap-1">
-                                            <Clock className="h-3 w-3 text-amber-600" /> {record.time}
-                                          </span>
+                                          <div className="flex items-center gap-2 text-[0.7rem] font-medium text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200/80">
+                                            <span className="flex items-center gap-1">
+                                              <Calendar className="h-3 w-3 text-sky-600" /> {record.date}
+                                            </span>
+                                            <span className="text-slate-300">•</span>
+                                            <span className="flex items-center gap-1">
+                                              <Clock className="h-3 w-3 text-amber-600" /> {record.time}
+                                            </span>
+                                          </div>
                                         </div>
+                                        <div className="flex items-center gap-1 text-[0.75rem] font-medium text-slate-600">
+                                          <Stethoscope className="h-3.5 w-3.5 text-sky-600" />
+                                          <span>{record.doctor}</span>
+                                        </div>
+                                        <p className="text-xs text-slate-600 pt-0.5">{record.notes}</p>
+                                        {record.prescription && (
+                                          <div className="rounded-lg bg-sky-50 border border-sky-100 p-2 mt-1 text-xs">
+                                            <p className="font-bold text-sky-900 text-[0.68rem] flex items-center gap-1">
+                                              <FileText className="h-3 w-3 text-sky-600" /> Prescription:
+                                            </p>
+                                            <p className="text-sky-800 mt-0.5 font-medium">{record.prescription}</p>
+                                          </div>
+                                        )}
                                       </div>
-                                      <div className="flex items-center gap-1 text-[0.75rem] font-medium text-slate-600">
-                                        <Stethoscope className="h-3.5 w-3.5 text-sky-600" />
-                                        <span>{record.doctor}</span>
-                                      </div>
-                                      <p className="text-xs text-slate-600 pt-0.5">{record.notes}</p>
-                                    </div>
-                                  ))
+                                    ))
                                 ) : (
                                   <div className="p-6 text-center text-xs text-slate-400 border border-dashed rounded-lg">
                                     No additional treatment history records attached.

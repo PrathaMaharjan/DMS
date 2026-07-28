@@ -15,24 +15,24 @@ export type PatientErrorCode =
   | "SERVER_ERROR";
 export type PatientListResult =
   | {
-      success: true;
-      patients: {
-        id: string;
-        firstName: string;
-        lastName: string;
-        age: number | null;
-        dob: string | null;
-        createdAt: Date | null;
-        gender: string | null;
-        phone: string | null;
-        email: string | null;
-        bloodGroup: string | null;
-        assignedDoctorName: string | null;
-        lastVisit: Date | null;
-        treatmentCompleted: boolean; // false = "Active", true = "Completed" - format on the frontend
-      }[];
-      pagination: { total: number; limit: number; offset: number };
-    }
+    success: true;
+    patients: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      age: number | null;
+      dob: string | null;
+      createdAt: Date | null;
+      gender: string | null;
+      phone: string | null;
+      email: string | null;
+      bloodGroup: string | null;
+      assignedDoctorName: string | null;
+      lastVisit: Date | null;
+      treatmentCompleted: boolean; // false = "Active", true = "Completed" - format on the frontend
+    }[];
+    pagination: { total: number; limit: number; offset: number };
+  }
   | { success: false; error: string };
 
 const DEFAULT_LIMIT = 20;
@@ -215,11 +215,11 @@ export async function deletePatient(
 // --------------------------- get single patent ----------------------------------
 export type GetPatientResult =
   | {
-      success: true;
-      patient: typeof patients.$inferSelect & {
-        assignedDoctorName: string | null;
-      };
-    }
+    success: true;
+    patient: typeof patients.$inferSelect & {
+      assignedDoctorName: string | null;
+    };
+  }
   | { success: false; error: string; code: PatientErrorCode };
 
 export async function getPatient(patientId: string): Promise<GetPatientResult> {
@@ -383,7 +383,7 @@ export async function updatePatient(patientId: string, input: unknown): Promise<
       }
     }
 
-   
+
     let updated = existing;
     if (Object.keys(patientFields).length > 0) {
       const [result] = await db.update(patients).set(patientFields).where(eq(patients.id, patientId)).returning();
@@ -416,9 +416,9 @@ export async function updatePatient(patientId: string, input: unknown): Promise<
 
 export type GetMedicalHistoryResult =
   | {
-      success: true;
-      medicalHistory: { allergies: string[]; medicalHistory: string[]; currentMedications: string[] };
-    }
+    success: true;
+    medicalHistory: { allergies: string[]; medicalHistory: string[]; currentMedications: string[] };
+  }
   | { success: false; error: string; code: PatientErrorCode };
 
 export async function getMedicalHistory(patientId: string): Promise<GetMedicalHistoryResult> {
@@ -457,18 +457,19 @@ export async function getMedicalHistory(patientId: string): Promise<GetMedicalHi
 // --------------------------- get Apponemnet history --------------------------------------\
 export type AppointmentHistoryResult =
   | {
-      success: true;
-      appointments: {
-        id: string;
-        startTime: Date;
-        endTime: Date;
-        status: string;
-        treatmentName: string;
-        providerName: string;
-        noteText: string | null;
-      }[];
-      pagination: { total: number; limit: number; offset: number };
-    }
+    success: true;
+    appointments: {
+      id: string;
+      startTime: Date;
+      endTime: Date;
+      status: string;
+      treatmentName: string;
+      providerName: string;
+      noteText: string | null;
+      prescription: string | null;
+    }[];
+    pagination: { total: number; limit: number; offset: number };
+  }
   | { success: false; error: string; code: HistoryErrorCode };
 export async function getAppointmentHistory(
   patientId: string,
@@ -499,6 +500,7 @@ export async function getAppointmentHistory(
           treatmentName: treatments.name,
           providerName: users.name,
           noteText: clinicalNotes.noteText,
+          prescription: clinicalNotes.prescription,
         })
         .from(appointments)
         .innerJoin(treatments, eq(appointments.treatmentId, treatments.id))

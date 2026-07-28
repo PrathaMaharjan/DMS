@@ -28,6 +28,7 @@ import {
   ImagePlus,
   User,
   Loader2,
+  FileText,
 } from "lucide-react";
 
 const STATUSES = ["Active", "Inactive"] as const;
@@ -302,12 +303,13 @@ export default function PatientsPage() {
           dob: form.dob || undefined,
           phone: form.phone || undefined,
           email: form.email || undefined,
+          address: form.address || undefined,
           gender: form.gender || undefined,
           bloodGroup: form.bloodGroup || undefined,
           treatmentCompleted: form.status === "Inactive",
           allergies: allergiesList,
           medicalHistory: medicalHistoryList,
-          currentMedications: medicationsList,
+          medications: medicationsList,
         };
 
         const res = await axios.patch(`/api/patent/${editingId}`, payload);
@@ -330,6 +332,7 @@ export default function PatientsPage() {
           dob: form.dob || undefined,
           phone: form.phone || undefined,
           email: form.email || undefined,
+          address: form.address || undefined,
           gender: form.gender || undefined,
           bloodGroup: form.bloodGroup || undefined,
           allergies: allergiesList,
@@ -348,8 +351,10 @@ export default function PatientsPage() {
       setForm(EMPTY_FORM);
       setEditingId(null);
       setModalOpen(false);
+      
     } catch (err: any) {
       console.error("Failed to save patient:", err);
+      
       alert(err.response?.data?.error || "Failed to save patient.");
     }
   }
@@ -421,9 +426,42 @@ export default function PatientsPage() {
     { icon: CalendarCheck, label: "Active Patients", value: String(patients.filter((p) => p.status === "Active").length) },
   ];
 
-  function openProfile(p: Patient) {
+  const [patientAppointments, setPatientAppointments] = useState<any[]>([]);
+  const [loadingAppts, setLoadingAppts] = useState(false);
+
+  async function openProfile(p: Patient) {
     setSelectedPatient(p);
     setProfileTab("detail");
+    setPatientAppointments([]);
+    setLoadingAppts(true);
+
+    try {
+      const [historyRes, apptsRes] = await Promise.all([
+        axios.get(`/api/patent/${p.id}/medical-History`).catch(() => axios.get(`/api/patent/${p.id}/medical-history`).catch(() => null)),
+        axios.get(`/api/patent/${p.id}/appoments`).catch(() => null),
+      ]);
+
+      let updated = { ...p };
+      let apptsList: any[] = [];
+
+      if (apptsRes?.data?.success && apptsRes.data.data.appointments) {
+        apptsList = apptsRes.data.data.appointments;
+        setPatientAppointments(apptsList);
+      }
+
+      if (historyRes?.data?.success && historyRes.data.data.medicalHistory) {
+        const mh = historyRes.data.data.medicalHistory;
+        updated.allergies = mh.allergies || [];
+        updated.medicalHistory = mh.medicalHistory || [];
+        updated.medications = mh.currentMedications || [];
+      }
+
+      setSelectedPatient(updated);
+    } catch (err) {
+      console.error("Error loading patient details for admin drawer:", err);
+    } finally {
+      setLoadingAppts(false);
+    }
   }
 
   return (
@@ -839,8 +877,8 @@ export default function PatientsPage() {
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900">{selectedPatient.name}</h2>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.85rem] text-slate-500">
-                    <span>{selectedPatient.patientId}</span>
-                    <span className="text-slate-300">|</span>
+
+                    <span className="text-slate-300"></span>
                     <span>{selectedPatient.age} yrs, {selectedPatient.gender}</span>
                     <span className="text-slate-300">|</span>
                     <span
@@ -986,25 +1024,97 @@ export default function PatientsPage() {
 
                   <div className="rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
                     <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
-                      <Pill className="h-3.5 w-3.5" strokeWidth={2} />
-                      Current Medications
+                      <Pill className="h-3.5 w-3.5 text-black-600" strokeWidth={2} />
+                      Current Medications & Prescriptions
                     </p>
-                    {selectedPatient.medications && selectedPatient.medications.length > 0 ? (
-                      <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[0.85rem] text-slate-600">
-                        {selectedPatient.medications.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-3 text-[0.85rem] text-slate-500">No medications recorded.</p>
-                    )}
+                    {(() => {
+                      const latestPrescriptionAppt = patientAppointments.find((a) => a.prescription || a.prescriptionText);
+                      const medsList = selectedPatient.medications || [];
+                      const hasMeds = medsList.length > 0;
+                      const hasPres = !!latestPrescriptionAppt;
+
+                      if (!hasMeds && !hasPres) {
+                        return <p className="mt-3 text-[0.85rem] text-slate-500">No medications or prescriptions recorded.</p>;
+                      }
+
+                      return (
+
+                        <div className=" mt-3 list-disc space-y-1.5 pl-5 ">
+                          
+                          {hasPres && (
+                            <div className="rounded-xl text-xs space-y-1">
+                                <ul className="mt-3 list-disc space-y-1.5  text-[0.85rem] text-slate-600">
+                                <li>{latestPrescriptionAppt.prescription || latestPrescriptionAppt.prescriptionText}</li>
+                              </ul>
+                            </div>
+                          )}
+                          {hasMeds && (
+                           <ul className="list-disc list-inside space-y-1.5 text-[0.85rem] text-slate-600">
+                              {medsList.map((item, idx) => (
+                                <li key={idx}>{item}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
 
               {profileTab === "appointments" && (
-                <div className="mt-5 rounded-2xl border border-dashed border-slate-900/15 bg-white p-10 text-center text-[0.85rem] text-slate-500 shadow-sm">
-                  No appointment history recorded yet.
+                <div className="mt-5 space-y-3">
+                  {loadingAppts ? (
+                    <div className="flex items-center justify-center p-8 text-xs text-slate-400 gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-[#3f6274]" />
+                      <span>Loading appointment history...</span>
+                    </div>
+                  ) : patientAppointments.length > 0 ? (
+                    patientAppointments.map((appt) => (
+                      <div
+                        key={appt.id}
+                        className="rounded-2xl border border-slate-900/5 bg-white p-5 shadow-sm space-y-2"
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                          <span className="font-semibold text-xs text-slate-900 flex items-center gap-1.5">
+                            <Stethoscope className="h-3.5 w-3.5 text-[#3f6274]" />
+                            {appt.treatmentName}
+                          </span>
+                          <span className="text-[0.75rem] font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded">
+                            {appt.startTime ? new Date(appt.startTime).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "-"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-600">
+                          <span className="flex items-center gap-1">
+                            <User className="h-3.5 w-3.5 text-slate-400" /> {appt.providerName || "Unassigned"}
+                          </span>
+                          <span className="rounded-full bg-sky-50 text-sky-700 px-2 py-0.5 text-[0.7rem] font-medium uppercase">
+                            {appt.status}
+                          </span>
+                        </div>
+                        {appt.noteText ? (
+                          <div className="mt-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-700 space-y-1">
+                            <span className="font-semibold text-slate-900 text-[0.7rem] uppercase tracking-wider block">Clinical Note:</span>
+                            <p className="leading-relaxed">{appt.noteText}</p>
+                          </div>
+                        ) : (
+                          <p className="text-[0.75rem] text-slate-400 italic pt-1">No clinical note attached.</p>
+                        )}
+                        {(appt.prescription || appt.prescriptionText) && (
+                          <div className="mt-2 rounded-xl bg-sky-50/80 border border-sky-100 p-3 text-xs text-sky-900 space-y-1">
+                            <span className="font-bold text-sky-900 text-[0.7rem] uppercase tracking-wider block flex items-center gap-1">
+                              <Pill className="h-3.5 w-3.5 text-sky-600" /> Prescription / Instructions:
+                            </span>
+                            <p className="leading-relaxed font-medium">{appt.prescription || appt.prescriptionText}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-900/15 bg-white p-10 text-center text-[0.85rem] text-slate-500 shadow-sm">
+                      No appointment history recorded yet.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
