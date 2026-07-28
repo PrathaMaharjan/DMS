@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
-import { CalendarDays, Clock, Users, LogOut } from "lucide-react";
+import { CalendarDays, Clock, Users, LogOut, Settings } from "lucide-react";
 
-export type DoctorTabType = "schedule" | "appointments" | "patients";
+export type DoctorTabType = "schedule" | "appointments" | "patients" | "settings";
 
 interface DoctorHeaderProps {
   activeTab: DoctorTabType;
@@ -106,12 +106,12 @@ export default function DoctorHeader({
       </div>
 
       {/* Centered Pill Navigation Container */}
-      <div className="inline-flex w-full max-w-lg items-center gap-1 rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60">
+      <div className="inline-flex w-full max-w-2xl items-center gap-1 rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60">
         <button
           onClick={() => setActiveTab("appointments")}
           className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "appointments"
-              ? "bg-[#7da3b3] text-white shadow-sm"
-              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            ? "bg-[#7da3b3] text-white shadow-sm"
+            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
             }`}
         >
           <CalendarDays className="h-3.5 w-3.5" />
@@ -120,8 +120,8 @@ export default function DoctorHeader({
         <button
           onClick={() => setActiveTab("patients")}
           className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "patients"
-              ? "bg-[#7da3b3] text-white shadow-sm"
-              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            ? "bg-[#7da3b3] text-white shadow-sm"
+            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
             }`}
         >
           <Users className="h-3.5 w-3.5" />
@@ -130,12 +130,22 @@ export default function DoctorHeader({
         <button
           onClick={() => setActiveTab("schedule")}
           className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "schedule"
-              ? "bg-[#7da3b3] text-white shadow-sm"
-              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            ? "bg-[#7da3b3] text-white shadow-sm"
+            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
             }`}
         >
           <Clock className="h-3.5 w-3.5" />
           My Availability
+        </button>
+        <button
+          onClick={() => setActiveTab("settings")}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "settings"
+            ? "bg-[#7da3b3] text-white shadow-sm"
+            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            }`}
+        >
+          <Settings className="h-3.5 w-3.5" />
+          Settings
         </button>
       </div>
     </div>

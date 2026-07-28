@@ -45,6 +45,7 @@ interface Patient {
   name: string;
   firstName: string;
   lastName: string;
+  age?: string;
   dob: string;
   phone: string;
   email: string;
@@ -136,6 +137,7 @@ export default function PatientsTab() {
           name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
           firstName: p.firstName || "",
           lastName: p.lastName || "",
+          age: p.age != null ? String(p.age) : "",
           dob: p.dob || "",
           phone: p.phone || "-",
           email: p.email || "-",
@@ -236,7 +238,7 @@ export default function PatientsTab() {
         locationId: activeLocId,
         firstName: newPatient.firstName.trim(),
         lastName: newPatient.lastName.trim(),
-        age: newPatient.age ? Number(newPatient.age) : 0,
+        age: newPatient.age ? Number(newPatient.age) : undefined,
         dob: newPatient.dob || undefined,
         phone: newPatient.phone || undefined,
         email: newPatient.email || undefined,
@@ -267,10 +269,11 @@ export default function PatientsTab() {
     setErrorMsg(null);
     setSuccessMsg(null);
     setEditingPatientId(patient.id);
+    const calculatedAge = patient.dob ? calculateAge(patient.dob) : 0;
     setEditPatient({
       firstName: patient.firstName,
       lastName: patient.lastName,
-      age: calculateAge(patient.dob) > 0 ? calculateAge(patient.dob).toString() : "",
+      age: calculatedAge > 0 ? calculatedAge.toString() : (patient.age ? String(patient.age) : ""),
       dob: patient.dob,
       phone: patient.phone === "-" ? "" : patient.phone,
       email: patient.email === "-" ? "" : patient.email,
@@ -774,7 +777,7 @@ export default function PatientsTab() {
                           <div className="p-4 text-xs text-slate-700 whitespace-nowrap">
                             <span className="flex items-center gap-1.5">
                               <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                              {age > 0 ? `${patient.dob} (${age}y)` : "N/A"}
+                              {patient.dob || "N/A"}
                             </span>
                           </div>
 
@@ -789,8 +792,8 @@ export default function PatientsTab() {
                             <button
                               onClick={(e) => toggleTreatmentStatus(patient.id, patient.treatmentStatus, e)}
                               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[0.68rem] font-bold uppercase tracking-wider transition-all ${patient.treatmentStatus === "Completed"
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
-                                  : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                                : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
                                 }`}
                             >
                               {patient.treatmentStatus === "Completed" ? (
@@ -981,8 +984,8 @@ export default function PatientsTab() {
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
                     className={`h-7 w-7 rounded-lg text-xs font-semibold transition-colors ${currentPage === pageNum
-                        ? "bg-[#7da3b3] text-white shadow-sm"
-                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                      ? "bg-[#7da3b3] text-white shadow-sm"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
                       }`}
                   >
                     {pageNum}
