@@ -44,6 +44,7 @@ type Patient = {
   patientId: string;
   name: string;
   age: string;
+  dob?: string;
   gender: string;
   bloodGroup: string;
   phone: string;
@@ -79,6 +80,7 @@ const EMPTY_FORM = {
   imageUrl: "",
   name: "",
   age: "",
+  dob: "",
   gender: "Female",
   bloodGroup: "A+",
   phone: "",
@@ -99,6 +101,7 @@ function patientToForm(p: Patient): FormState {
     imageUrl: p.imageUrl ?? "",
     name: p.name,
     age: p.age,
+    dob: p.dob ?? "",
     gender: p.gender,
     bloodGroup: p.bloodGroup,
     phone: p.phone,
@@ -126,6 +129,7 @@ function apiPatientToPatient(p: any): Patient {
     patientId: p.patientId || `PAT-${String(p.id).slice(-4)}`,
     name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
     age: p.age != null ? String(p.age) : "",
+    dob: p.dob || undefined,
     gender: p.gender || "Other",
     bloodGroup: p.bloodGroup || "-",
     phone: p.phone || "-",
@@ -208,30 +212,25 @@ export default function PatientsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadPatients() {
-      try {
-        setLoading(true);
-        setLoadError(null);
-        const res = await axios.get("/api/patent");
-        if (!cancelled && res.data?.success && res.data.data?.patients) {
-          const mapped: Patient[] = res.data.data.patients.map(apiPatientToPatient);
-          setPatients(mapped);
-        }
-      } catch (err) {
-        console.error("Failed to load patients:", err);
-        if (!cancelled) setLoadError("Failed to load patients from database.");
-      } finally {
-        if (!cancelled) setLoading(false);
+  const loadPatients = async () => {
+    try {
+      setLoading(true);
+      setLoadError(null);
+      const res = await axios.get("/api/patent");
+      if (res.data?.success && res.data.data?.patients) {
+        const mapped: Patient[] = res.data.data.patients.map(apiPatientToPatient);
+        setPatients(mapped);
       }
+    } catch (err) {
+      console.error("Failed to load patients:", err);
+      setLoadError("Failed to load patients from database.");
+    } finally {
+      setLoading(false);
     }
+  };
 
+  useEffect(() => {
     loadPatients();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   function update<K extends keyof FormState>(key: K, value: string) {
@@ -258,56 +257,77 @@ export default function PatientsPage() {
     setModalOpen(true);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const { allergies, medicalHistory, medications, ...rest } = form;
+    const { allergies, medicalHistory, medications } = form;
     const allergiesList = linesToArray(allergies);
     const medicalHistoryList = linesToArray(medicalHistory);
     const medicationsList = linesToArray(medications);
 
-    if (modalMode === "edit" && editingId) {
-      setPatients((prev) =>
-        prev.map((p) =>
-          p.id === editingId
-            ? {
-              ...p,
-              ...rest,
-              allergies: allergiesList,
-              medicalHistory: medicalHistoryList,
-              medications: medicationsList,
-            }
-            : p
-        )
-      );
-      setSelectedPatient((prev) =>
-        prev && prev.id === editingId
-          ? {
-            ...prev,
-            ...rest,
-            allergies: allergiesList,
-            medicalHistory: medicalHistoryList,
-            medications: medicationsList,
-          }
-          : prev
-      );
-    } else {
-      setPatients((prev) => [
-        {
-          id: crypto.randomUUID(),
-          patientId: `PAT-${1000 + prev.length + 1}`,
-          ...rest,
+    const trimmedName = form.name.trim();
+    const [firstName, ...rest] = trimmedName.split(" ");
+    const lastName = rest.join(" ") || "-";
+
+    try {
+      if (modalMode === "edit" && editingId) {
+        const payload: Record<string, any> = {
+          firstName,
+          lastName,
+          age: Number(form.age) || 0,
+          dob: form.dob || undefined,
+          phone: form.phone || undefined,
+          email: form.email || undefined,
+          gender: form.gender || undefined,
+          bloodGroup: form.bloodGroup || undefined,
+          treatmentCompleted: form.status === "Inactive",
           allergies: allergiesList,
           medicalHistory: medicalHistoryList,
-          medications: medicationsList,
-        },
-        ...prev,
-      ]);
-    }
+          currentMedications: medicationsList,
+        };
 
-    setForm(EMPTY_FORM);
-    setEditingId(null);
-    setModalOpen(false);
+        const res = await axios.patch(`/api/patent/${editingId}`, payload);
+        if (res.data?.success === false) {
+          alert(res.data?.error || "Failed to update patient.");
+          return;
+        }
+      } else {
+        let locId = "";
+        const servicesRes = await axios.get("/api/services").catch(() => null);
+        if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
+          locId = servicesRes.data.data.services[0].locationId;
+        }
+
+        const payload: Record<string, any> = {
+          locationId: locId,
+          firstName,
+          lastName,
+          age: Number(form.age) || 0,
+          dob: form.dob || undefined,
+          phone: form.phone || undefined,
+          email: form.email || undefined,
+          gender: form.gender || undefined,
+          bloodGroup: form.bloodGroup || undefined,
+          allergies: allergiesList,
+          medicalHistory: medicalHistoryList,
+          currentMedications: medicationsList,
+        };
+
+        const res = await axios.post("/api/patent", payload);
+        if (res.data?.success === false) {
+          alert(res.data?.error || "Failed to create patient.");
+          return;
+        }
+      }
+
+      await loadPatients();
+      setForm(EMPTY_FORM);
+      setEditingId(null);
+      setModalOpen(false);
+    } catch (err: any) {
+      console.error("Failed to save patient:", err);
+      alert(err.response?.data?.error || "Failed to save patient.");
+    }
   }
 
   async function handleDeletePatient(id: string, e: React.MouseEvent) {
@@ -637,8 +657,8 @@ export default function PatientsPage() {
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
                     className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
-                        ? "bg-[#7da3b3] text-white shadow-sm"
-                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      ? "bg-[#7da3b3] text-white shadow-sm"
+                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
                       }`}
                   >
                     {pageNum}
@@ -837,8 +857,8 @@ export default function PatientsPage() {
                     key={tab.key}
                     onClick={() => setProfileTab(tab.key)}
                     className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${profileTab === tab.key
-                        ? "border-[#3f6274] text-[#3f6274]"
-                        : "border-transparent text-slate-500 hover:text-slate-700"
+                      ? "border-[#3f6274] text-[#3f6274]"
+                      : "border-transparent text-slate-500 hover:text-slate-700"
                       }`}
                   >
                     {tab.label}

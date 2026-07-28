@@ -24,6 +24,8 @@ import {
   StickyNote,
   AlertCircle,
   Loader2,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 
 const inputClass =
@@ -54,6 +56,9 @@ interface Appointment {
   patientId?: string;
   phone: string;
   email: string;
+  dob?: string;
+  age?: string;
+  gender?: string;
   dentist: string;
   providerId?: string;
   service: string;
@@ -119,6 +124,7 @@ export default function AppointmentsTab() {
 
   // Booking Form State
   const [showAddAppt, setShowAddAppt] = useState(false);
+  const [editingApptId, setEditingApptId] = useState<string | null>(null);
   const [patientMode, setPatientMode] = useState<"search" | "new">("search");
   const [searchPatientQuery, setSearchPatientQuery] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -128,6 +134,10 @@ export default function AppointmentsTab() {
   const [preferredDate, setPreferredDate] = useState<string>("");
   const [preferredTime, setPreferredTime] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<Appointment | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const initialRegisterForm = {
     firstName: "",
@@ -347,6 +357,60 @@ export default function AppointmentsTab() {
     setSuccessMsg("Patient details entered for booking.");
   }
 
+  function resetBookingForm() {
+    setShowAddAppt(false);
+    setEditingApptId(null);
+    setSelectedPatient(null);
+    setSearchPatientQuery("");
+    setRegisterForm(initialRegisterForm);
+    setPatientMode("search");
+    setSelectedDoctorId("");
+    setPreferredDate("");
+    setPreferredTime("");
+    setNotes("");
+  }
+
+  function handleEditClick(appt: Appointment) {
+    setEditingApptId(appt.id);
+    setSelectedPatient({
+      id: appt.patientId || "",
+      firstName: "",
+      lastName: "",
+      name: appt.patient,
+      phone: appt.phone,
+      email: appt.email,
+    });
+    setPatientMode("search");
+    setSelectedDoctorId(appt.providerId || "");
+    setSelectedTreatmentId(appt.treatmentId || "");
+    setPreferredDate(appt.date !== "-" ? appt.date : "");
+    setPreferredTime(appt.time !== "-" ? appt.time : "");
+    setNotes(appt.notes || "");
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setShowAddAppt(true);
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await axios.delete(`/api/appoments/${deleteTarget.id}`);
+      if (res.data?.success === false) {
+        setErrorMsg(res.data?.error || "Failed to delete appointment.");
+      } else {
+        setSuccessMsg("Appointment deleted.");
+        await loadData();
+      }
+    } catch (err: any) {
+      console.error("Failed to delete appointment:", err);
+      setErrorMsg(err.response?.data?.error || "Failed to delete appointment.");
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  }
+
   async function handleAddAppt(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
@@ -382,6 +446,28 @@ export default function AppointmentsTab() {
 
     setSubmitting(true);
     try {
+      // Editing an existing appointment
+      if (editingApptId) {
+        const payload = {
+          patientName: selectedPatient?.name || undefined,
+          patientPhone: selectedPatient?.phone || undefined,
+          treatmentId: selectedTreatmentId || undefined,
+          providerId: selectedDoctorId || undefined,
+          date: preferredDate,
+          time: preferredTime,
+          notes: notes || undefined,
+        };
+        const res = await axios.patch(`/api/appoments/${editingApptId}`, payload);
+        if (!res.data?.success) {
+          setErrorMsg(res.data?.error || "Failed to update appointment.");
+          return;
+        }
+        setSuccessMsg("Appointment successfully updated!");
+        resetBookingForm();
+        await loadData();
+        return;
+      }
+
       if (selectedPatient?.id) {
 
         const payload = {
@@ -473,14 +559,7 @@ export default function AppointmentsTab() {
       }
 
       setSuccessMsg("Appointment successfully added!");
-      setShowAddAppt(false);
-      setSelectedPatient(null);
-      setSearchPatientQuery("");
-      setRegisterForm(initialRegisterForm);
-      setPatientMode("search");
-      setPreferredDate("");
-      setPreferredTime("");
-      setNotes("");
+      resetBookingForm();
 
       await loadData();
     } catch (err: any) {
@@ -676,11 +755,16 @@ export default function AppointmentsTab() {
           {view === "list" && (
             <button
               onClick={() => {
-                setShowAddAppt(!showAddAppt);
-                setSelectedPatient(null);
-                setPatientMode("search");
-                setErrorMsg(null);
-                setSuccessMsg(null);
+                if (showAddAppt) {
+                  resetBookingForm();
+                } else {
+                  setShowAddAppt(true);
+                  setEditingApptId(null);
+                  setSelectedPatient(null);
+                  setPatientMode("search");
+                  setErrorMsg(null);
+                  setSuccessMsg(null);
+                }
               }}
               className="flex items-center gap-1.5 rounded-full bg-[#7da3b3] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#6b92a2] transition-colors"
             >
@@ -841,14 +925,14 @@ export default function AppointmentsTab() {
             </div>
 
             {/* Add Appointment Form */}
-            {showAddAppt && (
+            {showAddAppt && !editingApptId && (
               <div className="rounded-2xl border border-slate-900/5 bg-white/90 p-6 shadow-md backdrop-blur-sm space-y-6">
                 <div className="border-b border-slate-100 pb-4 flex justify-between items-center">
                   <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">
                     New Desk Entry
                   </h3>
                   <button
-                    onClick={() => setShowAddAppt(false)}
+                    onClick={resetBookingForm}
                     className="text-slate-400 hover:text-slate-600"
                   >
                     <X className="h-4 w-4" />
@@ -1221,6 +1305,142 @@ export default function AppointmentsTab() {
               </div>
             )}
 
+            {/* Edit Appointment Form */}
+            {showAddAppt && editingApptId && (
+              <form
+                onSubmit={handleAddAppt}
+                className="grid gap-4 rounded-2xl border border-sky-200 bg-sky-50/40 p-6 shadow-md backdrop-blur-sm sm:grid-cols-6"
+              >
+                <div className="sm:col-span-6 flex items-center justify-between border-b border-sky-100 pb-3 mb-1">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-sky-700 flex items-center gap-2">
+                    <Pencil className="h-4 w-4" /> Edit Appointment
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={resetBookingForm}
+                    className="text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Read-only patient info */}
+                <div className="sm:col-span-6 rounded-xl bg-white border border-slate-200/80 p-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-9 w-9 rounded-full bg-sky-50 flex items-center justify-center text-sky-700 font-bold shrink-0">
+                      <User className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-[0.65rem] font-bold uppercase text-slate-400 tracking-wider">
+                        Patient
+                      </p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {selectedPatient?.name}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="flex items-center gap-1 text-xs text-slate-500">
+                    <Phone className="h-3.5 w-3.5 text-slate-400" /> {selectedPatient?.phone || "No phone"}
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-slate-500">
+                    <Mail className="h-3.5 w-3.5 text-slate-400" /> {selectedPatient?.email || "No email"}
+                  </span>
+                </div>
+
+                <label className="block sm:col-span-3">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">
+                    Assign Dentist
+                  </span>
+                  <select
+                    className={inputClass}
+                    value={selectedDoctorId}
+                    onChange={(e) => setSelectedDoctorId(e.target.value)}
+                  >
+                    <option value="">Auto-assign available dentist</option>
+                    {doctorsList.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block sm:col-span-3">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">
+                    Treatment / Service *
+                  </span>
+                  <select
+                    required
+                    className={inputClass}
+                    value={selectedTreatmentId}
+                    onChange={(e) => setSelectedTreatmentId(e.target.value)}
+                  >
+                    <option value="" disabled>
+                      Select Treatment
+                    </option>
+                    {treatmentsList.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} {t.durationMinutes ? `(${t.durationMinutes}m)` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block sm:col-span-3">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Date *</span>
+                  <input
+                    required
+                    type="date"
+                    className={inputClass}
+                    value={preferredDate}
+                    onChange={(e) => setPreferredDate(e.target.value)}
+                  />
+                </label>
+
+                <label className="block sm:col-span-3">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Time *</span>
+                  <input
+                    required
+                    type="time"
+                    className={inputClass}
+                    value={preferredTime}
+                    onChange={(e) => setPreferredTime(e.target.value)}
+                  />
+                </label>
+
+                <label className="block sm:col-span-6">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">
+                    Notes (Optional)
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Any additional notes..."
+                    className={inputClass}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </label>
+
+                <div className="sm:col-span-6 flex justify-end gap-2 pt-3 border-t border-sky-100 mt-2">
+                  <button
+                    type="button"
+                    onClick={resetBookingForm}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex items-center gap-1.5 rounded-xl bg-sky-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-50"
+                  >
+                    {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            )}
+
             {/* Appointments Data Grid */}
             <div className="w-full overflow-hidden rounded-2xl border border-slate-900/5 bg-white/90 shadow-lg backdrop-blur-sm">
               {loading ? (
@@ -1230,7 +1450,7 @@ export default function AppointmentsTab() {
                 </div>
               ) : (
                 <div className="overflow-x-auto w-full">
-                  <table className="w-full text-left border-collapse min-w-[1000px]">
+                  <table className="w-full text-left border-collapse min-w-[1100px]">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/70 text-xs font-medium text-slate-500">
                         <th className="p-4 pl-6">Patient Name</th>
@@ -1240,7 +1460,8 @@ export default function AppointmentsTab() {
                         <th className="p-4">Service</th>
                         <th className="p-4">Type</th>
                         <th className="p-4">Date & Time</th>
-                        <th className="p-4 pr-6">Attendance</th>
+                        <th className="p-4">Attendance</th>
+                        <th className="p-4 pr-6 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-sm">
@@ -1324,7 +1545,7 @@ export default function AppointmentsTab() {
                           </td>
 
                           {/* Attendance Column */}
-                          <td className="p-4 pr-6">
+                          <td className="p-4">
                             <select
                               value={
                                 appt.rawStatus ||
@@ -1354,11 +1575,33 @@ export default function AppointmentsTab() {
                               <option value="cancelled">Cancelled</option>
                             </select>
                           </td>
+
+                          {/* Actions Column */}
+                          <td className="p-4 pr-6">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleEditClick(appt)}
+                                title="Edit Appointment"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-sky-50 hover:text-sky-600 hover:border-sky-200 transition-colors"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteTarget(appt)}
+                                title="Delete Appointment"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-colors"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                       {filteredAppointments.length === 0 && (
                         <tr>
-                          <td colSpan={8} className="p-8 text-center text-xs text-slate-400 font-medium">
+                          <td colSpan={9} className="p-8 text-center text-xs text-slate-400 font-medium">
                             No confirmed appointments match your active search and date filters.
                           </td>
                         </tr>
@@ -1423,6 +1666,50 @@ export default function AppointmentsTab() {
               )}
             </div>
           </>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Delete Appointment</h3>
+                  <p className="text-xs text-slate-500">This action cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600">
+                Are you sure you want to delete the appointment for{" "}
+                <span className="font-semibold text-slate-900">{deleteTarget.patient}</span> on{" "}
+                <span className="font-semibold text-slate-900">
+                  {deleteTarget.date} · {deleteTarget.time}
+                </span>
+                ?
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={deleting}
+                  className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteConfirm}
+                  disabled={deleting}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-rose-700 transition-colors disabled:opacity-50"
+                >
+                  {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {deleting ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

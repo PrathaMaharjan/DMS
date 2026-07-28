@@ -122,7 +122,7 @@ function mapApiStatus(rawStatus: string | undefined): Status {
 function statusToApiValue(status: Status): string {
   switch (status) {
     case "Scheduled":
-      return "pending";
+      return "requested";
     case "Confirmed":
       return "confirmed";
     case "Completed":
@@ -410,43 +410,23 @@ export default function AppointmentsPage() {
     e.preventDefault();
     if (!editingId) return;
 
-    const original = appointments.find((a) => a.id === editingId);
-    if (!original) return;
-
     setSubmitting(true);
     try {
+      const payload: Record<string, any> = {
+        patientName: editForm.patientName,
+        patientPhone: editForm.patientPhone,
+        treatmentId: editForm.treatmentId || undefined,
+        providerId: editForm.doctorId || undefined,
+        date: editForm.date,
+        time: editForm.time,
+        status: statusToApiValue(editForm.status),
+        notes: editForm.notes,
+      };
 
-      if (editForm.status !== original.status) {
-        await axios.patch(`/api/appoments/${editingId}/status`, {
-          status: statusToApiValue(editForm.status),
-        });
-      }
-
-
-      if (editForm.doctorId !== original.doctorId) {
-        await axios.patch(`/api/appoments/${editingId}/reassign`, {
-          providerId: editForm.doctorId,
-        });
-      }
-
-
-      const otherFieldsChanged =
-        editForm.patientName !== original.patientName ||
-        editForm.patientPhone !== original.patientPhone ||
-        editForm.treatmentId !== original.treatmentId ||
-        editForm.date !== original.date ||
-        editForm.time !== original.time ||
-        editForm.notes !== (original.notes || "");
-
-      if (otherFieldsChanged) {
-        await axios.patch(`/api/appoments/${editingId}`, {
-          patientName: editForm.patientName,
-          patientPhone: editForm.patientPhone,
-          treatmentId: editForm.treatmentId,
-          date: editForm.date,
-          time: editForm.time,
-          notes: editForm.notes,
-        });
+      const res = await axios.patch(`/api/appoments/${editingId}`, payload);
+      if (res.data?.success === false) {
+        alert(res.data?.error || "Failed to save appointment.");
+        return;
       }
 
       await loadData();
