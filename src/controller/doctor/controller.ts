@@ -328,24 +328,22 @@ export async function getDoctors(
 export type UpdateDoctorResult =
   | {
       success: true;
-      doctor: { id: string };
+      doctor: {
+        id: string;
+        // name: string;
+        // email: string;
+        photoUrl: string | null;
+      };
     }
   | { success: false; error: string; code: DoctorErrorCode };
 
-export async function updateDoctor(
-  doctorId: string,
-  input: unknown,
-): Promise<UpdateDoctorResult> {
+export async function updateDoctor(doctorId: string, input: unknown): Promise<UpdateDoctorResult> {
   try {
     const session = await requireSession();
 
     const parsed = updateDoctorSchema.safeParse(input);
     if (!parsed.success) {
-      return {
-        success: false,
-        error: parsed.error.issues[0]?.message ?? "Invalid input.",
-        code: "VALIDATION",
-      };
+      return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input.", code: "VALIDATION" };
     }
     const data = parsed.data;
 
@@ -353,58 +351,42 @@ export async function updateDoctor(
     if (!owned) {
       return { success: false, error: "Doctor not found.", code: "NOT_FOUND" };
     }
+
     const updatedUser = await db.transaction(async (tx) => {
-      const userUpdates: Partial<{
-        name: string;
-        email: string;
-        phone: string;
-      }> = {};
+      const userUpdates: Partial<{ name: string; email: string; phone: string }> = {};
       if (data.name !== undefined) userUpdates.name = data.name;
       if (data.email !== undefined) userUpdates.email = data.email;
       if (data.phone !== undefined) userUpdates.phone = data.phone;
 
       let user = owned;
       if (Object.keys(userUpdates).length > 0) {
-        const [updated] = await tx
-          .update(users)
-          .set(userUpdates)
-          .where(eq(users.id, doctorId))
-          .returning();
+        const [updated] = await tx.update(users).set(userUpdates).where(eq(users.id, doctorId)).returning();
         user = updated;
       } else {
-        const [existing] = await tx
-          .select()
-          .from(users)
-          .where(eq(users.id, doctorId));
+        const [existing] = await tx.select().from(users).where(eq(users.id, doctorId));
         user = existing;
       }
+
       const profileUpdates: Record<string, unknown> = { updatedAt: new Date() };
       if (data.photoKey !== undefined) profileUpdates.photoUrl = data.photoKey;
-      if (data.specialization !== undefined)
-        profileUpdates.specialization = data.specialization;
-      if (data.qualification !== undefined)
-        profileUpdates.qualification = data.qualification;
-      if (data.education !== undefined)
-        profileUpdates.education = data.education;
+      if (data.specialization !== undefined) profileUpdates.specialization = data.specialization;
+      if (data.qualification !== undefined) profileUpdates.qualification = data.qualification;
+      if (data.education !== undefined) profileUpdates.education = data.education;
       if (data.bio !== undefined) profileUpdates.bio = data.bio;
-      if (data.yearsOfExperience !== undefined)
-        profileUpdates.yearsOfExperience = data.yearsOfExperience;
-      if (data.dateOfBirth !== undefined)
-        profileUpdates.dateOfBirth = data.dateOfBirth;
-      if (data.bloodGroup !== undefined)
-        profileUpdates.bloodGroup = data.bloodGroup;
+      if (data.yearsOfExperience !== undefined) profileUpdates.yearsOfExperience = data.yearsOfExperience;
+      if (data.dateOfBirth !== undefined) profileUpdates.dateOfBirth = data.dateOfBirth;
+      if (data.bloodGroup !== undefined) profileUpdates.bloodGroup = data.bloodGroup;
       if (data.gender !== undefined) profileUpdates.gender = data.gender;
       if (data.address !== undefined) profileUpdates.address = data.address;
-      if (data.employmentType !== undefined)
-        profileUpdates.employmentType = data.employmentType;
+      if (data.employmentType !== undefined) profileUpdates.employmentType = data.employmentType;
 
-      await tx
-        .update(providerProfiles)
-        .set(profileUpdates)
-        .where(eq(providerProfiles.userId, doctorId));
+      await tx.update(providerProfiles).set(profileUpdates).where(eq(providerProfiles.userId, doctorId));
 
       return user;
     });
+
+    // Read AFTER the transaction commits, so this reflects the photo
+    // that was just saved, not stale data from before the update ran.
     const [profile] = await db
       .select({ photoUrl: providerProfiles.photoUrl })
       .from(providerProfiles)
@@ -414,6 +396,9 @@ export async function updateDoctor(
       success: true,
       doctor: {
         id: updatedUser.id,
+        // name: updatedUser.name,
+        // email: updatedUser.email,
+        photoUrl: imagePresets.thumbnail(profile?.photoUrl ?? null),
       },
     };
   } catch (err) {
@@ -421,18 +406,10 @@ export async function updateDoctor(
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     if (getPgErrorCode(err) === "23505") {
-      return {
-        success: false,
-        error: "A staff member with this email already exists.",
-        code: "DUPLICATE",
-      };
+      return { success: false, error: "A staff member with this email already exists.", code: "DUPLICATE" };
     }
     console.error(err);
-    return {
-      success: false,
-      error: "Something went wrong updating the doctor.",
-      code: "SERVER_ERROR",
-    };
+    return { success: false, error: "Something went wrong updating the doctor.", code: "SERVER_ERROR" };
   }
 }
 // -------------------------------- delete doctor -----------------------------------------------------------

@@ -71,19 +71,18 @@ export const users = pgTable(
     orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-
     email: text("email").notNull().unique(),
     phone: text("phone").unique(),
     passwordHash: text("password_hash").notNull(),
     name: text("name").notNull(),
-    
+    photoUrl: text("photo_url"),
     isActive: boolean("is_active").notNull().default(true),
     deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
     orgIdx: index("users_org_id_idx").on(table.orgId),
-  }),
+  })
 );
 
 export const staffRoleEnum = pgEnum("staff_role", [
