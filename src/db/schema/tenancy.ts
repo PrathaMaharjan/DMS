@@ -164,16 +164,14 @@ export const providerProfiles = pgTable("provider_profiles", {
 export const providerSchedules = pgTable(
   "provider_schedules",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id),
-    locationId: uuid("location_id")
-      .notNull()
-      .references(() => locations.id),
+   id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    locationId: uuid("location_id").notNull().references(() => locations.id, { onDelete: "cascade" }),
     dayOfWeek: integer("day_of_week").notNull(),
-    startTime: time("start_time").notNull(),
-    endTime: time("end_time").notNull(),
+    // Nullable now - a day marked isOnLeave has no real hours to store.
+    startTime: time("start_time"),
+    endTime: time("end_time"),
+    isOnLeave: boolean("is_on_leave").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({

@@ -3,16 +3,16 @@ import { relations } from "drizzle-orm";
 import { appointments } from "./scheduling";
 import { users } from "./tenancy";
 import { patients } from "./patients";
-
 export const clinicalNotes = pgTable(
   "clinical_notes",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-   appointmentId: uuid("appointment_id")
-  .notNull()
-  .references(() => appointments.id, { onDelete: "cascade" }),
+    appointmentId: uuid("appointment_id")
+      .notNull()
+      .references(() => appointments.id),
     providerId: uuid("provider_id").notNull().references(() => users.id),
-    noteText: text("note_text").notNull(),
+    noteText: text("note_text"),
+    prescription: text("prescription"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
@@ -25,8 +25,8 @@ export const odontogramEntries = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     patientId: uuid("patient_id")
-  .notNull()
-  .references(() => patients.id, { onDelete: "cascade" }),
+      .notNull()
+      .references(() => patients.id, { onDelete: "cascade" }),
     toothNumber: integer("tooth_number").notNull(),
     condition: text("condition").notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -38,6 +38,7 @@ export const odontogramEntries = pgTable(
     ),
   })
 );
+
 
 export const clinicalNotesRelations = relations(clinicalNotes, ({ one }) => ({
   appointment: one(appointments, {
