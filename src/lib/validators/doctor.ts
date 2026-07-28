@@ -69,10 +69,22 @@ export const updateScheduleSchema = z.object({
   schedule: z.array(
     z.object({
       dayOfWeek: z.number().int().min(0).max(6),
-      startTime: z.string().min(1, "Start time is required"),
-      endTime: z.string().min(1, "End time is required"),
-    })
+      isOnLeave: z.boolean().default(false),
+      // Required only when NOT on leave - a day marked as leave doesn't
+      // need real hours at all.
+      startTime: z.string().optional(),
+      endTime: z.string().optional(),
+    }).refine(
+      (day) => day.isOnLeave || (day.startTime && day.endTime),
+      { message: "Start and end time are required for a working day" }
+    )
   ),
 });
-
 export type UpdateScheduleInput = z.infer<typeof updateScheduleSchema>;
+
+
+
+
+
+
+

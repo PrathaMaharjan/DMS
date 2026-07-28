@@ -632,26 +632,28 @@ export async function getPatientHistoryByDoctor(
 // --------------------------------getSingle doctor --------------------------------------
 export type GetDoctorResult =
   | {
-    success: true;
-    doctor: {
-      id: string;
-      name: string;
-      email: string;
-      phone: string | null;
-      photoUrl: string | null;
-      specialization: string | null;
-      qualification: string | null;
-      education: string | null;
-      bio: string | null;
-      yearsOfExperience: number | null;
-      schedule: {
-        dayOfWeek: number;
-        startTime: string;
-        endTime: string;
-        locationId: string;
-      }[];
-    };
-  }
+      success: true;
+      doctor: {
+        id: string;
+        name: string;
+        email: string;
+        phone: string | null;
+        photoUrl: string | null;
+        specialization: string | null;
+        qualification: string | null;
+        education: string | null;
+        bio: string | null;
+        yearsOfExperience: number | null;
+        schedule: {
+          dayOfWeek: number;
+          // Nullable now - a day marked isOnLeave has no real hours stored.
+          startTime: string | null;
+          endTime: string | null;
+          isOnLeave: boolean;
+          locationId: string;
+        }[];
+      };
+    }
   | { success: false; error: string; code: DoctorErrorCode };
 
 export async function getDoctor(doctorId: string): Promise<GetDoctorResult> {
@@ -681,8 +683,8 @@ export async function getDoctor(doctorId: string): Promise<GetDoctorResult> {
             eq(users.orgId, session.orgId),
             eq(userLocationRoles.role, "clinical"),
             eq(users.isActive, true),
-            isNull(users.deletedAt),
-          ),
+            isNull(users.deletedAt)
+          )
         )
         .limit(1),
       db
@@ -690,6 +692,7 @@ export async function getDoctor(doctorId: string): Promise<GetDoctorResult> {
           dayOfWeek: providerSchedules.dayOfWeek,
           startTime: providerSchedules.startTime,
           endTime: providerSchedules.endTime,
+          isOnLeave: providerSchedules.isOnLeave,
           locationId: providerSchedules.locationId,
         })
         .from(providerSchedules)
@@ -715,11 +718,7 @@ export async function getDoctor(doctorId: string): Promise<GetDoctorResult> {
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return {
-      success: false,
-      error: "Something went wrong loading the doctor.",
-      code: "SERVER_ERROR",
-    };
+    return { success: false, error: "Something went wrong loading the doctor.", code: "SERVER_ERROR" };
   }
 }
 
@@ -731,19 +730,11 @@ export type UpdateScheduleResult =
 // The actual logic - takes an explicit doctorId rather than reading it
 // from the session itself, so both callers below can share one
 // implementation without duplicating the replace-on-save transaction.
-async function replaceSchedule(
-  doctorId: string,
-  data: UpdateScheduleInput,
-): Promise<UpdateScheduleResult> {
+async function replaceSchedule(doctorId: string, data: UpdateScheduleInput): Promise<UpdateScheduleResult> {
   await db.transaction(async (tx) => {
     await tx
       .delete(providerSchedules)
-      .where(
-        and(
-          eq(providerSchedules.userId, doctorId),
-          eq(providerSchedules.locationId, data.locationId),
-        ),
-      );
+      .where(and(eq(providerSchedules.userId, doctorId), eq(providerSchedules.locationId, data.locationId)));
 
     if (data.schedule.length > 0) {
       await tx.insert(providerSchedules).values(
@@ -751,9 +742,10 @@ async function replaceSchedule(
           userId: doctorId,
           locationId: data.locationId,
           dayOfWeek: day.dayOfWeek,
-          startTime: day.startTime,
-          endTime: day.endTime,
-        })),
+          isOnLeave: day.isOnLeave,
+          startTime: day.isOnLeave ? null : day.startTime,
+          endTime: day.isOnLeave ? null : day.endTime,
+        }))
       );
     }
   });
