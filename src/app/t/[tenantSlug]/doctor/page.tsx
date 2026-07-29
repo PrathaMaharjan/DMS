@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import BackgroundDecorations from "../BackgroundDecorations";
 import DoctorHeader, { DoctorTabType } from "./DoctorHeader";
 import DoctorScheduleTab from "./DoctorScheduleTab";
@@ -9,7 +9,33 @@ import DoctorPatientsTab from "./DoctorPatientsTab";
 import DoctorSettingsTab from "./DoctorSettingsTab";
 
 export default function DoctorPage() {
-  const [activeTab, setActiveTab] = useState<DoctorTabType>("appointments");
+  const [activeTab, setActiveTabState] = useState<DoctorTabType>("appointments");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlTab = params.get("tab") as DoctorTabType;
+      const validTabs: DoctorTabType[] = ["appointments", "patients", "schedule", "settings"];
+      if (urlTab && validTabs.includes(urlTab)) {
+        setActiveTabState(urlTab);
+      } else {
+        const savedTab = localStorage.getItem("doctor_active_tab") as DoctorTabType;
+        if (savedTab && validTabs.includes(savedTab)) {
+          setActiveTabState(savedTab);
+        }
+      }
+    }
+  }, []);
+
+  const setActiveTab = (tab: DoctorTabType) => {
+    setActiveTabState(tab);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("doctor_active_tab", tab);
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tab);
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
 
   return (
     <section className="relative min-h-screen overflow-x-hidden bg-gradient-to-b from-sky-50 via-white to-white text-slate-900">

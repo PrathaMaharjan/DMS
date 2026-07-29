@@ -1,367 +1,342 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import axios from "axios";
 import {
   Clock,
-  Plus,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
+  Save,
+  Loader2,
+  Check,
+  AlertCircle,
+  Calendar,
+  Sun,
   Coffee,
+  CheckCircle2,
+  XCircle,
   ArrowRight,
+  Stethoscope,
 } from "lucide-react";
 
-interface TimeSlot {
-  id: string;
-  start: string;
-  end: string;
+interface ScheduleDay {
+  dayOfWeek: number;
+  dayName: string;
+  isOnLeave: boolean;
+  startTime: string;
+  endTime: string;
 }
 
-interface DateOverride {
-  id: string;
-  date: string;
-  type: "FULL_DAY_OFF" | "BREAK_HOURS";
-  reason?: string;
-  slots?: TimeSlot[];
-}
+const DAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
 
-const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const DEFAULT_SCHEDULE: ScheduleDay[] = DAY_NAMES.map((name, index) => ({
+  dayOfWeek: index,
+  dayName: name,
+  isOnLeave: index === 0 || index === 6, // Weekend default off
+  startTime: "09:00",
+  endTime: "17:00",
+}));
 
 export default function DoctorScheduleTab() {
-  const [overrides, setOverrides] = useState<DateOverride[]>([
-    {
-      id: "ov-1",
-      date: "2026-07-23",
-      type: "BREAK_HOURS",
-      reason: "Lunch & Personal Break",
-      slots: [{ id: "b1", start: "12:00", end: "13:00" }],
-    },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [locationId, setLocationId] = useState<string>("");
+  const [doctorId, setDoctorId] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
+  const [schedule, setSchedule] = useState<ScheduleDay[]>(DEFAULT_SCHEDULE);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setErrorMsg(null);
 
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1));
-  const [selectedDate, setSelectedDate] = useState<string>("2026-07-22");
+      // 1. Fetch locationId from treatments/services API
+      const [treatmentsRes, servicesRes, docSettingsRes] = await Promise.all([
+        axios.get("/api/treatment").catch(() => null),
+        axios.get("/api/services").catch(() => null),
+        axios.get("/api/settings/doctor").catch(() => null),
+      ]);
 
+      const locId =
+        treatmentsRes?.data?.data?.treatments?.[0]?.locationId ||
+        servicesRes?.data?.data?.services?.[0]?.locationId ||
+        "";
 
-  const [customizeByHours, setCustomizeByHours] = useState(true);
-  const [breakIntervals, setBreakIntervals] = useState<TimeSlot[]>([
-    { id: "b-1", start: "09:00", end: "12:00" },
-    { id: "b-2", start: "13:00", end: "18:00" },
-  ]);
+      if (locId) {
+        setLocationId(locId);
+      }
 
+      const doc = docSettingsRes?.data?.success ? docSettingsRes.data.data?.doctor : null;
+      if (doc?.id) {
+        setDoctorId(doc.id);
+      }
 
-  const daysInMonth = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+      if (doc?.schedule && Array.isArray(doc.schedule) && doc.schedule.length > 0) {
+        const mergedSchedule = DEFAULT_SCHEDULE.map((defaultDay) => {
+          const existing = doc.schedule.find((s: any) => s.dayOfWeek === defaultDay.dayOfWeek);
+          if (existing) {
+            return {
+              ...defaultDay,
+              isOnLeave: Boolean(existing.isOnLeave),
+              startTime: existing.startTime || "09:00",
+              endTime: existing.endTime || "17:00",
+            };
+          }
+          return defaultDay;
+        });
+        setSchedule(mergedSchedule);
+      }
+    } catch (err) {
+      console.error("Failed to load doctor schedule:", err);
+      setErrorMsg("Failed to load schedule from server.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const firstDayOfMonth = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  const handlePrevMonth = () => {
-    setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
+  const handleToggleLeave = (dayOfWeek: number) => {
+    setSchedule((prev) =>
+      prev.map((day) =>
+        day.dayOfWeek === dayOfWeek ? { ...day, isOnLeave: !day.isOnLeave } : day
+      )
     );
   };
 
-  const handleNextMonth = () => {
-    setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
-    );
-  };
-
-  const addBreakInterval = () => {
-    setBreakIntervals((prev) => [
-      ...prev,
-      { id: `b-${Date.now()}`, start: "13:00", end: "14:00" },
-    ]);
-  };
-
-  const removeBreakInterval = (id: string) => {
-    setBreakIntervals((prev) => prev.filter((i) => i.id !== id));
-  };
-
-  const updateBreakInterval = (
-    id: string,
-    field: "start" | "end",
+  const handleTimeChange = (
+    dayOfWeek: number,
+    field: "startTime" | "endTime",
     value: string
   ) => {
-    setBreakIntervals((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, [field]: value } : i))
+    setSchedule((prev) =>
+      prev.map((day) =>
+        day.dayOfWeek === dayOfWeek ? { ...day, [field]: value } : day
+      )
     );
   };
 
-  const handleSaveClosingPeriod = () => {
-    const createdOverride: DateOverride = {
-      id: `ov-${Date.now()}`,
-      date: selectedDate,
-      type: customizeByHours ? "BREAK_HOURS" : "FULL_DAY_OFF",
-      reason: customizeByHours
-        ? "Break / Unavailable Hours"
-        : "Full Day Closed",
-      slots: customizeByHours ? breakIntervals : undefined,
-    };
+  const handleSaveSchedule = async () => {
+    if (!locationId) {
+      setErrorMsg("Could not determine location ID. Please configure treatments/services first.");
+      return;
+    }
 
-    setOverrides((prev) => [
-      ...prev.filter((o) => o.date !== selectedDate),
-      createdOverride,
-    ]);
+    setSaving(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      const payload = {
+        locationId,
+        schedule: schedule.map((day) => ({
+          dayOfWeek: day.dayOfWeek,
+          isOnLeave: day.isOnLeave,
+          startTime: day.isOnLeave ? undefined : day.startTime,
+          endTime: day.isOnLeave ? undefined : day.endTime,
+        })),
+      };
+
+      let res = await axios.patch("/api/doctor/me/schedule", payload).catch(() => null);
+
+      if (!res?.data?.success && doctorId) {
+        res = await axios.patch(`/api/doctor/${doctorId}/schedule`, payload).catch(() => null);
+      }
+
+      if (res?.data?.success) {
+        setSuccessMsg("Weekly schedule saved successfully!");
+      } else {
+        setErrorMsg(res?.data?.error || "Failed to save schedule.");
+      }
+    } catch (err: any) {
+      console.error("Failed to save schedule:", err);
+      setErrorMsg(err.response?.data?.error || "An error occurred while saving schedule.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const removeOverride = (id: string) => {
-    setOverrides((prev) => prev.filter((o) => o.id !== id));
-  };
-
-  const monthDays = daysInMonth(currentDate);
-  const startDay = firstDayOfMonth(currentDate);
   return (
     <div className="w-full space-y-6">
-      <div className="grid gap-6 lg:grid-cols-12">
+      {/* Alert Messages */}
+      {errorMsg && (
+        <div className="flex items-center justify-between rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>{errorMsg}</span>
+          </div>
+          <button onClick={() => setErrorMsg(null)} className="text-rose-400 hover:text-rose-600">
+            ×
+          </button>
+        </div>
+      )}
 
-        <div className="lg:col-span-7 rounded-2xl border border-[#7da3b3]/20 bg-white/90 p-6 shadow-sm backdrop-blur-sm space-y-6">
+      {successMsg && (
+        <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
+          <div className="flex items-center gap-2">
+            <Check className="h-4 w-4 shrink-0 text-emerald-600" />
+            <span>{successMsg}</span>
+          </div>
+          <button onClick={() => setSuccessMsg(null)} className="text-emerald-400 hover:text-emerald-600">
+            ×
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-slate-900/5 bg-white p-16 text-center text-xs text-slate-400 shadow-sm">
+          <Loader2 className="h-6 w-6 animate-spin text-[#7da3b3]" />
+          <span>Loading your schedule...</span>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-[#7da3b3]/20 bg-white/90 p-6 shadow-sm backdrop-blur-sm space-y-6">
+          {/* Date Selector & Schedule Notice */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-[#7da3b3]/20 bg-[#f4fafc] p-4 text-xs text-slate-700">
+            <div className="flex items-center gap-3">
+              <Calendar className="h-5 w-5 shrink-0 text-[#7da3b3]" />
+              <div>
+                <span className="font-bold text-slate-900">Select Date to Edit:</span> Pick any date to set or adjust its working schedule.
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-white border border-[#7da3b3]/30 rounded-xl px-3 py-1.5 shadow-sm">
+              <span className="text-slate-400 font-medium">Date:</span>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-transparent font-bold text-slate-800 outline-none"
+              />
+            </div>
+          </div>
+
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
-              <h3 className="text-md font-bold text-slate-900 flex items-center gap-2">
-                <Clock className="h-4 w-4 text-sky-600" /> Select Timing
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Clock className="h-5 w-5 text-[#7da3b3]" /> Weekly Working Hours
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Choose a date from the calendar to modify hours.
+              <p className="text-xs text-slate-500 mt-0.5">
+                Configure your shift times and off-days for each day of the week.
               </p>
             </div>
-            <div className="text-xs font-semibold text-[#7da3b3] bg-[#7da3b3]/10 px-3 py-1 rounded-full border border-[#7da3b3]/20">
-              Selected:{" "}
-              <span className="font-bold text-slate-900">{selectedDate}</span>
-            </div>
-          </div>
-
-          {/* Calendar Container */}
-          <div className="bg-[#f4fafc] p-5 rounded-2xl border border-[#7da3b3]/15 space-y-4">
-            <div className="flex items-center justify-between text-sm font-bold text-slate-800">
-              <span>
-                {currentDate.toLocaleString("default", {
-                  month: "long",
-                  year: "numeric",
-                })}
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handlePrevMonth}
-                  className="p-1.5 text-slate-500 hover:text-[#7da3b3] bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 transition-colors"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleNextMonth}
-                  className="p-1.5 text-slate-500 hover:text-[#7da3b3] bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 transition-colors"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-
-            <div className="grid grid-cols-7 text-center text-xs font-semibold text-slate-400">
-              {WEEKDAYS.map((day) => (
-                <span key={day}>{day}</span>
-              ))}
-            </div>
-
-            {/* Calendar Grid */}
-            <div className="grid grid-cols-7 gap-1.5 text-xs">
-
-              {Array.from({ length: startDay }).map((_, i) => (
-                <div key={`empty-${i}`} className="h-9" />
-              ))}
-
-              {/* Month Days */}
-              {Array.from({ length: monthDays }).map((_, i) => {
-                const dayNum = i + 1;
-                const formattedDate = `${currentDate.getFullYear()}-${String(
-                  currentDate.getMonth() + 1
-                ).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
-
-                const isSelected = selectedDate === formattedDate;
-                const hasOverride = overrides.some(
-                  (o) => o.date === formattedDate
-                );
-
-                return (
-                  <button
-                    key={dayNum}
-                    type="button"
-                    onClick={() => setSelectedDate(formattedDate)}
-                    className={`relative h-9 w-full rounded-xl flex items-center justify-center font-medium transition-all ${isSelected
-                        ? "bg-[#7da3b3] text-white font-bold shadow-md scale-105"
-                        : "text-slate-700 bg-white border border-slate-200/60 hover:border-[#7da3b3] hover:text-[#7da3b3]"
-                      }`}
-                  >
-                    {dayNum}
-                    {hasOverride && !isSelected && (
-                      <span className="absolute bottom-1 h-1 w-1 rounded-full bg-[#7da3b3]" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Inline Closing Controls */}
-          <div className="space-y-4 border-t border-slate-100 pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-bold text-slate-900">
-                  Customize by hours
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCustomizeByHours(!customizeByHours)}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${customizeByHours ? "bg-[#7da3b3]" : "bg-slate-200"
-                  }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${customizeByHours ? "translate-x-5" : "translate-x-0"
-                    }`}
-                />
-              </button>
-            </div>
-
-            {customizeByHours ? (
-              <div className="space-y-3">
-                {breakIntervals.map((interval) => (
-                  <div key={interval.id} className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => removeBreakInterval(interval.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-
-                    <div className="flex-1 flex items-center gap-2 bg-[#f4fafc] border border-[#7da3b3]/20 rounded-xl px-3 py-2 text-xs">
-                      <span className="text-slate-400 font-medium">From</span>
-                      <input
-                        type="time"
-                        value={interval.start}
-                        onChange={(e) =>
-                          updateBreakInterval(
-                            interval.id,
-                            "start",
-                            e.target.value
-                          )
-                        }
-                        className="bg-transparent font-bold text-slate-800 outline-none"
-                      />
-                    </div>
-
-                    <ArrowRight className="h-4 w-4 text-[#7da3b3] shrink-0" />
-
-                    <div className="flex-1 flex items-center gap-2 bg-[#f4fafc] border border-[#7da3b3]/20 rounded-xl px-3 py-2 text-xs">
-                      <span className="text-slate-400 font-medium">To</span>
-                      <input
-                        type="time"
-                        value={interval.end}
-                        onChange={(e) =>
-                          updateBreakInterval(
-                            interval.id,
-                            "end",
-                            e.target.value
-                          )
-                        }
-                        className="bg-transparent font-bold text-slate-800 outline-none"
-                      />
-                    </div>
-                  </div>
-                ))}
-
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="button"
-                    onClick={addBreakInterval}
-                    className="p-2 border border-[#7da3b3]/30 rounded-xl bg-white hover:bg-[#f4fafc] text-[#7da3b3] transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800">
-                Full Day marked as <strong>Closed / Unavailable</strong> for{" "}
-                <strong>{selectedDate}</strong>.
-              </div>
-            )}
-
             <button
-              onClick={handleSaveClosingPeriod}
-              className="w-full py-3 bg-[#7da3b3] text-white rounded-xl text-xs font-bold hover:bg-[#6b92a2] transition-colors shadow-sm"
+              onClick={handleSaveSchedule}
+              disabled={saving}
+              className="flex items-center gap-2 bg-[#7da3b3] hover:bg-[#345263] text-white px-5 py-2.5 rounded-full text-xs font-semibold shadow-sm transition-all disabled:opacity-60"
             >
-              Apply
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save Schedule
             </button>
           </div>
-        </div>
 
-        {/* Active Overrides Side-Panel */}
-        <div className="lg:col-span-5 space-y-6">
-          <div className="rounded-2xl border border-[#7da3b3]/20 bg-white/90 p-5 shadow-sm backdrop-blur-sm space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <Coffee className="h-4 w-4 text-[#7da3b3]" /> Active Breaks & Unavailabilities
-            </h3>
+          {/* Days Grid */}
+          <div className="grid gap-3">
+            {schedule.map((day) => {
+              const selectedDayOfWeek = new Date(selectedDate + "T00:00:00").getDay();
+              const isSelectedDay = selectedDayOfWeek === day.dayOfWeek;
 
-            <div className="space-y-2 pt-1">
-              {overrides.length === 0 ? (
-                <p className="text-xs text-slate-400 italic py-4 text-center">
-                  No closing or break periods added yet.
-                </p>
-              ) : (
-                overrides.map((ov) => (
-                  <div
-                    key={ov.id}
-                    className="p-3.5 rounded-xl border border-[#7da3b3]/20 bg-[#f4fafc]/60 text-xs space-y-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-800">
-                          {ov.date}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[0.65rem] font-bold ${ov.type === "FULL_DAY_OFF"
-                              ? "bg-rose-50 text-rose-700 border border-rose-200"
-                              : "bg-[#7da3b3]/15 text-[#6b92a2] border border-[#7da3b3]/30"
-                            }`}
-                        >
-                          {ov.type === "FULL_DAY_OFF"
-                            ? "Closed Full Day"
-                            : "Break Hours"}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => removeOverride(ov.id)}
-                        className="text-slate-400 hover:text-rose-600 transition-colors p-1"
+              return (
+                <div
+                  key={day.dayOfWeek}
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border transition-all ${isSelectedDay
+                    ? "ring-2 ring-[#7da3b3] bg-[#7da3b3]/10 border-[#7da3b3]"
+                    : day.isOnLeave
+                      ? "bg-slate-50/70 border-slate-200/80"
+                      : "bg-[#f4fafc]/60 border-[#7da3b3]/20 hover:border-[#7da3b3]/40"
+                    }`}
+                >
+                  {/* Left: Day Name & Toggle */}
+                  <div className="flex items-center justify-between sm:justify-start gap-4 min-w-[200px]">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold ${isSelectedDay
+                          ? "bg-[#7da3b3] text-white"
+                          : day.isOnLeave
+                            ? "bg-slate-200 text-slate-500"
+                            : "bg-[#7da3b3]/20 text-[#3f6274]"
+                          }`}
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                        {day.dayName.substring(0, 3)}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                          {day.dayName}
+                          {isSelectedDay && (
+                            <span className="text-[0.65rem] font-bold bg-[#7da3b3] text-white px-2 py-0.5 rounded-full">
+                              Selected Date
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-[0.75rem] text-slate-400">
+                          {day.isOnLeave ? "Day Off / On Leave" : "Working Day"}
+                        </p>
+                      </div>
                     </div>
 
-                    {ov.slots && ov.slots.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {ov.slots.map((s) => (
-                          <span
-                            key={s.id}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-[#7da3b3]/20 rounded-lg text-[0.7rem] text-slate-700 font-medium"
-                          >
-                            <Clock className="h-3 w-3 text-[#7da3b3]" />{" "}
-                            {s.start} - {s.end}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleLeave(day.dayOfWeek)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${!day.isOnLeave ? "bg-[#7da3b3]" : "bg-slate-300"
+                        }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${!day.isOnLeave ? "translate-x-5" : "translate-x-0"
+                          }`}
+                      />
+                    </button>
                   </div>
-                ))
-              )}
-            </div>
+
+                  {/* Right: Working Hours Time Pickers or Off Badge */}
+                  {!day.isOnLeave ? (
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 bg-white border border-[#7da3b3]/30 rounded-xl px-3 py-2 text-xs shadow-sm">
+                        <span className="text-slate-400 font-medium">Start</span>
+                        <input
+                          type="time"
+                          value={day.startTime}
+                          onChange={(e) =>
+                            handleTimeChange(day.dayOfWeek, "startTime", e.target.value)
+                          }
+                          className="bg-transparent font-semibold text-slate-800 outline-none"
+                        />
+                      </div>
+
+                      <ArrowRight className="h-4 w-4 text-[#7da3b3] shrink-0" />
+
+                      <div className="flex items-center gap-2 bg-white border border-[#7da3b3]/30 rounded-xl px-3 py-2 text-xs shadow-sm">
+                        <span className="text-slate-400 font-medium">End</span>
+                        <input
+                          type="time"
+                          value={day.endTime}
+                          onChange={(e) =>
+                            handleTimeChange(day.dayOfWeek, "endTime", e.target.value)
+                          }
+                          className="bg-transparent font-semibold text-slate-800 outline-none"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 bg-slate-200/60 border border-slate-200">
+                      <XCircle className="h-3.5 w-3.5 text-slate-400" /> Not Working
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

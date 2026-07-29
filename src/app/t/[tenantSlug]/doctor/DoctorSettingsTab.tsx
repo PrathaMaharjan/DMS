@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import axios from "axios";
 import {
@@ -14,7 +15,6 @@ import {
   Droplet,
   VenusAndMars,
   MapPin,
-  ImagePlus,
   Lock,
   Eye,
   EyeOff,
@@ -24,8 +24,9 @@ import {
   Check,
   X,
   AlertCircle,
-  IdCard,
+  Camera,
 } from "lucide-react";
+import { uploadConfig } from "@/lib/cloudinary/storage";
 
 const SPECIALIZATIONS = [
   "General Dentistry",
@@ -130,8 +131,11 @@ function FieldLabel({ icon, children }: { icon?: React.ReactNode; children: Reac
 }
 
 export default function DoctorSettingsTab() {
+  const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [savingSection, setSavingSection] = useState<"profile" | "password" | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -139,7 +143,9 @@ export default function DoctorSettingsTab() {
   const [passwordForm, setPasswordForm] = useState<PasswordForm>(EMPTY_PASSWORD);
   const [showCurrentPw, setShowCurrentPw] = useState(false);
   const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadProfile = useCallback(async () => {
@@ -147,40 +153,46 @@ export default function DoctorSettingsTab() {
       setLoading(true);
       setErrorMsg(null);
 
+      // 1. Fetch user details first
+      const userRes = await axios.get("/api/user-details").catch(() => null);
+      const u = userRes?.data?.success ? userRes.data.data?.user : null;
 
-      let res = await axios.get("/api/settings/doctor").catch(() => null);
-      let d = res?.data?.success ? res.data.data?.doctor : null;
+      // 2. Fetch doctor profile details if available
+      let d: any = null;
+      let doctorId = "";
 
-      if (!d) {
-        const listRes = await axios.get("/api/doctor").catch(() => null);
-        if (listRes?.data?.success && listRes.data.data?.doctors?.length > 0) {
-          const firstDoctor = listRes.data.data.doctors[0];
-          if (firstDoctor?.id) {
-            const docRes = await axios.get(`/api/doctor/${firstDoctor.id}`).catch(() => null);
-            if (docRes?.data?.success && docRes.data.data?.doctor) {
-              d = docRes.data.data.doctor;
-            }
+      const listRes = await axios.get("/api/doctor").catch(() => null);
+      if (listRes?.data?.success && listRes.data.data?.doctors?.length > 0) {
+        const doctors = listRes.data.data.doctors;
+        const matchingDoc = doctors.find((doc: any) => doc.id === u?.id || doc.email === u?.email) || doctors[0];
+        if (matchingDoc?.id) {
+          doctorId = matchingDoc.id;
+          const docRes = await axios.get(`/api/doctor/${matchingDoc.id}`).catch(() => null);
+          if (docRes?.data?.success && docRes.data.data?.doctor) {
+            d = docRes.data.data.doctor;
           }
         }
       }
 
-      if (d) {
+      if (u || d) {
+        const rawDob = pickField(d, "dateOfBirth", "dob", "date_of_birth");
+        const formattedDob = rawDob ? rawDob.split("T")[0] : "";
         setProfile({
-          name: d.name || "",
-          email: d.email || "",
-          phone: d.phone || "",
-          specialization: SPECIALIZATION_MAP_FRONTEND[d.specialization] || SPECIALIZATIONS[0],
-          experience: String(d.yearsOfExperience ?? ""),
-          qualification: d.qualification || "",
-          imageUrl: d.photoUrl || "",
-          doctorId: d.id || d.doctorId || "",
-          age: d.age || "",
-          bloodGroup: d.bloodGroup || BLOOD_GROUPS[0],
-          gender: d.gender || GENDERS[0],
-          dob: pickField(d, "dateOfBirth", "dob", "date_of_birth"),
+          name: u?.name || d?.name || "",
+          email: u?.email || d?.email || "",
+          phone: u?.phone || d?.phone || "",
+          specialization: SPECIALIZATION_MAP_FRONTEND[d?.specialization] || SPECIALIZATIONS[0],
+          experience: String(d?.yearsOfExperience ?? d?.experience ?? ""),
+          qualification: d?.qualification || "",
+          imageUrl: u?.photoUrl || d?.photoUrl || "",
+          doctorId: doctorId || d?.id || u?.id || "",
+          age: d?.age || "",
+          bloodGroup: d?.bloodGroup || BLOOD_GROUPS[0],
+          gender: d?.gender || GENDERS[0],
+          dob: formattedDob,
           address: pickField(d, "address", "location", "doctorAddress", "residenceAddress"),
-          education: d.education || "",
-          experienceNotes: d.bio || "",
+          education: d?.education || "",
+          experienceNotes: d?.bio || d?.experienceNotes || "",
         });
       }
     } catch (err) {
@@ -199,12 +211,44 @@ export default function DoctorSettingsTab() {
     setProfile((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAvatarPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    update("imageUrl", url);
 
+    const reader = new FileReader();
+    reader.onload = () => setAvatarPreview(reader.result as string);
+    reader.readAsDataURL(file);
+
+    setUploadingPhoto(true);
+    setErrorMsg(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", uploadConfig.cloudinary.uploadPreset!);
+      formData.append("folder", "dental/staff");
+
+      const cloudinaryRes = await axios.post(
+        `https://api.cloudinary.com/v1_1/${uploadConfig.cloudinary.cloudName}/image/upload`,
+        formData
+      );
+      const photoKey: string = cloudinaryRes.data.public_id;
+
+      const { data: responseBody } = await axios.patch("/api/user-details", { photoKey });
+      if (!responseBody?.success) {
+        setErrorMsg(responseBody?.error ?? "Failed to upload photo.");
+        return;
+      }
+      if (profile.doctorId) {
+        await axios.patch(`/api/doctor/${profile.doctorId}`, { photoKey }).catch(() => null);
+      }
+      setProfile((prev) => ({ ...prev, imageUrl: responseBody.data.user.photoUrl }));
+      setSuccessMsg("Profile photo updated!");
+    } catch (err: any) {
+      console.error("Failed to upload photo:", err);
+      setErrorMsg(err.response?.data?.error ?? "Failed to upload photo.");
+    } finally {
+      setUploadingPhoto(false);
+    }
   }
 
   async function handleSaveProfile(e: React.FormEvent) {
@@ -219,34 +263,55 @@ export default function DoctorSettingsTab() {
 
     setSavingSection("profile");
     try {
-      const payload: Record<string, unknown> = {
-        name: profile.name.trim(),
+      const [firstName, ...lastNameParts] = profile.name.trim().split(" ");
+      const lastName = lastNameParts.join(" ");
+
+      // 1. Update user details
+      const userRes = await axios.patch("/api/user-details", {
+        firstName: firstName || profile.name.trim(),
+        lastName,
         email: profile.email.trim(),
         phone: profile.phone.trim(),
-        specialization: SPECIALIZATION_MAP_BACKEND[profile.specialization] || "general_dentistry",
-        qualification: profile.qualification,
-        yearsOfExperience: parseInt(profile.experience, 10) || 0,
-      };
-      if (profile.imageUrl) payload.photoKey = profile.imageUrl;
-      if (profile.age) payload.age = profile.age;
-      if (profile.dob) payload.dateOfBirth = profile.dob;
-      if (profile.bloodGroup) payload.bloodGroup = profile.bloodGroup;
-      if (profile.gender) payload.gender = profile.gender;
-      if (profile.address) payload.address = profile.address;
-      if (profile.education) payload.education = profile.education;
-      if (profile.experienceNotes) payload.bio = profile.experienceNotes;
+      }).catch((err) => err.response);
 
-      let res = await axios.patch("/api/settings/doctor/profile", payload).catch(() => null);
+      // 2. Update doctor details if doctorId exists or find matching doctor
+      let docRes = null;
+      let targetDocId = profile.doctorId;
 
-      // Fallback: patch directly via /api/doctor/[id] if available
-      if (!res?.data?.success && profile.doctorId) {
-        res = await axios.patch(`/api/doctor/${profile.doctorId}`, payload).catch(() => null);
+      if (!targetDocId) {
+        const listRes = await axios.get("/api/doctor").catch(() => null);
+        if (listRes?.data?.success && listRes.data.data?.doctors?.length > 0) {
+          const matching = listRes.data.data.doctors.find((doc: any) => doc.email === profile.email) || listRes.data.data.doctors[0];
+          targetDocId = matching?.id;
+        }
       }
 
-      if (res?.data?.success) {
+      if (targetDocId) {
+        const docPayload: Record<string, unknown> = {
+          name: profile.name.trim(),
+          email: profile.email.trim(),
+          phone: profile.phone.trim(),
+          specialization: SPECIALIZATION_MAP_BACKEND[profile.specialization] || "general_dentistry",
+          qualification: profile.qualification,
+          yearsOfExperience: parseInt(profile.experience, 10) || 0,
+          dateOfBirth: profile.dob || undefined,
+          bloodGroup: profile.bloodGroup,
+          gender: profile.gender,
+          address: profile.address,
+          education: profile.education,
+          bio: profile.experienceNotes,
+        };
+        docRes = await axios.patch(`/api/doctor/${targetDocId}`, docPayload).catch((err) => err.response);
+      }
+
+      const userSuccess = userRes?.data?.success ?? false;
+      const docSuccess = docRes?.data?.success ?? false;
+
+      if (userSuccess || docSuccess || userRes?.status === 200 || docRes?.status === 200) {
         setSuccessMsg("Profile updated successfully!");
       } else {
-        setErrorMsg(res?.data?.error || "Failed to update profile.");
+        const error = docRes?.data?.error || userRes?.data?.error || "Failed to update profile.";
+        setErrorMsg(error);
       }
     } catch (err: any) {
       console.error("Failed to save doctor profile:", err);
@@ -276,27 +341,25 @@ export default function DoctorSettingsTab() {
 
     setSavingSection("password");
     try {
-      let res = await axios.post("/api/settings/doctor/change-password", {
+      const { data: responseBody } = await axios.patch("/api/user-details/password", {
         currentPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword,
-      }).catch(() => null);
+        confirmPassword: passwordForm.confirmPassword,
+      });
 
-      if (!res?.data?.success) {
-        // Fallback: try auth reset-password endpoint
-        res = await axios.post("/api/auth/reset-password", {
-          password: passwordForm.newPassword,
-        }).catch(() => null);
+      if (!responseBody?.success) {
+        setErrorMsg(responseBody?.error ?? "Failed to change password.");
+        return;
       }
 
-      if (res?.data?.success) {
-        setSuccessMsg("Password changed successfully!");
-        setPasswordForm(EMPTY_PASSWORD);
-      } else {
-        setErrorMsg(res?.data?.error || "Failed to change password. Please check your credentials.");
-      }
+      setSuccessMsg("Password changed! Redirecting you to log in again...");
+      setPasswordForm(EMPTY_PASSWORD);
+      setTimeout(() => {
+        router.push("/login");
+      }, 2000);
     } catch (err: any) {
-      console.error("Failed to change doctor password:", err);
-      setErrorMsg(err.response?.data?.error || "Failed to change password.");
+      console.error("Failed to change password:", err);
+      setErrorMsg(err.response?.data?.error ?? "Failed to change password.");
     } finally {
       setSavingSection(null);
     }
@@ -349,14 +412,13 @@ export default function DoctorSettingsTab() {
             {/* Identity header */}
             <div className="flex items-center gap-4 border-b border-slate-900/5 p-6 sm:p-7">
               <div className="relative shrink-0">
-                <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-[#7da3b3]/15 text-[1.3rem] font-semibold text-[#3f6274] ring-4 ring-slate-50">
-                  {profile.imageUrl ? (
-                    <Image
-                      src={profile.imageUrl}
+                <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-900/10 bg-slate-100 text-[1.3rem] font-semibold text-[#3f6274] shadow-sm ring-4 ring-slate-50">
+                  {avatarPreview || profile.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={avatarPreview ?? profile.imageUrl}
                       alt={profile.name || "Doctor photo"}
-                      fill
-                      unoptimized
-                      className="object-cover"
+                      className="h-full w-full object-cover"
                     />
                   ) : (
                     initials
@@ -365,16 +427,21 @@ export default function DoctorSettingsTab() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingPhoto}
                   title="Change photo"
-                  className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#345263] text-white shadow-sm transition-colors hover:bg-[#2a4351]"
+                  className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#345263] text-white shadow-sm transition-colors hover:bg-[#2a4351] disabled:opacity-50"
                 >
-                  <ImagePlus className="h-3.5 w-3.5" />
+                  {uploadingPhoto ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Camera className="h-3.5 w-3.5" />
+                  )}
                 </button>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
+                  accept="image/png, image/jpeg, image/webp"
+                  onChange={handleAvatarPick}
                   className="hidden"
                 />
               </div>
@@ -385,7 +452,6 @@ export default function DoctorSettingsTab() {
                 </h2>
                 <p className="mt-0.5 text-[0.85rem] text-slate-500">
                   {profile.specialization}
-
                 </p>
               </div>
             </div>
@@ -394,7 +460,6 @@ export default function DoctorSettingsTab() {
             <form onSubmit={handleSaveProfile} className="border-b border-slate-900/5 p-6 sm:p-7">
               <div className="mb-6">
                 <h3 className="text-sm font-semibold text-slate-900">Personal information</h3>
-
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -410,8 +475,6 @@ export default function DoctorSettingsTab() {
                     className={inputClass}
                   />
                 </label>
-
-
 
                 <label className="block">
                   <FieldLabel icon={<Mail className="h-3.5 w-3.5" strokeWidth={2} />}>
@@ -442,7 +505,6 @@ export default function DoctorSettingsTab() {
 
               <div className="mt-7 border-t border-slate-100 pt-6">
                 <h3 className="text-sm font-semibold text-slate-900">Professional details</h3>
-
               </div>
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -604,7 +666,6 @@ export default function DoctorSettingsTab() {
             <form onSubmit={handleChangePassword} className="p-6 sm:p-7">
               <div className="mb-6">
                 <h3 className="text-sm font-semibold text-slate-900">Password &amp; security</h3>
-
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -661,15 +722,25 @@ export default function DoctorSettingsTab() {
                   <FieldLabel icon={<Lock className="h-3.5 w-3.5" strokeWidth={2} />}>
                     Confirm new password
                   </FieldLabel>
-                  <input
-                    required
-                    type={showNewPw ? "text" : "password"}
-                    value={passwordForm.confirmPassword}
-                    onChange={(e) =>
-                      setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })
-                    }
-                    className={inputClass}
-                  />
+                  <div className="relative">
+                    <input
+                      required
+                      type={showConfirmPw ? "text" : "password"}
+                      placeholder="Re-enter new password"
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) =>
+                        setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })
+                      }
+                      className={`${inputClass} pr-10`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPw((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      {showConfirmPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </label>
               </div>
 

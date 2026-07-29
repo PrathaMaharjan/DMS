@@ -242,9 +242,7 @@ export default function SettingsTab() {
         return;
       }
 
-      // changeMyPassword revokes every refresh token on success - the
-      // session is already dead server-side, so redirect to login rather
-      // than leaving the person here expecting to keep working normally.
+
       setSuccessMsg("Password changed! Redirecting you to log in again...");
       setPasswordForm(DEFAULT_PASSWORD_FORM);
       setTimeout(() => {
@@ -296,16 +294,9 @@ export default function SettingsTab() {
           </div>
         ) : (
           <div className="overflow-hidden rounded-3xl border border-slate-900/5 bg-white/90 shadow-[0_20px_60px_-15px_rgba(15,23,42,0.15)] backdrop-blur-sm">
-            <div className="flex items-center justify-between gap-5 px-8 pb-8 pt-9 sm:px-10">
-              <div className="min-w-0">
-                <h2 className="truncate text-xl font-semibold text-slate-900">{fullName}</h2>
-                <p className="truncate text-xs font-medium text-slate-500">
-                  {profile.email || "No email on file yet"}
-                </p>
-              </div>
-
+            <div className="flex items-center gap-4 border-b border-slate-900/5 p-6 sm:p-7">
               <div className="relative shrink-0">
-                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-900/10 bg-slate-100 text-xl font-bold text-slate-500 shadow-sm">
+                <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-900/10 bg-slate-100 text-[1.3rem] font-semibold text-[#3f6274] shadow-sm ring-4 ring-slate-50">
                   {avatarPreview || profile.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -333,14 +324,21 @@ export default function SettingsTab() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/png, image/jpeg"
+                  accept="image/png, image/jpeg, image/webp"
                   onChange={handleAvatarPick}
                   className="hidden"
                 />
               </div>
+
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-semibold text-slate-900">{fullName}</h2>
+                <p className="mt-0.5 truncate text-[0.85rem] text-slate-500">
+                  {profile.email || "No email on file yet"}
+                </p>
+              </div>
             </div>
 
-            <form onSubmit={handleSaveProfile} className="border-t border-slate-100 p-8 sm:p-10">
+            <form onSubmit={handleSaveProfile} className="p-8 sm:p-10">
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-slate-900">Personal information</h3>
               </div>
