@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
-import { Calendar, Users, Eye, LogOut, Settings } from "lucide-react";
+import { Calendar, Users, Eye, LogOut, Settings, LayoutDashboard } from "lucide-react";
 
-export type FrontDeskTabType = "appointments" | "patients" | "availability" | "settings";
+export type FrontDeskTabType = "dashboard" | "appointments" | "patients" | "availability" | "settings";
 
 interface FrontDeskHeaderProps {
   activeTab: FrontDeskTabType;
@@ -105,12 +105,23 @@ export default function FrontDeskHeader({
       {/* Centered, Light Theme Navigation Container */}
       <div className="inline-flex w-full max-w-2xl items-center gap-1 rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60">
         <button
-          onClick={() => setActiveTab("appointments")}
+          onClick={() => setActiveTab("dashboard")}
           className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${
-            activeTab === "appointments"
+            activeTab === "dashboard"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
           }`}
+        >
+          <LayoutDashboard className="h-3.5 w-3.5" />
+          Dashboard
+        </button>
+
+        <button
+          onClick={() => setActiveTab("appointments")}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "appointments"
+              ? "bg-[#7da3b3] text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            }`}
         >
           <Calendar className="h-3.5 w-3.5" />
           Appointments
@@ -118,11 +129,10 @@ export default function FrontDeskHeader({
 
         <button
           onClick={() => setActiveTab("patients")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${
-            activeTab === "patients"
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "patients"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <Users className="h-3.5 w-3.5" />
           Patients
@@ -130,11 +140,10 @@ export default function FrontDeskHeader({
 
         <button
           onClick={() => setActiveTab("availability")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${
-            activeTab === "availability"
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "availability"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <Eye className="h-3.5 w-3.5" />
           Schedules
@@ -142,11 +151,10 @@ export default function FrontDeskHeader({
 
         <button
           onClick={() => setActiveTab("settings")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${
-            activeTab === "settings"
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "settings"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <Settings className="h-3.5 w-3.5" />
           Settings

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 import { CalendarDays, Clock, Users, LogOut, Settings } from "lucide-react";
 
-export type DoctorTabType = "schedule" | "appointments" | "patients" | "settings";
+export type DoctorTabType = "dashboard" | "schedule" | "appointments" | "patients" | "settings";
 
 interface DoctorHeaderProps {
   activeTab: DoctorTabType;
@@ -106,7 +106,17 @@ export default function DoctorHeader({
       </div>
 
       {/* Centered Pill Navigation Container */}
-      <div className="inline-flex w-full max-w-2xl items-center gap-1 rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60">
+      <div className="inline-flex w-full max-w-3xl items-center gap-1 rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60">
+        <button
+          onClick={() => setActiveTab("dashboard")}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "dashboard"
+            ? "bg-[#7da3b3] text-white shadow-sm"
+            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            }`}
+        >
+          <CalendarDays className="h-3.5 w-3.5" />
+          Dashboard
+        </button>
         <button
           onClick={() => setActiveTab("appointments")}
           className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "appointments"

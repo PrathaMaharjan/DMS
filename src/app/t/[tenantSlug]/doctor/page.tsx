@@ -7,6 +7,7 @@ import DoctorScheduleTab from "./DoctorScheduleTab";
 import DoctorAppointmentsTab from "./DoctorAppointmentTab";
 import DoctorPatientsTab from "./DoctorPatientsTab";
 import DoctorSettingsTab from "./DoctorSettingsTab";
+import DoctorDashboardTab from "./DoctorDashboardTab";
 
 export default function DoctorPage() {
   const [activeTab, setActiveTabState] = useState<DoctorTabType>("appointments");
@@ -15,7 +16,7 @@ export default function DoctorPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const urlTab = params.get("tab") as DoctorTabType;
-      const validTabs: DoctorTabType[] = ["appointments", "patients", "schedule", "settings"];
+      const validTabs: DoctorTabType[] = ["dashboard", "appointments", "patients", "schedule", "settings"];
       if (urlTab && validTabs.includes(urlTab)) {
         setActiveTabState(urlTab);
       } else {
@@ -45,6 +46,7 @@ export default function DoctorPage() {
         <DoctorHeader activeTab={activeTab} setActiveTab={setActiveTab} />
 
         <div className="mt-10">
+          {activeTab === "dashboard" && <DoctorDashboardTab />}
           {activeTab === "appointments" && <DoctorAppointmentsTab />}
           {activeTab === "patients" && <DoctorPatientsTab />}
           {activeTab === "schedule" && <DoctorScheduleTab />}
