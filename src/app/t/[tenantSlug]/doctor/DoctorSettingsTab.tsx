@@ -147,11 +147,10 @@ export default function DoctorSettingsTab() {
       setLoading(true);
       setErrorMsg(null);
 
-      // Try primary settings endpoint
+
       let res = await axios.get("/api/settings/doctor").catch(() => null);
       let d = res?.data?.success ? res.data.data?.doctor : null;
 
-      // Fallback: search via /api/doctor and fetch details via /api/doctor/[id]
       if (!d) {
         const listRes = await axios.get("/api/doctor").catch(() => null);
         if (listRes?.data?.success && listRes.data.data?.doctors?.length > 0) {
@@ -386,7 +385,7 @@ export default function DoctorSettingsTab() {
                 </h2>
                 <p className="mt-0.5 text-[0.85rem] text-slate-500">
                   {profile.specialization}
-                  {profile.doctorId ? ` · ${profile.doctorId}` : ""}
+
                 </p>
               </div>
             </div>
@@ -412,7 +411,7 @@ export default function DoctorSettingsTab() {
                   />
                 </label>
 
-            
+
 
                 <label className="block">
                   <FieldLabel icon={<Mail className="h-3.5 w-3.5" strokeWidth={2} />}>
