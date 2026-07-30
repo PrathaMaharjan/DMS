@@ -63,9 +63,7 @@ export default function DoctorHeader({
     setIsLoggingOut(true);
 
     try {
-
       await axios.post("/api/auth/logout");
-
 
       if (onLogout) {
         onLogout();
@@ -105,54 +103,59 @@ export default function DoctorHeader({
         </h1>
       </div>
 
-      {/* Centered Pill Navigation Container */}
-      <div className="inline-flex w-full max-w-3xl items-center gap-1 rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60">
+      {/* Centered Pill Navigation Container (Mobile Responsive Horizontal Scroll) */}
+      <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <button
           onClick={() => setActiveTab("dashboard")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "dashboard"
-            ? "bg-[#7da3b3] text-white shadow-sm"
-            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-            }`}
+          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${
+            activeTab === "dashboard"
+              ? "bg-[#7da3b3] text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+          }`}
         >
           <CalendarDays className="h-3.5 w-3.5" />
           Dashboard
         </button>
         <button
           onClick={() => setActiveTab("appointments")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "appointments"
-            ? "bg-[#7da3b3] text-white shadow-sm"
-            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-            }`}
+          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${
+            activeTab === "appointments"
+              ? "bg-[#7da3b3] text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+          }`}
         >
           <CalendarDays className="h-3.5 w-3.5" />
           Appointments
         </button>
         <button
           onClick={() => setActiveTab("patients")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "patients"
-            ? "bg-[#7da3b3] text-white shadow-sm"
-            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-            }`}
+          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${
+            activeTab === "patients"
+              ? "bg-[#7da3b3] text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+          }`}
         >
           <Users className="h-3.5 w-3.5" />
           Patient Records
         </button>
         <button
           onClick={() => setActiveTab("schedule")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "schedule"
-            ? "bg-[#7da3b3] text-white shadow-sm"
-            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-            }`}
+          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${
+            activeTab === "schedule"
+              ? "bg-[#7da3b3] text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+          }`}
         >
           <Clock className="h-3.5 w-3.5" />
           My Availability
         </button>
         <button
           onClick={() => setActiveTab("settings")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "settings"
-            ? "bg-[#7da3b3] text-white shadow-sm"
-            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-            }`}
+          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${
+            activeTab === "settings"
+              ? "bg-[#7da3b3] text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+          }`}
         >
           <Settings className="h-3.5 w-3.5" />
           Settings

@@ -1,57 +1,64 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useParams, useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import axios from "axios";
 import {
   LayoutDashboard,
-  Stethoscope,
-  CalendarDays,
-  Users,
+  Building2,
+  CreditCard,
+  ShieldCheck,
+  Activity,
   Settings,
   LogOut,
 } from "lucide-react";
 
-const NAV_ITEMS = [
-  { label: "Dashboard", href: "", icon: LayoutDashboard, exact: true },
-  { label: "Appointments", href: "/appointments", icon: CalendarDays },
-  { label: "Doctors", href: "/doctors", icon: Stethoscope },
-  { label: "Patients", href: "/patients", icon: Users },
-  { label: "Treatments", href: "/treatments", icon: CalendarDays },
-  { label: "Settings", href: "/settings", icon: Settings },
+const SUPERADMIN_NAV_ITEMS = [
+  { label: "Overview", href: "", icon: LayoutDashboard, exact: true },
+  { label: "Clinics & Tenants", href: "/tenants", icon: Building2 },
+  { label: "Subscriptions", href: "/subscriptions", icon: CreditCard },
+  { label: "Global Users", href: "/users", icon: ShieldCheck },
+  { label: "System Logs", href: "/logs", icon: Activity },
+  { label: "Platform Settings", href: "/settings", icon: Settings },
 ];
 
-function Sidebar() {
+function SuperAdminSidebar() {
   const pathname = usePathname();
-  const params = useParams<{ tenantSlug: string }>();
   const router = useRouter();
 
-  const adminRoot = `/t/${params.tenantSlug}/admin`;
+  const superAdminRoot = `/superadmin`;
 
   async function handleLogout() {
-    await axios.post(
-      "/api/auth/logout",
-      {},
-      { withCredentials: true }
-    );
-    router.push(`/login`);
-    router.refresh();
+    try {
+      await axios.post(
+        "/api/auth/logout",
+        {},
+        { withCredentials: true }
+      );
+      router.push(`/login`);
+      router.refresh();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
   }
 
   return (
-    <aside className="sticky top-0 flex h-screen w-70 shrink-0 flex-col self-start bg-[#3f6274]  py-6">
+    <aside className="sticky top-0 flex h-screen w-70 shrink-0 flex-col self-start bg-[#3f6274] py-6">
 
-      {/* Brand */}
-      <div className="flex items-center gap-2 px-6">
+      {/* Brand & Badge */}
+      <div className="flex flex-col gap-1 px-6">
         <span className="text-2xl font-semibold tracking-tight text-white">
           Chitwan Dental
+        </span>
+        <span className="w-fit rounded-md bg-white/15 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider text-white/90">
+          Superadmin Portal
         </span>
       </div>
 
       {/* Nav */}
       <nav className="mt-10 flex flex-1 flex-col gap-2">
-        {NAV_ITEMS.map(({ label, href, icon: Icon, exact }) => {
-          const fullHref = `${adminRoot}${href}`;
+        {SUPERADMIN_NAV_ITEMS.map(({ label, href, icon: Icon, exact }) => {
+          const fullHref = `${superAdminRoot}${href}`;
           const active = exact
             ? pathname === fullHref
             : pathname === fullHref || pathname?.startsWith(`${fullHref}/`);
@@ -63,7 +70,7 @@ function Sidebar() {
               className={[
                 "flex w-full items-center gap-3 rounded-none pl-5 pr-6 py-3 text-[0.9rem] font-medium transition-colors",
                 active
-                  ? "bg-white text-[#3f6274] border-l-4 border-[#3f6274]"
+                  ? "bg-white text-[#3f6274] border-l-4 border-[#7da3b3]"
                   : "text-white/85 hover:bg-white/10 hover:text-white border-l-4 border-transparent",
               ].join(" ")}
             >
@@ -89,4 +96,4 @@ function Sidebar() {
   );
 }
 
-export default Sidebar;
+export default SuperAdminSidebar;

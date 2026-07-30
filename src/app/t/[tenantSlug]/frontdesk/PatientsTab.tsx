@@ -23,12 +23,14 @@ import {
   Check,
   Pencil,
   Trash2,
+  Droplet,
 } from "lucide-react";
 
 const inputClass =
   "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-sky-400 focus:ring-1 focus:ring-sky-400";
 
 const GENDER_OPTIONS = ["Male", "Female", "Other"];
+const BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const ITEMS_PER_PAGE = 8;
 
 interface TreatmentRecord {
@@ -51,6 +53,7 @@ interface Patient {
   phone: string;
   email: string;
   gender: string;
+  bloodGroup: string;
   treatmentStatus: string;
   assignedDoctor: string;
   allergies?: string[];
@@ -79,6 +82,7 @@ const emptyPatientForm = {
   phone: "",
   email: "",
   gender: GENDER_OPTIONS[0],
+  bloodGroup: BLOOD_GROUP_OPTIONS[0],
 };
 
 export default function PatientsTab() {
@@ -146,6 +150,7 @@ export default function PatientsTab() {
           phone: p.phone || "-",
           email: p.email || "-",
           gender: p.gender || "Male",
+          bloodGroup: p.bloodGroup || "-",
           treatmentStatus: p.treatmentCompleted ? "Completed" : "In Treatment",
           assignedDoctor: p.assignedDoctorName || "Unassigned",
           history: [],
@@ -247,6 +252,7 @@ export default function PatientsTab() {
         phone: newPatient.phone || undefined,
         email: newPatient.email || undefined,
         gender: newPatient.gender || undefined,
+        bloodGroup: newPatient.bloodGroup || undefined,
       };
 
       const res = await axios.post("/api/patent", payload);
@@ -282,6 +288,7 @@ export default function PatientsTab() {
       phone: patient.phone === "-" ? "" : patient.phone,
       email: patient.email === "-" ? "" : patient.email,
       gender: GENDER_OPTIONS.includes(patient.gender) ? patient.gender : GENDER_OPTIONS[0],
+      bloodGroup: BLOOD_GROUP_OPTIONS.includes(patient.bloodGroup) ? patient.bloodGroup : BLOOD_GROUP_OPTIONS[0],
     });
   }
 
@@ -312,6 +319,7 @@ export default function PatientsTab() {
         phone: editPatient.phone || undefined,
         email: editPatient.email || undefined,
         gender: editPatient.gender || undefined,
+        bloodGroup: editPatient.bloodGroup || undefined,
       };
 
       const res = await axios.patch(`/api/patent/${editingPatientId}`, payload);
@@ -461,7 +469,8 @@ export default function PatientsTab() {
     (p) =>
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.phone.includes(searchQuery) ||
-      p.email.toLowerCase().includes(searchQuery.toLowerCase())
+      p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.bloodGroup.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Pagination Logic
@@ -597,6 +606,21 @@ export default function PatientsTab() {
             </select>
           </label>
 
+          <label className="block sm:col-span-1">
+            <span className="mb-1 block text-xs font-medium text-slate-600">Blood Group</span>
+            <select
+              value={newPatient.bloodGroup}
+              className={inputClass}
+              onChange={(e) => setNewPatient({ ...newPatient, bloodGroup: e.target.value })}
+            >
+              {BLOOD_GROUP_OPTIONS.map((bg) => (
+                <option key={bg} value={bg}>
+                  {bg}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <label className="block sm:col-span-2">
             <span className="mb-1 block text-xs font-medium text-slate-600">Date of Birth</span>
             <input
@@ -719,6 +743,21 @@ export default function PatientsTab() {
             </select>
           </label>
 
+          <label className="block sm:col-span-1">
+            <span className="mb-1 block text-xs font-medium text-slate-600">Blood Group</span>
+            <select
+              value={editPatient.bloodGroup}
+              className={inputClass}
+              onChange={(e) => setEditPatient({ ...editPatient, bloodGroup: e.target.value })}
+            >
+              {BLOOD_GROUP_OPTIONS.map((bg) => (
+                <option key={bg} value={bg}>
+                  {bg}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <label className="block sm:col-span-2">
             <span className="mb-1 block text-xs font-medium text-slate-600">Date of Birth</span>
             <input
@@ -780,13 +819,14 @@ export default function PatientsTab() {
           </div>
         ) : (
           <div className="w-full overflow-x-auto">
-            <div className="min-w-[1150px] w-full">
+            <div className="min-w-[1250px] w-full">
               {/* Header Row */}
-              <div className="grid grid-cols-[2fr_1.5fr_1.8fr_1fr_1.2fr_1.5fr_1.3fr_1.1fr] border-b border-slate-100 bg-slate-50/70 text-xs font-medium text-slate-500">
+              <div className="grid grid-cols-[2fr_1.3fr_1.5fr_0.8fr_1fr_1.1fr_1.3fr_1.1fr_1fr] border-b border-slate-100 bg-slate-50/70 text-xs font-medium text-slate-500">
                 <div className="p-4 pl-6">Patient Name</div>
                 <div className="p-4">Phone</div>
                 <div className="p-4">Email</div>
                 <div className="p-4">Gender</div>
+                <div className="p-4">Blood Group</div>
                 <div className="p-4">DOB</div>
                 <div className="p-4">Assigned Doctor</div>
                 <div className="p-4">Status</div>
@@ -810,7 +850,7 @@ export default function PatientsTab() {
                       <div key={patient.id} className="transition-colors">
                         <div
                           onClick={() => toggleExpand(patient.id)}
-                          className={`grid grid-cols-[2fr_1.5fr_1.8fr_1fr_1.2fr_1.5fr_1.3fr_1.1fr] items-center text-sm cursor-pointer hover:bg-slate-50/50 transition-colors ${isExpanded ? "bg-sky-50/30" : ""
+                          className={`grid grid-cols-[2fr_1.3fr_1.5fr_0.8fr_1fr_1.1fr_1.3fr_1.1fr_1fr] items-center text-sm cursor-pointer hover:bg-slate-50/50 transition-colors ${isExpanded ? "bg-sky-50/30" : ""
                             }`}
                         >
                           <div className="p-4 pl-6 flex items-center gap-2.5">
@@ -839,6 +879,13 @@ export default function PatientsTab() {
                           </div>
 
                           <div className="p-4 text-xs font-medium text-slate-700">{patient.gender}</div>
+
+                          <div className="p-4 text-xs font-medium text-slate-700 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 font-semibold px-2 py-0.5 rounded border border-rose-200/60 text-[0.72rem]">
+                              <Droplet className="h-3 w-3 text-rose-500 shrink-0" />
+                              {patient.bloodGroup || "-"}
+                            </span>
+                          </div>
 
                           <div className="p-4 text-xs text-slate-700 whitespace-nowrap">
                             <span className="flex items-center gap-1.5">

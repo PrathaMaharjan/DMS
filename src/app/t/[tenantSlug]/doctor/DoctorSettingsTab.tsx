@@ -753,7 +753,7 @@ export default function DoctorSettingsTab() {
                 <button
                   type="submit"
                   disabled={savingSection === "password"}
-                  className="flex items-center gap-1.5 rounded-full bg-[#345263] px-6 py-2.5 text-[0.9rem] font-medium text-white shadow-sm transition-colors hover:bg-[#2a4351] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex items-center gap-1.5 rounded-full bg-[#7da3b3] px-6 py-2.5 text-[0.9rem] font-medium text-white shadow-sm transition-colors hover:bg-[#345263] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {savingSection === "password" ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
