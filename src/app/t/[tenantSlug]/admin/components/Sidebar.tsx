@@ -46,6 +46,7 @@ function Sidebar() {
         <span className="text-2xl font-semibold tracking-tight text-white">
           Chitwan Dental
         </span>
+        <hr className="border-white/15 mt-7" />
       </div>
 
       {/* Nav */}
