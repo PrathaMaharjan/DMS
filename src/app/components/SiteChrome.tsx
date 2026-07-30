@@ -11,9 +11,9 @@ export default function SiteChrome({
 }) {
   const pathname = usePathname();
 
-  // Excludes the layout if the URL path contains /admin or /frontdesk right after the tenant slug
+
   const isInternalDashboard = pathname 
-    ? /^\/t\/[^/]+\/(admin|frontdesk|doctor)(\/|$)/.test(pathname) 
+    ? /^\/t\/[^/]+\/(admin|frontdesk|doctor|organization)(\/|$)/.test(pathname) 
     : false;
 
   if (isInternalDashboard) return <>{children}</>;
