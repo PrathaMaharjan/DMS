@@ -69,15 +69,15 @@ async function findOwnedDoctor(doctorId: string, orgId: string) {
 
 export type CreateDoctorResult =
   | {
-    success: true;
-    doctor: {
-      id: string;
-      name: string;
-      email: string;
-      photoUrl: string | null;
-    };
-    emailSent: boolean;
-  }
+      success: true;
+      doctor: {
+        id: string;
+        name: string;
+        email: string;
+        photoUrl: string | null;
+      };
+      emailSent: boolean;
+    }
   | { success: false; error: string; code: DoctorErrorCode };
 
 export async function createDoctor(
@@ -218,17 +218,17 @@ export async function createDoctor(
 // ----------------------------------get doctor ------------------------------------------
 export type GetDoctorsResult =
   | {
-    success: true;
-    doctors: {
-      id: string;
-      name: string;
-      email: string;
-      photoUrl: string | null;
-      specialization: string | null;
-      yearsOfExperience: number | null;
-    }[];
-    pagination: { total: number; limit: number; offset: number };
-  }
+      success: true;
+      doctors: {
+        id: string;
+        name: string;
+        email: string;
+        photoUrl: string | null;
+        specialization: string | null;
+        yearsOfExperience: number | null;
+      }[];
+      pagination: { total: number; limit: number; offset: number };
+    }
   | { success: false; error: string; code: DoctorErrorCode };
 
 const DEFAULT_LIMIT = 20;
@@ -248,17 +248,17 @@ export async function getDoctors(
 
     const whereClause = locationId
       ? and(
-        eq(userLocationRoles.role, "clinical"),
-        eq(userLocationRoles.locationId, locationId),
-        eq(users.orgId, session.orgId),
-        isNull(users.deletedAt),
-      )
+          eq(userLocationRoles.role, "clinical"),
+          eq(userLocationRoles.locationId, locationId),
+          eq(users.orgId, session.orgId),
+          isNull(users.deletedAt),
+        )
       : and(
-        eq(userLocationRoles.role, "clinical"),
-        eq(users.orgId, session.orgId),
-        eq(users.isActive, true),
-        isNull(users.deletedAt),
-      );
+          eq(userLocationRoles.role, "clinical"),
+          eq(users.orgId, session.orgId),
+          eq(users.isActive, true),
+          isNull(users.deletedAt),
+        );
     const [results, countResult] = await Promise.all([
       db
         .select({
@@ -287,18 +287,18 @@ export async function getDoctors(
     const doctorIds = results.map((d) => d.id);
     const patientCounts = doctorIds.length
       ? await db
-        .select({
-          providerId: appointments.providerId,
-          patientCount: sql<number>`count(distinct ${appointments.patientId})::int`,
-        })
-        .from(appointments)
-        .where(
-          and(
-            inArray(appointments.providerId, doctorIds),
-            eq(appointments.status, "completed"),
-          ),
-        )
-        .groupBy(appointments.providerId)
+          .select({
+            providerId: appointments.providerId,
+            patientCount: sql<number>`count(distinct ${appointments.patientId})::int`,
+          })
+          .from(appointments)
+          .where(
+            and(
+              inArray(appointments.providerId, doctorIds),
+              eq(appointments.status, "completed"),
+            ),
+          )
+          .groupBy(appointments.providerId)
       : [];
     const countsByDoctor = new Map(
       patientCounts.map((p) => [p.providerId, p.patientCount]),
@@ -327,14 +327,9 @@ export async function getDoctors(
 
 export type UpdateDoctorResult =
   | {
-    success: true;
-    doctor: {
-      id: string;
-      // name: string;
-      // email: string;
-      photoUrl: string | null;
-    };
-  }
+      success: true;
+      doctor: { id: string; };
+    }
   | { success: false; error: string; code: DoctorErrorCode };
 
 export async function updateDoctor(doctorId: string, input: unknown): Promise<UpdateDoctorResult> {
@@ -347,6 +342,8 @@ export async function updateDoctor(doctorId: string, input: unknown): Promise<Up
     }
     const data = parsed.data;
 
+    // Confirms this doctor genuinely belongs to the caller's own clinic
+    // before touching anything - same ownership check used everywhere.
     const owned = await findOwnedDoctor(doctorId, session.orgId);
     if (!owned) {
       return { success: false, error: "Doctor not found.", code: "NOT_FOUND" };
@@ -398,7 +395,7 @@ export async function updateDoctor(doctorId: string, input: unknown): Promise<Up
         id: updatedUser.id,
         // name: updatedUser.name,
         // email: updatedUser.email,
-        photoUrl: imagePresets.thumbnail(profile?.photoUrl ?? null),
+        // photoUrl: imagePresets.thumbnail(profile?.photoUrl ?? null),
       },
     };
   } catch (err) {
@@ -455,18 +452,18 @@ export type HistoryErrorCode = "UNAUTHORIZED" | "NOT_FOUND" | "SERVER_ERROR";
 
 export type DoctorAppointmentHistoryResult =
   | {
-    success: true;
-    appointments: {
-      id: string;
-      startTime: Date;
-      endTime: Date;
-      status: string;
-      treatmentName: string; // was serviceName
-      patientId: string;
-      patientName: string;
-    }[];
-    pagination: { total: number; limit: number; offset: number };
-  }
+      success: true;
+      appointments: {
+        id: string;
+        startTime: Date;
+        endTime: Date;
+        status: string;
+        treatmentName: string; // was serviceName
+        patientId: string;
+        patientName: string;
+      }[];
+      pagination: { total: number; limit: number; offset: number };
+    }
   | { success: false; error: string; code: HistoryErrorCode };
 
 export async function getAppointmentHistoryByDoctor(
@@ -541,17 +538,17 @@ export async function getAppointmentHistoryByDoctor(
 // ------------------------- get Patent History ------------------------------------
 export type PatientHistoryByDoctorResult =
   | {
-    success: true;
-    visits: {
-      appointmentId: string;
-      startTime: Date;
-      status: string;
-      treatmentName: string; // was serviceName
-      patientId: string;
-      patientName: string;
-    }[];
-    pagination: { total: number; limit: number; offset: number };
-  }
+      success: true;
+      visits: {
+        appointmentId: string;
+        startTime: Date;
+        status: string;
+        treatmentName: string; // was serviceName
+        patientId: string;
+        patientName: string;
+      }[];
+      pagination: { total: number; limit: number; offset: number };
+    }
   | { success: false; error: string; code: HistoryErrorCode };
 export async function getPatientHistoryByDoctor(
   doctorId: string,
@@ -621,28 +618,28 @@ export async function getPatientHistoryByDoctor(
 // --------------------------------getSingle doctor --------------------------------------
 export type GetDoctorResult =
   | {
-    success: true;
-    doctor: {
-      id: string;
-      name: string;
-      email: string;
-      phone: string | null;
-      photoUrl: string | null;
-      specialization: string | null;
-      qualification: string | null;
-      education: string | null;
-      bio: string | null;
-      yearsOfExperience: number | null;
-      schedule: {
-        dayOfWeek: number;
-        // Nullable now - a day marked isOnLeave has no real hours stored.
-        startTime: string | null;
-        endTime: string | null;
-        isOnLeave: boolean;
-        locationId: string;
-      }[];
-    };
-  }
+      success: true;
+      doctor: {
+        id: string;
+        name: string;
+        email: string;
+        phone: string | null;
+        photoUrl: string | null;
+        specialization: string | null;
+        qualification: string | null;
+        education: string | null;
+        bio: string | null;
+        yearsOfExperience: number | null;
+        schedule: {
+          dayOfWeek: number;
+          // Nullable now - a day marked isOnLeave has no real hours stored.
+          startTime: string | null;
+          endTime: string | null;
+          isOnLeave: boolean;
+          locationId: string;
+        }[];
+      };
+    }
   | { success: false; error: string; code: DoctorErrorCode };
 
 export async function getDoctor(doctorId: string): Promise<GetDoctorResult> {
@@ -844,7 +841,6 @@ export async function updateDoctorSchedule(
 
 // ------------------ get schedule information ----------------------------------
 
-
 // Placeholder until breaks are a real, configurable column - hardcoded
 // 1-hour lunch in the middle of the shift for now.
 function computeBreakWindow(
@@ -871,23 +867,27 @@ function computeBreakWindow(
 // added to src/lib/controllers/doctors.controller.ts
 export type AllDoctorsScheduleResult =
   | {
-    success: true;
-    doctors: {
-      id: string;
-      name: string;
-      specialization: string | null;
-      status: "available" | "on_leave" | "not_scheduled";
-      shiftStart: string | null;
-      shiftEnd: string | null;
-      openSlots: number;
-      segments: { start: string; end: string; type: "free" | "booked" | "break" }[];
-    }[];
-  }
+      success: true;
+      doctors: {
+        id: string;
+        name: string;
+        specialization: string | null;
+        status: "available" | "on_leave" | "not_scheduled";
+        shiftStart: string | null;
+        shiftEnd: string | null;
+        openSlots: number;
+        segments: {
+          start: string;
+          end: string;
+          type: "free" | "booked" | "break";
+        }[];
+      }[];
+    }
   | { success: false; error: string; code: DoctorErrorCode };
 
 export async function getAllDoctorsScheduleTimeline(
   locationId: string,
-  date: string
+  date: string,
 ): Promise<AllDoctorsScheduleResult> {
   try {
     const session = await requireSession();
@@ -912,8 +912,8 @@ export async function getAllDoctorsScheduleTimeline(
         and(
           eq(providerSchedules.userId, users.id),
           eq(providerSchedules.locationId, locationId),
-          eq(providerSchedules.dayOfWeek, dayOfWeek)
-        )
+          eq(providerSchedules.dayOfWeek, dayOfWeek),
+        ),
       )
       .where(
         and(
@@ -921,8 +921,8 @@ export async function getAllDoctorsScheduleTimeline(
           eq(userLocationRoles.role, "clinical"),
           eq(users.orgId, session.orgId),
           eq(users.isActive, true),
-          isNull(users.deletedAt)
-        )
+          isNull(users.deletedAt),
+        ),
       )
       .orderBy(users.name);
 
@@ -934,23 +934,26 @@ export async function getAllDoctorsScheduleTimeline(
     const dayEnd = new Date(`${date}T23:59:59`);
     const allBookings = doctorIds.length
       ? await db
-        .select({
-          providerId: appointments.providerId,
-          startTime: appointments.startTime,
-          endTime: appointments.endTime,
-        })
-        .from(appointments)
-        .where(
-          and(
-            inArray(appointments.providerId, doctorIds),
-            ne(appointments.status, "cancelled"),
-            gt(appointments.startTime, dayStart),
-            lt(appointments.startTime, dayEnd)
+          .select({
+            providerId: appointments.providerId,
+            startTime: appointments.startTime,
+            endTime: appointments.endTime,
+          })
+          .from(appointments)
+          .where(
+            and(
+              inArray(appointments.providerId, doctorIds),
+              ne(appointments.status, "cancelled"),
+              gt(appointments.startTime, dayStart),
+              lt(appointments.startTime, dayEnd),
+            ),
           )
-        )
       : [];
 
-    const bookingsByDoctor = new Map<string, { startTime: Date; endTime: Date }[]>();
+    const bookingsByDoctor = new Map<
+      string,
+      { startTime: Date; endTime: Date }[]
+    >();
     for (const b of allBookings) {
       const list = bookingsByDoctor.get(b.providerId) ?? [];
       list.push({ startTime: b.startTime, endTime: b.endTime });
@@ -963,7 +966,9 @@ export async function getAllDoctorsScheduleTimeline(
           id: doctorRow.id,
           name: doctorRow.name,
           specialization: doctorRow.specialization,
-          status: doctorRow.isOnLeave ? ("on_leave" as const) : ("not_scheduled" as const),
+          status: doctorRow.isOnLeave
+            ? ("on_leave" as const)
+            : ("not_scheduled" as const),
           shiftStart: null,
           shiftEnd: null,
           openSlots: 0,
@@ -972,7 +977,10 @@ export async function getAllDoctorsScheduleTimeline(
       }
 
       const bookings = bookingsByDoctor.get(doctorRow.id) ?? [];
-      const breakWindow = computeBreakWindow(doctorRow.startTime, doctorRow.endTime);
+      const breakWindow = computeBreakWindow(
+        doctorRow.startTime,
+        doctorRow.endTime,
+      );
 
       type Interval = { start: string; end: string; type: "booked" | "break" };
       const busy: Interval[] = [
@@ -984,7 +992,11 @@ export async function getAllDoctorsScheduleTimeline(
         { ...breakWindow, type: "break" as const },
       ].sort((a, b) => a.start.localeCompare(b.start));
 
-      const segments: { start: string; end: string; type: "free" | "booked" | "break" }[] = [];
+      const segments: {
+        start: string;
+        end: string;
+        type: "free" | "booked" | "break";
+      }[] = [];
       let cursor = doctorRow.startTime;
 
       for (const interval of busy) {
@@ -1011,7 +1023,8 @@ export async function getAllDoctorsScheduleTimeline(
         id: doctorRow.id,
         name: doctorRow.name,
         specialization: doctorRow.specialization,
-        status: openSlots === 0 ? ("on_leave" as const) : ("available" as const),
+        status:
+          openSlots === 0 ? ("on_leave" as const) : ("available" as const),
         shiftStart: doctorRow.startTime,
         shiftEnd: doctorRow.endTime,
         openSlots,
@@ -1025,19 +1038,23 @@ export async function getAllDoctorsScheduleTimeline(
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong loading doctor schedules.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong loading doctor schedules.",
+      code: "SERVER_ERROR",
+    };
   }
 }
 
 // ------------------------- get doctor name and id ---------------------------------------
 export type GetDoctorNameAndIdResult =
   | {
-    success: true;
-    doctors: {
-      id: string;
-      name: string;
-    }[];
-  }
+      success: true;
+      doctors: {
+        id: string;
+        name: string;
+      }[];
+    }
   | { success: false; error: string; code: DoctorErrorCode };
 
 export async function getDoctorNameAndId(
@@ -1047,17 +1064,17 @@ export async function getDoctorNameAndId(
     const session = await requireSession();
     const whereClause = locationId
       ? and(
-        eq(userLocationRoles.role, "clinical"),
-        eq(userLocationRoles.locationId, locationId),
-        eq(users.orgId, session.orgId),
-        isNull(users.deletedAt),
-      )
+          eq(userLocationRoles.role, "clinical"),
+          eq(userLocationRoles.locationId, locationId),
+          eq(users.orgId, session.orgId),
+          isNull(users.deletedAt),
+        )
       : and(
-        eq(userLocationRoles.role, "clinical"),
-        eq(users.orgId, session.orgId),
-        eq(users.isActive, true),
-        isNull(users.deletedAt),
-      );
+          eq(userLocationRoles.role, "clinical"),
+          eq(users.orgId, session.orgId),
+          eq(users.isActive, true),
+          isNull(users.deletedAt),
+        );
     const result = await db
       .select({
         id: users.id,
