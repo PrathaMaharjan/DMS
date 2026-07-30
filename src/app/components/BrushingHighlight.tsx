@@ -21,19 +21,26 @@ interface BrushingHighlightProps {
 
 export default function BrushingHighlight({ tenantSlug }: BrushingHighlightProps) {
   const [sparkleList, setSparkleList] = useState<Sparkle[]>([]);
+  // Track cursor position inside the tooth container
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const lastSpawnRef = useRef(0);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const now = Date.now();
-    if (now - lastSpawnRef.current < 60) return;
-    lastSpawnRef.current = now;
-
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
 
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+
+    // Update custom cursor coordinates
+    setCursorPos({ x, y });
+
+    // Handle sparkle generation
+    const now = Date.now();
+    if (now - lastSpawnRef.current < 60) return;
+    lastSpawnRef.current = now;
 
     const newSparkle: Sparkle = {
       id: sparkleId++,
@@ -49,6 +56,10 @@ export default function BrushingHighlight({ tenantSlug }: BrushingHighlightProps
       setSparkleList((prev) => prev.filter((s) => s.id !== newSparkle.id));
     }, 700);
   }, []);
+
+  const handleMouseLeave = () => {
+    setCursorPos(null); // Hide custom toothbrush when hovering out
+  };
 
   return (
     <section className="relative overflow-hidden bg-gradient-to-br from-[#eaf3f6] via-[#dcebf0] to-[#c9e0e8] py-12 lg:py-16">
@@ -85,10 +96,11 @@ export default function BrushingHighlight({ tenantSlug }: BrushingHighlightProps
           </Link>
         </div>
 
-        {/* Right — image, pulled in close, no extra column space */}
+        {/* Right — image container */}
         <div
           ref={containerRef}
           onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
           className="relative mt-12 aspect-[4/5] w-full max-w-md flex-shrink-0 cursor-none lg:mt-0 lg:w-[380px] xl:w-[440px]"
         >
           <Image
@@ -99,6 +111,23 @@ export default function BrushingHighlight({ tenantSlug }: BrushingHighlightProps
             className="object-contain drop-shadow-2xl"
             priority
           />
+
+          {/* Custom floating toothbrush cursor */}
+          {cursorPos && (
+            <div
+              className="pointer-events-none absolute z-50 -translate-x-1/2 -translate-y-1/2"
+              style={{
+                left: cursorPos.x,
+                top: cursorPos.y,
+              }}
+            >
+              <img
+                src="/images/cursor.png"
+                alt="Toothbrush Cursor"
+                className="h-11 w-11 object-contain" 
+              />
+            </div>
+          )}
 
           {sparkleList.map((s) => (
             <span

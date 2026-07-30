@@ -24,13 +24,10 @@ import {
     Stethoscope,
     TrendingUp,
     PieChart as PieChartIcon,
-    UserPlus,
-    ClipboardList,
     ArrowRight,
     Loader2,
     AlertCircle,
     User,
-    Phone,
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -41,40 +38,36 @@ const STATUS_COLORS: Record<string, string> = {
     Cancelled: "#cbd5e1",
 };
 
-interface AppointmentLite {
-    id: string;
-    patient: string;
-    phone: string;
-    dentist: string;
-    providerId?: string;
-    service: string;
-    date: string;
-    time: string;
-    rawStatus: string;
-}
+const STATUS_NAME_MAP: Record<string, string> = {
+    confirmed: "Confirmed",
+    checked_in: "Checked In",
+    completed: "Completed",
+    no_show: "No-Show",
+    cancelled: "Cancelled",
+};
 
-interface DoctorOption {
-    id: string;
-    name: string;
-}
-
-function formatDateTime(isoString: string | Date | null | undefined) {
-    if (!isoString) return { date: "-", time: "-" };
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return { date: "-", time: "-" };
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    const hours = String(d.getHours()).padStart(2, "0");
-    const minutes = String(d.getMinutes()).padStart(2, "0");
-    return { date: `${year}-${month}-${day}`, time: `${hours}:${minutes}` };
-}
-
-function toDateKey(d: Date) {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+interface FrontDeskDashboardData {
+    stats: {
+        appointmentsToday: number;
+        pendingRequests: number;
+        checkedIn: number;
+        noShowsToday: number;
+    };
+    last7Days: { day: string; date: string; count: number }[];
+    todayStatus: { status: string; count: number }[];
+    todaysSchedule: {
+        id: string;
+        patientName: string;
+        doctorName: string;
+        treatmentName: string;
+        startTime: string;
+        status: string;
+    }[];
+    doctorLoad: {
+        doctorId: string;
+        doctorName: string;
+        appointmentCount: number;
+    }[];
 }
 
 export default function DashboardTab({
@@ -84,10 +77,7 @@ export default function DashboardTab({
 }) {
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-    const [doctorsList, setDoctorsList] = useState<DoctorOption[]>([]);
-    const [appointments, setAppointments] = useState<AppointmentLite[]>([]);
-    const [pendingCount, setPendingCount] = useState(0);
+    const [dashboardData, setDashboardData] = useState<FrontDeskDashboardData | null>(null);
 
     const loadData = useCallback(async () => {
         try {
@@ -109,48 +99,24 @@ export default function DashboardTab({
                 locationId = patientsRes.data.data.patients[0].locationId;
             }
 
-            const doctorsRes = await axios
-                .get("/api/doctor", { params: locationId ? { locationId } : undefined })
-                .catch(() => null);
-            if (doctorsRes?.data?.success && doctorsRes.data.data.doctors) {
-                setDoctorsList(
-                    doctorsRes.data.data.doctors.map((d: any) => ({ id: d.id, name: d.name }))
-                );
+            if (!locationId) {
+                setErrorMsg("No clinic location found.");
+                setLoading(false);
+                return;
             }
 
-            if (locationId) {
-                const apptsRes = await axios
-                    .get("/api/appoments", { params: { locationId } })
-                    .catch(() => null);
+            const res = await axios.get("/api/frontDesk/dashboard/getAll", {
+                params: { locationId },
+            });
 
-                if (apptsRes?.data?.success && apptsRes.data.data.appointments) {
-                    const mapped: AppointmentLite[] = apptsRes.data.data.appointments.map((a: any) => {
-                        const { date, time } = formatDateTime(a.startTime);
-                        return {
-                            id: a.id,
-                            patient: a.patientName || "Patient",
-                            phone: a.patientPhone || "-",
-                            dentist: a.providerName || "Unassigned",
-                            providerId: a.providerId || "",
-                            service: a.treatmentName || "General Treatment",
-                            date,
-                            time,
-                            rawStatus: a.status || "confirmed",
-                        };
-                    });
-                    setAppointments(mapped);
-                }
-
-                const pendingRes = await axios
-                    .get("/api/appoments/pending", { params: { locationId } })
-                    .catch(() => null);
-                if (pendingRes?.data?.success && pendingRes.data.data.appointments) {
-                    setPendingCount(pendingRes.data.data.appointments.length);
-                }
+            if (res?.data?.success && res.data.data) {
+                setDashboardData(res.data.data);
+            } else {
+                setErrorMsg(res?.data?.error || "Failed to load dashboard data.");
             }
-        } catch (err) {
-            console.error("Failed to load dashboard data:", err);
-            setErrorMsg("Failed to load dashboard data from server.");
+        } catch (err: any) {
+            console.error("Failed to load frontdesk dashboard data:", err);
+            setErrorMsg(err?.response?.data?.error || "Failed to load dashboard data from server.");
         } finally {
             setLoading(false);
         }
@@ -160,81 +126,48 @@ export default function DashboardTab({
         loadData();
     }, [loadData]);
 
-    const todayKey = toDateKey(new Date());
-
-    const todaysAppointments = useMemo(
-        () => appointments.filter((a) => a.date === todayKey).sort((a, b) => a.time.localeCompare(b.time)),
-        [appointments, todayKey]
-    );
-
-    const checkedInCount = todaysAppointments.filter((a) => a.rawStatus === "checked_in").length;
-    const noShowCount = todaysAppointments.filter((a) => a.rawStatus === "no_show").length;
-    const completedCount = todaysAppointments.filter((a) => a.rawStatus === "completed").length;
-
     const statusBreakdown = useMemo(() => {
-        const counts: Record<string, number> = {
-            Confirmed: 0,
-            "Checked In": 0,
-            Completed: 0,
-            "No-Show": 0,
-            Cancelled: 0,
-        };
-        todaysAppointments.forEach((a) => {
-            if (a.rawStatus === "checked_in") counts["Checked In"]++;
-            else if (a.rawStatus === "completed") counts["Completed"]++;
-            else if (a.rawStatus === "no_show") counts["No-Show"]++;
-            else if (a.rawStatus === "cancelled") counts["Cancelled"]++;
-            else counts["Confirmed"]++;
-        });
-        return Object.entries(counts)
-            .filter(([, value]) => value > 0)
-            .map(([name, value]) => ({ name, value }));
-    }, [todaysAppointments]);
+        if (!dashboardData?.todayStatus) return [];
+        return dashboardData.todayStatus
+            .map((s) => ({
+                name: STATUS_NAME_MAP[s.status] || s.status,
+                value: s.count,
+            }))
+            .filter((item) => item.value > 0);
+    }, [dashboardData]);
 
     const weeklyTrend = useMemo(() => {
-        const days: { label: string; key: string; count: number }[] = [];
-        for (let i = 6; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            const key = toDateKey(d);
-            const label = d.toLocaleDateString("en-US", { weekday: "short" });
-            days.push({ label, key, count: 0 });
-        }
-        appointments.forEach((a) => {
-            const match = days.find((d) => d.key === a.date);
-            if (match) match.count++;
-        });
-        return days;
-    }, [appointments]);
+        if (!dashboardData?.last7Days) return [];
+        return dashboardData.last7Days.map((d) => ({
+            label: d.day,
+            date: d.date,
+            count: d.count,
+        }));
+    }, [dashboardData]);
 
     const doctorLoad = useMemo(() => {
-        const counts = doctorsList.map((d) => ({
-            id: d.id,
-            name: d.name,
-            count: todaysAppointments.filter((a) => a.providerId === d.id).length,
+        if (!dashboardData?.doctorLoad) return [];
+        const doctors = dashboardData.doctorLoad;
+        const maxCount = Math.max(1, ...doctors.map((d) => d.appointmentCount));
+        return doctors.map((d) => ({
+            id: d.doctorId,
+            name: d.doctorName,
+            count: d.appointmentCount,
+            pct: Math.round((d.appointmentCount / maxCount) * 100),
         }));
-        const maxCount = Math.max(1, ...counts.map((c) => c.count));
-        return counts
-            .sort((a, b) => b.count - a.count)
-            .map((c) => ({ ...c, pct: Math.round((c.count / maxCount) * 100) }));
-    }, [doctorsList, todaysAppointments]);
+    }, [dashboardData]);
 
-    const upcomingToday = todaysAppointments.filter(
-        (a) => a.rawStatus !== "completed" && a.rawStatus !== "cancelled" && a.rawStatus !== "no_show"
-    );
+    const todaysSchedule = useMemo(() => {
+        if (!dashboardData?.todaysSchedule) return [];
+        return dashboardData.todaysSchedule;
+    }, [dashboardData]);
 
-    const greeting = (() => {
-        const h = new Date().getHours();
-        if (h < 12) return "Good morning";
-        if (h < 17) return "Good afternoon";
-        return "Good evening";
-    })();
-
-    const todayLabel = new Date().toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-    });
+    const stats = dashboardData?.stats || {
+        appointmentsToday: 0,
+        pendingRequests: 0,
+        checkedIn: 0,
+        noShowsToday: 0,
+    };
 
     return (
         <div className="w-full py-6">
@@ -247,8 +180,6 @@ export default function DashboardTab({
                         </div>
                     </div>
                 )}
-
-
 
                 {loading ? (
                     <div className="rounded-2xl border border-slate-900/5 bg-white/90 p-12 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2 shadow-lg backdrop-blur-sm">
@@ -269,7 +200,7 @@ export default function DashboardTab({
                                     </span>
                                 </div>
                                 <p className="mt-2 text-2xl font-bold text-slate-900">
-                                    {todaysAppointments.length}
+                                    {stats.appointmentsToday}
                                 </p>
                             </div>
 
@@ -282,7 +213,7 @@ export default function DashboardTab({
                                         <Inbox className="h-4 w-4" />
                                     </span>
                                 </div>
-                                <p className="mt-2 text-2xl font-bold text-slate-900">{pendingCount}</p>
+                                <p className="mt-2 text-2xl font-bold text-slate-900">{stats.pendingRequests}</p>
                             </div>
 
                             <div className="rounded-2xl border border-slate-900/5 bg-white/90 p-5 shadow-lg backdrop-blur-sm">
@@ -294,7 +225,7 @@ export default function DashboardTab({
                                         <UserCheck className="h-4 w-4" />
                                     </span>
                                 </div>
-                                <p className="mt-2 text-2xl font-bold text-slate-900">{checkedInCount}</p>
+                                <p className="mt-2 text-2xl font-bold text-slate-900">{stats.checkedIn}</p>
                             </div>
 
                             <div className="rounded-2xl border border-slate-900/5 bg-white/90 p-5 shadow-lg backdrop-blur-sm">
@@ -306,7 +237,7 @@ export default function DashboardTab({
                                         <AlertTriangle className="h-4 w-4" />
                                     </span>
                                 </div>
-                                <p className="mt-2 text-2xl font-bold text-slate-900">{noShowCount}</p>
+                                <p className="mt-2 text-2xl font-bold text-slate-900">{stats.noShowsToday}</p>
                             </div>
                         </div>
 
@@ -322,7 +253,6 @@ export default function DashboardTab({
                                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                                             Appointments for Last 7 Days
                                         </h3>
-
                                     </div>
                                 </div>
                                 <div className="h-64">
@@ -365,7 +295,6 @@ export default function DashboardTab({
                                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                                             Today's Status
                                         </h3>
-
                                     </div>
                                 </div>
                                 {statusBreakdown.length === 0 ? (
@@ -434,38 +363,47 @@ export default function DashboardTab({
                                 </div>
 
                                 <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-                                    {upcomingToday.length === 0 ? (
+                                    {todaysSchedule.length === 0 ? (
                                         <div className="p-8 text-center text-xs text-slate-400">
-                                            No upcoming appointments left for today.
+                                            No appointments scheduled for today.
                                         </div>
                                     ) : (
-                                        upcomingToday.map((a) => (
-                                            <div key={a.id} className="flex items-center gap-3 p-4">
-                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700 font-bold">
-                                                    <User className="h-4 w-4" />
+                                        todaysSchedule.map((a) => {
+                                            const statusLabel = STATUS_NAME_MAP[a.status] || a.status;
+                                            return (
+                                                <div key={a.id} className="flex items-center gap-3 p-4">
+                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700 font-bold">
+                                                        <User className="h-4 w-4" />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-sm font-semibold text-slate-900 truncate">
+                                                            {a.patientName}
+                                                        </p>
+                                                        <p className="text-xs text-slate-500 truncate flex items-center gap-1.5">
+                                                            <Stethoscope className="h-3 w-3 text-[#7da3b3]" /> {a.doctorName} ·{" "}
+                                                            {a.treatmentName}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-right shrink-0">
+                                                        <p className="text-xs font-semibold text-slate-700">{a.startTime}</p>
+                                                        <span
+                                                            className={`inline-block mt-0.5 rounded-md px-1.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider ${a.status === "checked_in"
+                                                                ? "bg-emerald-50 text-emerald-700"
+                                                                : a.status === "completed"
+                                                                    ? "bg-slate-100 text-slate-600"
+                                                                    : a.status === "no_show"
+                                                                        ? "bg-rose-50 text-rose-600"
+                                                                        : a.status === "cancelled"
+                                                                            ? "bg-slate-100 text-slate-400"
+                                                                            : "bg-[#7da3b3]/10 text-[#3f6274]"
+                                                                }`}
+                                                        >
+                                                            {statusLabel}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-sm font-semibold text-slate-900 truncate">
-                                                        {a.patient}
-                                                    </p>
-                                                    <p className="text-xs text-slate-500 truncate flex items-center gap-1.5">
-                                                        <Stethoscope className="h-3 w-3 text-[#7da3b3]" /> {a.dentist} ·{" "}
-                                                        {a.service}
-                                                    </p>
-                                                </div>
-                                                <div className="text-right shrink-0">
-                                                    <p className="text-xs font-semibold text-slate-700">{a.time}</p>
-                                                    <span
-                                                        className={`inline-block mt-0.5 rounded-md px-1.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider ${a.rawStatus === "checked_in"
-                                                            ? "bg-emerald-50 text-emerald-700"
-                                                            : "bg-slate-100 text-slate-600"
-                                                            }`}
-                                                    >
-                                                        {a.rawStatus === "checked_in" ? "Checked In" : "Confirmed"}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </div>
                             </div>
@@ -507,8 +445,6 @@ export default function DashboardTab({
                                 )}
                             </div>
                         </div>
-
-
                     </>
                 )}
             </div>
