@@ -76,7 +76,11 @@ const AVATAR_COLORS = [
   "bg-amber-100 text-amber-700",
   "bg-emerald-100 text-emerald-700",
 ];
-
+const OUTLETS = [
+  { id: "all", name: "All outlets" },
+  { id: "outlet-1", name: "Chitwan Dental Home" },
+  { id: "outlet-2", name: "Chitwan Dental Home" },
+];
 const EMPTY_FORM = {
   imageUrl: "",
   name: "",
@@ -428,6 +432,7 @@ export default function PatientsPage() {
 
   const [patientAppointments, setPatientAppointments] = useState<any[]>([]);
   const [loadingAppts, setLoadingAppts] = useState(false);
+const [outletFilter, setOutletFilter] = useState("all");
 
   async function openProfile(p: Patient) {
     setSelectedPatient(p);
@@ -466,11 +471,32 @@ export default function PatientsPage() {
 
   return (
     <div className="relative min-h-screen bg-slate-50">
-      <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
-          Patients
-        </h1>
-      </div>
+     <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
+  <div className="flex flex-wrap items-center justify-between gap-3">
+    <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
+     Patients
+    </h1>
+
+    <div className="relative">
+      <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+      <select
+        value={outletFilter}
+        onChange={(e) => setOutletFilter(e.target.value)}
+        className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
+      >
+        {OUTLETS.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  </div>
+</div>
+
+    
+                                           
+
 
       <div className="mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
 

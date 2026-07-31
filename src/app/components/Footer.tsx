@@ -90,7 +90,7 @@ export default function Footer({ tenantSlug = "chitwan-dental-home" }: FooterPro
           <p className="text-[0.9rem] text-white">
             © 2026, Chitwan Dental Clinic
           </p>
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-6">
             <Link
               href="/terms"
               className="text-[0.9rem] text-white underline-offset-4 transition-all hover:underline"
@@ -102,6 +102,13 @@ export default function Footer({ tenantSlug = "chitwan-dental-home" }: FooterPro
               className="text-[0.9rem] text-white underline-offset-4 transition-all hover:underline"
             >
               Privacy Policy
+            </Link>
+            {/* Staff Portal Link */}
+            <Link
+              href={`/login?tenant=${tenantSlug}`}
+              className="text-[0.9rem] font-medium text-white/90 underline-offset-4 transition-all hover:text-white hover:underline"
+            >
+              Staff Portal Login
             </Link>
           </div>
         </div>

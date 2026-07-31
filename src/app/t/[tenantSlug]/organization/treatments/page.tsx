@@ -22,6 +22,7 @@ import {
   Clock,
   Layers,
   Sparkles,
+  MapPin,
   ShieldCheck,
   Scissors,
   Banknote,
@@ -51,6 +52,12 @@ const CATEGORY_COLORS: Record<string, string> = {
   Surgical: "bg-rose-100 text-rose-700",
   Pediatric: "bg-teal-100 text-teal-700",
 };
+
+const OUTLETS = [
+  { id: "all", name: "All outlets" },
+  { id: "outlet-1", name: "Chitwan Dental Home" },
+  { id: "outlet-2", name: "Chitwan Dental Home" },
+];
 
 type Treatment = {
   id: string;
@@ -126,6 +133,7 @@ export default function TreatmentsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [selectedTreatment, setSelectedTreatment] = useState<Treatment | null>(null);
+  const [outletFilter, setOutletFilter] = useState("all");
   const [profileTab, setProfileTab] = useState<"detail" | "procedure" | "aftercare">(
     "detail"
   );
@@ -413,12 +421,28 @@ export default function TreatmentsPage() {
       </div>
 
 
-      <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
+<div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
+  <div className="flex flex-wrap items-center justify-between gap-3">
+    <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
+      Treatments
+    </h1>
 
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
-          Treatments
-        </h1>
-      </div>
+    <div className="relative">
+      <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+      <select
+        value={outletFilter}
+        onChange={(e) => setOutletFilter(e.target.value)}
+        className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
+      >
+        {OUTLETS.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  </div>
+</div>
 
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
         {/* Stats */}

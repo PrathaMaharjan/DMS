@@ -16,6 +16,7 @@ import {
   Phone,
   Stethoscope,
   Cross,
+  MapPin,
   HeartPulse,
   Pill,
   Activity,
@@ -47,6 +48,12 @@ const STATUS_COLORS: Record<Status, string> = {
   Completed: "bg-emerald-100 text-emerald-700",
   Cancelled: "bg-rose-100 text-rose-700",
 };
+
+const OUTLETS = [
+  { id: "all", name: "All outlets" },
+  { id: "outlet-1", name: "Chitwan Dental" },
+  { id: "outlet-2", name: "Chitwan Dental Home" },
+];
 
 interface DoctorOption {
   id: string;
@@ -194,7 +201,7 @@ export default function AppointmentsPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | Status>("All");
   const [dateFilter, setDateFilter] = useState<"All" | "Today" | "Upcoming">("All");
-
+const [outletFilter, setOutletFilter] = useState("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     patientName: "",
@@ -450,11 +457,28 @@ export default function AppointmentsPage() {
         <Activity className="absolute right-[32%] bottom-[6%] h-24 w-24 text-[#7da3b3]/[0.07]" strokeWidth={1} />
       </div>
 
-      <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
-          Appointments
-        </h1>
-      </div>
+   <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
+  <div className="flex flex-wrap items-center justify-between gap-3">
+    <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
+      Appointments
+    </h1>
+
+    <div className="relative">
+      <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+      <select
+        value={outletFilter}
+        onChange={(e) => setOutletFilter(e.target.value)}
+        className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
+      >
+        {OUTLETS.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  </div>
+</div>
 
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
         {errorMsg && (

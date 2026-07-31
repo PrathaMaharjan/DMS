@@ -23,7 +23,7 @@ import {
   providerSchedules,
   locations,
 } from "@/db/schema";
-import { getSession, requireSession, SessionError } from "@/lib/auth/get-session";
+import { requireSession, SessionError } from "@/lib/auth/get-session";
 import {
   assignAppointmentSchema,
   bookAppointmentSchema,
@@ -152,7 +152,7 @@ export async function bookAppointment(
   input: unknown,
 ): Promise<BookAppointmentResult> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
 
     const parsed = bookAppointmentSchema.safeParse(input);
     if (!parsed.success) {
@@ -164,21 +164,6 @@ export async function bookAppointment(
     }
     const data = parsed.data;
 
-    let orgId = session?.orgId;
-    if (!orgId) {
-      const loc = await db.query.locations.findFirst({
-        where: eq(locations.id, data.locationId),
-      });
-      if (!loc) {
-        return {
-          success: false,
-          error: "Selected clinic location could not be found.",
-          code: "NOT_FOUND",
-        };
-      }
-      orgId = loc.orgId;
-    }
-
     const identifierMatch =
       data.email && data.email.trim() !== ""
         ? or(eq(patients.phone, data.phone), eq(patients.email, data.email))
@@ -186,7 +171,7 @@ export async function bookAppointment(
 
     const [existingPatient, treatment] = await Promise.all([
       db.query.patients.findFirst({
-        where: and(eq(patients.orgId, orgId), identifierMatch),
+        where: and(eq(patients.orgId, session.orgId), identifierMatch),
       }),
       db.query.treatments.findFirst({
         where: eq(treatments.id, data.treatmentId),
@@ -207,6 +192,9 @@ export async function bookAppointment(
     const endTime = new Date(
       startTime.getTime() + treatment.durationMinutes * 60_000,
     );
+
+    // console.log("bookAppointment - data.locationId:", data.locationId);
+    // console.log("bookAppointment - startTime:", startTime, "endTime:", endTime);
 
     let providerId = data.providerId;
     if (!providerId) {
@@ -240,7 +228,7 @@ export async function bookAppointment(
         const [newPatient] = await tx
           .insert(patients)
           .values({
-            orgId: orgId!,
+            orgId: session.orgId,
             locationId: data.locationId,
             firstName,
             lastName,
@@ -278,7 +266,7 @@ export async function bookAppointment(
           startTime,
           endTime,
           notes: data.notes || null,
-          source: data.source || "online_booking",
+          source: "staff",
           status: data.source === "staff" ? "confirmed" : "requested",
         })
         .returning();
@@ -1015,9 +1003,3 @@ export async function deleteAppointment(appointmentId: string): Promise<DeleteAp
     return { success: false, error: "Something went wrong deleting the appointment.", code: "SERVER_ERROR" };
   }
 }
-
-
-
-
-
-

@@ -68,6 +68,12 @@ const SPECIALIZATION_MAP_FRONTEND: Record<string, string> = {
   "prosthodontics": "Prosthodontics",
 };
 
+const OUTLETS = [
+  { id: "all", name: "All outlets" },
+  { id: "outlet-1", name: "Chitwan Dental Home" },
+  { id: "outlet-2", name: "Chitwan Dental Home" },
+];
+
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["Female", "Male", "Other"];
 
@@ -402,7 +408,7 @@ export default function DoctorsPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedDoctors = filtered.slice(startIndex, startIndex + itemsPerPage);
-
+const [outletFilter, setOutletFilter] = useState("all");
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage);
@@ -605,12 +611,28 @@ export default function DoctorsPage() {
       </div>
 
 
-      <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
+<div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
+  <div className="flex flex-wrap items-center justify-between gap-3">
+    <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
+      Doctors
+    </h1>
 
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
-          Doctors
-        </h1>
-      </div>
+    <div className="relative">
+      <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+      <select
+        value={outletFilter}
+        onChange={(e) => setOutletFilter(e.target.value)}
+        className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
+      >
+        {OUTLETS.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  </div>
+</div>
 
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
         {/* Stats */}
