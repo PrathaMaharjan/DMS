@@ -22,6 +22,7 @@ export const employmentTypeEnum = pgEnum("employment_type", [
   "part_time",
   "contractor",
 ]);
+export const shiftEnum = pgEnum("shift", ["morning", "afternoon", "night"]);
 export const orgStatusEnum = pgEnum("org_status", [
   "trial",
   "active",
@@ -84,6 +85,11 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     name: text("name").notNull(),
     photoUrl: text("photo_url"),
+    shift: shiftEnum("shift"),
+    joinDate: date("join_date"),
+    gender: text("gender"),
+    address: text("address"),
+    notes: text("notes"),
     isOwner: boolean("is_owner").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     deletedAt: timestamp("deleted_at"),
