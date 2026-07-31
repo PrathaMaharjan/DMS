@@ -88,6 +88,8 @@ export async function loginController(input: unknown): Promise<LoginResult> {
     .values({ userId: user.id, tokenHash, expiresAt });
 
   const redirectTo = await getRedirectPathForUser(user.id, org.slug);
+  console.log("redirect : ",redirectTo)
+  console.log("user : ",user)
 
   return {
     success: true,

@@ -18,6 +18,7 @@ async function seed() {
     .insert(locations)
     .values({ orgId: org.id, name: "Main Street Office" })
     .returning();
+
   console.log("Seeding services (appointment types)...");
   await db.insert(appointmentTypes).values([
     { locationId: location.id, name: "Checkup", durationMinutes: 30 },
@@ -25,22 +26,33 @@ async function seed() {
     { locationId: location.id, name: "Filling", durationMinutes: 45 },
     { locationId: location.id, name: "Root Canal", durationMinutes: 90 },
   ]);
+
+  const passwordHash = await hashPassword(SEED_PASSWORD);
+
+  // Genuine org-wide owner - NOT tied to any location, no row in
+  // user_location_roles at all. Access comes entirely from users.isOwner.
+  // This is why "owner" no longer appears in staffToSeed below - it's
+  // seeded here, separately, exactly once.
+  console.log("Seeding organization owner...");
+  await db.insert(users).values({
+    orgId: org.id,
+    email: "owner@gmail.com",
+    passwordHash,
+    name: "Priya Owner",
+    isOwner: true,
+  });
+  console.log(`  owner        -> owner@gmail.com / ${SEED_PASSWORD}`);
+
+  // "owner" role removed from this list - that value used to go into
+  // user_location_roles, but ownership no longer works that way. What
+  // used to be the location-level admin is now "manager" instead.
   const staffToSeed = [
-    { role: "owner" as const, name: "Olivia Owner", email: "owner@gmail.com" },
-    {
-      role: "clinical" as const,
-      name: "Dr. Priya Chen",
-      email: "doctor@gmail.com",
-    },
-    {
-      role: "front_office" as const,
-      name: "Frankie Frontdesk",
-      email: "frontoffice@gmail.com",
-    },
+    { role: "manager" as const, name: "Olivia Manager", email: "manager@gmail.com" },
+    { role: "clinical" as const, name: "Dr. Priya Chen", email: "doctor@gmail.com" },
+    { role: "front_office" as const, name: "Frankie Frontdesk", email: "frontoffice@gmail.com" },
   ];
 
   console.log("Seeding one user per role...");
-  const passwordHash = await hashPassword(SEED_PASSWORD);
 
   for (const staff of staffToSeed) {
     const [user] = await db
@@ -59,9 +71,7 @@ async function seed() {
       role: staff.role,
     });
 
-    console.log(
-      `  ${staff.role.padEnd(12)} -> ${staff.email} / ${SEED_PASSWORD}`,
-    );
+    console.log(`  ${staff.role.padEnd(12)} -> ${staff.email} / ${SEED_PASSWORD}`);
   }
 
   console.log("Done seeding.");

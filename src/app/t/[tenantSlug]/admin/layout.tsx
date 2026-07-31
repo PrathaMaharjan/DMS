@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/get-session";
 import { getPrimaryRoleForUser } from "@/lib/auth/role-redirect";
 import Sidebar from "./components/Sidebar";
-// import Sidebar from "./components/Sidebar";
 
 export default async function AdminLayout({
   children,
@@ -16,9 +15,12 @@ export default async function AdminLayout({
   if (!session) redirect("/login");
 
   const role = await getPrimaryRoleForUser(session.userId);
-  console.log(role)
-  if (role !== "owner") {
-    const ownFolder = role === "clinical" ? "doctor" : role === "front_office" ? "frontdesk" : "";
+
+  // "manager" is the correct role for this folder now - "owner" has its
+  // own separate /organization folder instead of sharing this one.
+  if (role !== "manager") {
+    const ownFolder =
+      role === "owner" ? "organization" : role === "clinical" ? "doctor" : role === "front_office" ? "frontdesk" : "";
     redirect(ownFolder ? `/t/${tenantSlug}/${ownFolder}` : "/login");
   }
 

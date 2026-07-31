@@ -29,6 +29,7 @@ export const updateDoctorSchema = z.object({
   email: z.string().email("Please enter a valid email address").optional(),
   phone: z.string().optional(),
   photoKey: z.string().optional(),
+  
   specialization: z
     .enum([
       "general_dentistry",

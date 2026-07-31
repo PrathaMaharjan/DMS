@@ -76,6 +76,7 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     name: text("name").notNull(),
     photoUrl: text("photo_url"),
+    isOwner: boolean("is_owner").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -85,11 +86,8 @@ export const users = pgTable(
   })
 );
 
-export const staffRoleEnum = pgEnum("staff_role", [
-  "owner",
-  "clinical",
-  "front_office",
-]);
+// src/db/schema/tenancy.ts
+export const staffRoleEnum = pgEnum("staff_role", ["owner", "manager", "clinical", "front_office"]);
 
 // owner        - full access: staff, settings, billing, reports, all patients at their locations
 // clinical     - dentist + hygienist merged. Note: in most places a hygienist legally

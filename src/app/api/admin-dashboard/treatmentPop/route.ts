@@ -1,4 +1,5 @@
-import { getLast7DaysAppointments } from "@/controller/doctor/doctorDashboard/homepage/controller";
+// src/app/api/admin/dashboard/treatment-popularity/route.ts
+import { getTreatmentPopularity } from "@/controller/admin-dashboard/controller";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -6,9 +7,9 @@ export async function GET(request: NextRequest) {
   if (!locationId) {
     return NextResponse.json({ success: false, error: "locationId is required" }, { status: 400 });
   }
-  const result = await getLast7DaysAppointments(locationId);
+  const result = await getTreatmentPopularity(locationId);
   if (!result.success) {
     return NextResponse.json({ success: false, error: result.error }, { status: result.code === "UNAUTHORIZED" ? 401 : 500 });
   }
-  return NextResponse.json({ success: true, statusCode: 200, data: { days: result.days } });
+  return NextResponse.json({ success: true, statusCode: 200, data: { breakdown: result.breakdown } });
 }

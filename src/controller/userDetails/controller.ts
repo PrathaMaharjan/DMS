@@ -1,13 +1,15 @@
 // src/lib/controllers/users.controller.ts
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { providerProfiles, userLocationRoles, users } from "@/db/schema";
 import { requireSession, SessionError } from "@/lib/auth/get-session";
 import { updateMyDetailsSchema } from "@/lib/validators/users";
 import { hashPassword, verifyPassword } from "@/lib/auth/hash";
 import { refreshTokens } from "@/db/schema";
 import { changePasswordSchema } from "@/lib/validators/users";
 import { imagePresets } from "@/lib/cloudinary/storage";
+import { updateDoctorSchema } from "@/lib/validators/doctor";
+import { DoctorErrorCode } from "../doctor/controller";
 
 
 
@@ -163,3 +165,105 @@ export async function getMyDetails(): Promise<GetMyDetailsResult> {
     return { success: false, error: "Something went wrong loading your details.", code: "SERVER_ERROR" };
   }
 }
+async function findOwnedDoctor(doctorId: string, orgId: string) {
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .innerJoin(userLocationRoles, eq(userLocationRoles.userId, users.id))
+    .where(
+      and(
+        eq(users.id, doctorId),
+        eq(users.orgId, orgId),
+        eq(userLocationRoles.role, "clinical")
+      )
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+// export type UpdateDoctorResult =
+//   | {
+//       success: true;
+//       doctor: { id: string; };
+//     }
+//   | { success: false; error: string; code: DoctorErrorCode };
+
+// export async function updateDoctor(doctorId: string, input: unknown): Promise<UpdateDoctorResult> {
+//   try {
+//     const session = await requireSession();
+
+//     const parsed = updateDoctorSchema.safeParse(input);
+//     if (!parsed.success) {
+//       return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input.", code: "VALIDATION" };
+//     }
+//     const data = parsed.data;
+
+//     // Confirms this doctor genuinely belongs to the caller's own clinic
+//     // before touching anything - same ownership check used everywhere.
+//     const owned = await findOwnedDoctor(doctorId, session.orgId);
+//     if (!owned) {
+//       return { success: false, error: "Doctor not found.", code: "NOT_FOUND" };
+//     }
+
+//     const updatedUser = await db.transaction(async (tx) => {
+//       const userUpdates: Partial<{ name: string; email: string; phone: string }> = {};
+//       if (data.name !== undefined) userUpdates.name = data.name;
+//       if (data.email !== undefined) userUpdates.email = data.email;
+//       if (data.phone !== undefined) userUpdates.phone = data.phone;
+
+//       let user = owned;
+//       if (Object.keys(userUpdates).length > 0) {
+//         const [updated] = await tx.update(users).set(userUpdates).where(eq(users.id, doctorId)).returning();
+//         user = updated;
+//       } else {
+//         const [existing] = await tx.select().from(users).where(eq(users.id, doctorId));
+//         user = existing;
+//       }
+
+//       const profileUpdates: Record<string, unknown> = { updatedAt: new Date() };
+//       if (data.photoKey !== undefined) profileUpdates.photoUrl = data.photoKey;
+//       if (data.specialization !== undefined) profileUpdates.specialization = data.specialization;
+//       if (data.qualification !== undefined) profileUpdates.qualification = data.qualification;
+//       if (data.education !== undefined) profileUpdates.education = data.education;
+//       if (data.bio !== undefined) profileUpdates.bio = data.bio;
+//       if (data.yearsOfExperience !== undefined) profileUpdates.yearsOfExperience = data.yearsOfExperience;
+//       if (data.dateOfBirth !== undefined) profileUpdates.dateOfBirth = data.dateOfBirth;
+//       if (data.bloodGroup !== undefined) profileUpdates.bloodGroup = data.bloodGroup;
+//       if (data.gender !== undefined) profileUpdates.gender = data.gender;
+//       if (data.address !== undefined) profileUpdates.address = data.address;
+//       if (data.employmentType !== undefined) profileUpdates.employmentType = data.employmentType;
+
+//       await tx.update(providerProfiles).set(profileUpdates).where(eq(providerProfiles.userId, doctorId));
+
+//       return user;
+//     });
+
+//     // Read AFTER the transaction commits, so this reflects the photo
+//     // that was just saved, not stale data from before the update ran.
+//     const [profile] = await db
+//       .select({ photoUrl: providerProfiles.photoUrl })
+//       .from(providerProfiles)
+//       .where(eq(providerProfiles.userId, doctorId));
+
+//     return {
+//       success: true,
+//       doctor: {
+//         id: updatedUser.id,
+//       },
+//     };
+//   } catch (err) {
+//     if (err instanceof SessionError) {
+//       return { success: false, error: err.message, code: "UNAUTHORIZED" };
+//     }
+//     if (getPgErrorCode(err) === "23505") {
+//       return { success: false, error: "A staff member with this email already exists.", code: "DUPLICATE" };
+//     }
+//     console.error(err);
+//     return { success: false, error: "Something went wrong updating the doctor.", code: "SERVER_ERROR" };
+//   }
+// }
+
+
+
+
+
