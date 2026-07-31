@@ -9,7 +9,7 @@ export const createLocationSchema = z.object({
   timezone: z.string().optional(),
   openingTime: z.string().optional(),
   closingTime: z.string().optional(),
-  notes: z.string().optional(),
+  // notes: z.string().optional(),
   isActive: z.boolean().optional(),
 });
 
