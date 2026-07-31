@@ -53,11 +53,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Pediatric: "bg-teal-100 text-teal-700",
 };
 
-const OUTLETS = [
-  { id: "all", name: "All outlets" },
-  { id: "outlet-1", name: "Chitwan Dental Home" },
-  { id: "outlet-2", name: "Chitwan Dental Home" },
-];
+const OUTLETS_DEFAULT = [{ id: "all", name: "All outlets" }];
 
 type Treatment = {
   id: string;
@@ -138,33 +134,61 @@ export default function TreatmentsPage() {
     "detail"
   );
 
+  const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>(OUTLETS_DEFAULT);
+
   async function loadData() {
     try {
       setLoading(true);
-      // Fetch locations/services first to get locationId
-      const servicesRes = await axios.get("/api/services");
-      if (servicesRes.data?.success && servicesRes.data.data.services?.length > 0) {
-        setLocationId(servicesRes.data.data.services[0].locationId);
+      const [servicesRes, outletsRes] = await Promise.all([
+        axios.get("/api/services").catch(() => null),
+        axios.get("/api/outlets").catch(() => null),
+      ]);
+
+      let locId: string | null = null;
+      if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
+        locId = servicesRes.data.data.services[0].locationId;
+        setLocationId(locId);
       }
 
-      // Fetch treatments
-      const treatmentsRes = await axios.get("/api/treatment");
+      if (outletsRes?.data?.success && outletsRes.data.data?.locations) {
+        const seenOutlets = new Set<string>();
+        const mappedOutlets: { id: string; name: string }[] = [];
+        outletsRes.data.data.locations.forEach((l: any) => {
+          if (l.id && !seenOutlets.has(l.id)) {
+            seenOutlets.add(l.id);
+            mappedOutlets.push({ id: l.id, name: l.name });
+          }
+        });
+        setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutlets]);
+      }
+
+      const targetLoc = outletFilter !== "all" ? outletFilter : locId;
+      const treatmentsRes = await axios.get("/api/treatment", {
+        params: targetLoc ? { locationId: targetLoc } : undefined,
+      });
       if (treatmentsRes.data?.success) {
         const dbTreatments = treatmentsRes.data.data.treatments || [];
-        const mapped = dbTreatments.map((t: any, index: number) => ({
-          id: t.id,
-          name: t.name,
-          category: CATEGORIES.find(c => c.toLowerCase() === t.category) || t.category,
-          duration: `${t.durationMinutes} mins`,
-          price: t.priceCents / 100,
-          description: t.description || "",
-          treatmentId: `TRT-${1000 + index + 1}`,
-          sessions: String(t.sessions || 1),
-          recoveryTime: t.recoveryTime || "",
-          anesthesia: t.anesthesia ? (t.anesthesia.charAt(0).toUpperCase() + t.anesthesia.slice(1)) : "None",
-          procedureSteps: t.procedureSteps || [],
-          aftercare: t.aftercareInstructions || [],
-        }));
+        const seen = new Set<string>();
+        const mapped: Treatment[] = [];
+        dbTreatments.forEach((t: any, index: number) => {
+          if (t.id && !seen.has(t.id)) {
+            seen.add(t.id);
+            mapped.push({
+              id: t.id,
+              name: t.name,
+              category: CATEGORIES.find(c => c.toLowerCase() === t.category) || t.category,
+              duration: `${t.durationMinutes} mins`,
+              price: t.priceCents / 100,
+              description: t.description || "",
+              treatmentId: `TRT-${1000 + index + 1}`,
+              sessions: String(t.sessions || 1),
+              recoveryTime: t.recoveryTime || "",
+              anesthesia: t.anesthesia || "None",
+              procedureSteps: t.procedureSteps ? t.procedureSteps.split("\n") : [],
+              aftercare: t.aftercareInstructions ? t.aftercareInstructions.split("\n") : [],
+            });
+          }
+        });
         setTreatments(mapped);
       }
     } catch (err) {
@@ -176,7 +200,7 @@ export default function TreatmentsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [outletFilter]);
 
   function openProfile(t: Treatment) {
     setSelectedTreatment(t);
@@ -434,8 +458,8 @@ export default function TreatmentsPage() {
         onChange={(e) => setOutletFilter(e.target.value)}
         className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
       >
-        {OUTLETS.map((o) => (
-          <option key={o.id} value={o.id}>
+        {outletsList.map((o, idx) => (
+          <option key={`${o.id}-${idx}`} value={o.id}>
             {o.name}
           </option>
         ))}
@@ -542,12 +566,12 @@ export default function TreatmentsPage() {
                   </tr>
                 ) : (
                   <>
-                    {paginatedTreatments.map((t) => {
+                    {paginatedTreatments.map((t, index) => {
                       const color = CATEGORY_COLORS[t.category] ?? "bg-slate-100 text-slate-700";
 
                       return (
                         <tr
-                          key={t.id}
+                          key={`${t.id}-${index}`}
                           onClick={() => openProfile(t)}
                           className="cursor-pointer transition-colors hover:bg-[#7da3b3]/[0.06]"
                         >

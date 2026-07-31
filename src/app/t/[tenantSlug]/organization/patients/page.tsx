@@ -58,6 +58,7 @@ type Patient = {
   allergies?: string[];
   medicalHistory?: string[];
   medications?: string[];
+  locationId?: string;
 };
 
 function initialsOf(name: string) {
@@ -75,11 +76,6 @@ const AVATAR_COLORS = [
   "bg-sky-100 text-sky-700",
   "bg-amber-100 text-amber-700",
   "bg-emerald-100 text-emerald-700",
-];
-const OUTLETS = [
-  { id: "all", name: "All outlets" },
-  { id: "outlet-1", name: "Chitwan Dental Home" },
-  { id: "outlet-2", name: "Chitwan Dental Home" },
 ];
 const EMPTY_FORM = {
   imageUrl: "",
@@ -147,6 +143,7 @@ function apiPatientToPatient(p: any): Patient {
     allergies: p.allergies || [],
     medicalHistory: p.medicalHistory || [],
     medications: p.medications || [],
+    locationId: p.locationId || "",
   };
 }
 
@@ -218,14 +215,39 @@ export default function PatientsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
+  const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>([]);
+  const [outletFilter, setOutletFilter] = useState("all");
+
   const loadPatients = async () => {
     try {
       setLoading(true);
       setLoadError(null);
-      const res = await axios.get("/api/patent");
+      const [res, outletsRes] = await Promise.all([
+        axios.get("/api/patent"),
+        axios.get("/api/outlets").catch(() => null),
+      ]);
       if (res.data?.success && res.data.data?.patients) {
-        const mapped: Patient[] = res.data.data.patients.map(apiPatientToPatient);
+        const seenPatients = new Set<string>();
+        const mapped: Patient[] = [];
+        res.data.data.patients.forEach((raw: any) => {
+          const pt = apiPatientToPatient(raw);
+          if (pt.id && !seenPatients.has(pt.id)) {
+            seenPatients.add(pt.id);
+            mapped.push(pt);
+          }
+        });
         setPatients(mapped);
+      }
+      if (outletsRes?.data?.success && outletsRes.data.data?.locations) {
+        const seenOutlets = new Set<string>();
+        const mappedOutlets: { id: string; name: string }[] = [];
+        outletsRes.data.data.locations.forEach((l: any) => {
+          if (l.id && !seenOutlets.has(l.id)) {
+            seenOutlets.add(l.id);
+            mappedOutlets.push({ id: l.id, name: l.name });
+          }
+        });
+        setOutletsList(mappedOutlets);
       }
     } catch (err) {
       console.error("Failed to load patients:", err);
@@ -401,9 +423,10 @@ export default function PatientsPage() {
         p.patientId.toLowerCase().includes(q);
       const matchesDoctor = doctorFilter === "All" || p.assignedDoctor === doctorFilter;
       const matchesStatus = statusFilter === "All" || p.status === statusFilter;
-      return matchesQuery && matchesDoctor && matchesStatus;
+      const matchesOutlet = outletFilter === "all" || p.locationId === outletFilter;
+      return matchesQuery && matchesDoctor && matchesStatus && matchesOutlet;
     });
-  }, [patients, query, doctorFilter, statusFilter]);
+  }, [patients, query, doctorFilter, statusFilter, outletFilter]);
 
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
@@ -432,7 +455,6 @@ export default function PatientsPage() {
 
   const [patientAppointments, setPatientAppointments] = useState<any[]>([]);
   const [loadingAppts, setLoadingAppts] = useState(false);
-const [outletFilter, setOutletFilter] = useState("all");
 
   async function openProfile(p: Patient) {
     setSelectedPatient(p);
@@ -484,11 +506,12 @@ const [outletFilter, setOutletFilter] = useState("all");
         onChange={(e) => setOutletFilter(e.target.value)}
         className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
       >
-        {OUTLETS.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.name}
-          </option>
-        ))}
+        <option value="all">All outlets</option>
+                  {outletsList.map((o, idx) => (
+                    <option key={`${o.id}-${idx}`} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
       </select>
     </div>
   </div>
@@ -531,6 +554,25 @@ const [outletFilter, setOutletFilter] = useState("all");
                 />
               </div>
 
+
+              <div className="relative">
+                <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+                <select
+                  value={outletFilter}
+                  onChange={(e) => {
+                    setOutletFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="appearance-none rounded-full border border-slate-900/10 bg-white pl-9 pr-8 py-2.5 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
+                >
+                  <option value="all">All Outlets</option>
+                  {outletsList.map((o, idx) => (
+                    <option key={`${o.id}-${idx}`} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div className="relative">
                 <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
@@ -624,7 +666,7 @@ const [outletFilter, setOutletFilter] = useState("all");
                     const isDeleting = deletingId === p.id;
                     return (
                       <tr
-                        key={p.id}
+                        key={`${p.id}-${i}`}
                         onClick={() => openProfile(p)}
                         className="cursor-pointer border-b border-slate-900/5 transition-colors last:border-b-0 hover:bg-[#7da3b3]/[0.04]"
                       >

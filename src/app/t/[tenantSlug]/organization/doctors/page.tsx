@@ -68,11 +68,7 @@ const SPECIALIZATION_MAP_FRONTEND: Record<string, string> = {
   "prosthodontics": "Prosthodontics",
 };
 
-const OUTLETS = [
-  { id: "all", name: "All outlets" },
-  { id: "outlet-1", name: "Chitwan Dental Home" },
-  { id: "outlet-2", name: "Chitwan Dental Home" },
-];
+const OUTLETS_DEFAULT = [{ id: "all", name: "All outlets" }];
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["Female", "Male", "Other"];
@@ -204,43 +200,69 @@ export default function DoctorsPage() {
   const [patients, setPatients] = useState<any[]>([]);
   const [patientsLoading, setPatientsLoading] = useState(false);
 
+  const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>(OUTLETS_DEFAULT);
+  const [outletFilter, setOutletFilter] = useState("all");
+
   async function loadData() {
     try {
       setLoading(true);
 
-      const servicesRes = await axios.get("/api/services");
+      const [servicesRes, outletsRes] = await Promise.all([
+        axios.get("/api/services").catch(() => null),
+        axios.get("/api/outlets").catch(() => null),
+      ]);
+
       let locId: string | null = null;
-      if (servicesRes.data?.success && servicesRes.data.data.services?.length > 0) {
+      if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
         locId = servicesRes.data.data.services[0].locationId;
         setLocationId(locId);
       }
 
+      if (outletsRes?.data?.success && outletsRes.data.data?.locations) {
+        const seenOutlets = new Set<string>();
+        const mappedOutlets: { id: string; name: string }[] = [];
+        outletsRes.data.data.locations.forEach((l: any) => {
+          if (l.id && !seenOutlets.has(l.id)) {
+            seenOutlets.add(l.id);
+            mappedOutlets.push({ id: l.id, name: l.name });
+          }
+        });
+        setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutlets]);
+      }
 
+      const activeLoc = outletFilter !== "all" ? outletFilter : locId;
       const res = await axios.get("/api/doctor", {
-        params: locId ? { locationId: locId } : undefined,
+        params: activeLoc ? { locationId: activeLoc } : undefined,
       });
       if (res.data?.success) {
         const dbDoctors = res.data.data?.doctors || [];
-        const mapped = dbDoctors.map((d: any, index: number) => ({
-          id: d.id,
-          name: d.name,
-          specialization: SPECIALIZATION_MAP_FRONTEND[d.specialization] || "General Dentistry",
-          experience: String(d.yearsOfExperience ?? 0),
-          email: d.email,
-          phone: d.phone || "",
-          qualification: d.qualification || "BDS",
-          rating: 5.0,
-          patients: d.patientsCheckedUp ?? 0,
-          imageUrl: d.photoUrl || undefined,
-          doctorId: `DOC-${1000 + index + 1}`,
-          age: d.age || "30",
-          bloodGroup: d.bloodGroup || "O+",
-          gender: d.gender || "Female",
-          dob: pickField(d, "dateOfBirth", "dob", "date_of_birth"),
-          address: pickField(d, "address", "location", "doctorAddress", "residenceAddress"),
-          education: d.education ? [d.education] : [],
-          experienceNotes: d.bio ? [d.bio] : [],
-        }));
+        const seen = new Set<string>();
+        const mapped: Doctor[] = [];
+        dbDoctors.forEach((d: any, index: number) => {
+          if (d.id && !seen.has(d.id)) {
+            seen.add(d.id);
+            mapped.push({
+              id: d.id,
+              name: d.name,
+              specialization: SPECIALIZATION_MAP_FRONTEND[d.specialization] || "General Dentistry",
+              experience: String(d.yearsOfExperience ?? 0),
+              email: d.email,
+              phone: d.phone || "",
+              qualification: d.qualification || "BDS",
+              rating: 5.0,
+              patients: d.patientsCheckedUp ?? 0,
+              imageUrl: d.photoUrl || undefined,
+              doctorId: `DOC-${1000 + index + 1}`,
+              age: d.age || "30",
+              bloodGroup: d.bloodGroup || "O+",
+              gender: d.gender || "Female",
+              dob: pickField(d, "dateOfBirth", "dob", "date_of_birth"),
+              address: pickField(d, "address", "location", "doctorAddress", "residenceAddress"),
+              education: d.education ? [d.education] : [],
+              experienceNotes: d.bio ? [d.bio] : [],
+            });
+          }
+        });
         setDoctors(mapped);
       }
     } catch (err) {
@@ -252,7 +274,7 @@ export default function DoctorsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [outletFilter]);
 
   useEffect(() => {
     if (!selectedDoctor) return;
@@ -408,7 +430,7 @@ export default function DoctorsPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedDoctors = filtered.slice(startIndex, startIndex + itemsPerPage);
-const [outletFilter, setOutletFilter] = useState("all");
+
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage);
@@ -621,11 +643,13 @@ const [outletFilter, setOutletFilter] = useState("all");
       <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
       <select
         value={outletFilter}
-        onChange={(e) => setOutletFilter(e.target.value)}
+        onChange={(e) => {
+          setOutletFilter(e.target.value);
+        }}
         className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
       >
-        {OUTLETS.map((o) => (
-          <option key={o.id} value={o.id}>
+        {outletsList.map((o, idx) => (
+          <option key={`${o.id}-${idx}`} value={o.id}>
             {o.name}
           </option>
         ))}
@@ -728,7 +752,7 @@ const [outletFilter, setOutletFilter] = useState("all");
 
                 return (
                   <div
-                    key={doc.id}
+                    key={`${doc.id}-${i}`}
                     onClick={() => openProfile(doc)}
                     className="group cursor-pointer rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#7da3b3]/30 hover:shadow-lg"
                   >

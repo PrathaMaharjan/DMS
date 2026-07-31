@@ -52,11 +52,10 @@ const STATUS_COLORS: Record<StaffStatus, string> = {
   Inactive: "bg-slate-100 text-slate-500",
 };
 
-const OUTLETS = [
-  { id: "all", name: "All outlets" },
-  { id: "outlet-1", name: "Chitwan Dental Home - Bharatpur" },
-  { id: "outlet-2", name: "Chitwan Dental Home - Narayangarh" },
-];
+import axios from "axios";
+import { useEffect } from "react";
+
+const OUTLETS_DEFAULT = [{ id: "all", name: "All outlets" }];
 
 type Staff = {
   id: string;
@@ -197,7 +196,24 @@ function formatDateLabel(dateStr?: string) {
 
 export default function StaffPage() {
   const [staff, setStaff] = useState<Staff[]>(SEED_STAFF);
+  const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>(OUTLETS_DEFAULT);
   const [outletFilter, setOutletFilter] = useState("all");
+
+  useEffect(() => {
+    axios.get("/api/outlets").then((res) => {
+      if (res.data?.success && res.data.data?.locations) {
+        const seenOutlets = new Set<string>();
+        const mapped: { id: string; name: string }[] = [];
+        res.data.data.locations.forEach((l: any) => {
+          if (l.id && !seenOutlets.has(l.id)) {
+            seenOutlets.add(l.id);
+            mapped.push({ id: l.id, name: l.name });
+          }
+        });
+        setOutletsList([{ id: "all", name: "All outlets" }, ...mapped]);
+      }
+    }).catch(() => null);
+  }, []);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"All" | Role>("All");
   const [currentPage, setCurrentPage] = useState(1);
@@ -345,8 +361,8 @@ export default function StaffPage() {
               onChange={(e) => setOutletFilter(e.target.value)}
               className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
             >
-              {OUTLETS.map((o) => (
-                <option key={o.id} value={o.id}>
+              {outletsList.map((o, idx) => (
+                <option key={`${o.id}-${idx}`} value={o.id}>
                   {o.name}
                 </option>
               ))}
@@ -426,7 +442,7 @@ export default function StaffPage() {
               const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
               return (
                 <div
-                  key={s.id}
+                  key={`${s.id}-${i}`}
                   onClick={() => openProfile(s)}
                   className="group cursor-pointer rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#7da3b3]/30 hover:shadow-lg"
                 >

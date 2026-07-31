@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
+import axios from "axios";
 import {
   Search,
   Plus,
@@ -26,6 +27,7 @@ import {
   BadgeCheck,
   Building,
   Globe,
+  Loader2,
 } from "lucide-react";
 
 const STATUSES = ["Active", "Inactive"] as const;
@@ -45,6 +47,7 @@ type Outlet = {
   phone: string;
   email: string;
   manager: string;
+  managerId?: string;
   status: OutletStatus;
   openingTime: string;
   closingTime: string;
@@ -52,53 +55,24 @@ type Outlet = {
   notes?: string;
 };
 
-const SEED_OUTLETS: Outlet[] = [
-  {
-    id: "1",
-    outletId: "OUT-1001",
-    name: "Chitwan Dental Home - Bharatpur",
-    address: "Narayangarh Road, Bharatpur-10",
-    city: "Chitwan",
-    phone: "+977 56-123456",
-    email: "bharatpur@chitwandental.com",
-    manager: "Sujata Karki",
-    status: "Active",
-    openingTime: "09:00",
-    closingTime: "18:00",
-    createdDate: "2023-01-15",
-    notes: "Main branch with full dental services.",
-  },
-  {
-    id: "2",
-    outletId: "OUT-1002",
-    name: "Chitwan Dental Home - Narayangarh",
-    address: "Ratna Chowk, Narayangarh-4",
-    city: "Chitwan",
-    phone: "+977 56-654321",
-    email: "narayangarh@chitwandental.com",
-    manager: "Dr. Anish Shrestha",
-    status: "Active",
-    openingTime: "10:00",
-    closingTime: "19:00",
-    createdDate: "2024-03-22",
-    notes: "Newer branch, focused on cosmetic dentistry.",
-  },
-  {
-    id: "3",
-    outletId: "OUT-1003",
-    name: "Chitwan Dental Home - Ratnanagar",
-    address: "Ratnanagar-2, Chitwan",
-    city: "Chitwan",
-    phone: "+977 56-789012",
-    email: "ratnanagar@chitwandental.com",
-    manager: "Bimala Thapa",
-    status: "Inactive",
-    openingTime: "09:00",
-    closingTime: "17:00",
-    createdDate: "2022-07-05",
-    notes: "Temporarily closed for renovation.",
-  },
-];
+function apiLocationToOutlet(loc: any): Outlet {
+  return {
+    id: loc.id,
+    outletId: `OUT-${String(loc.id).slice(0, 4).toUpperCase()}`,
+    name: loc.name || "Untitled Outlet",
+    address: loc.address || "",
+    city: loc.city || "",
+    phone: loc.phone || "",
+    email: loc.email || "",
+    manager: loc.managerName || "Unassigned",
+    managerId: loc.managerId || "",
+    status: loc.isActive !== false ? "Active" : "Inactive",
+    openingTime: loc.openingTime || "09:00",
+    closingTime: loc.closingTime || "18:00",
+    createdDate: loc.createdAt ? new Date(loc.createdAt).toISOString().slice(0, 10) : "",
+    notes: loc.notes || "",
+  };
+}
 
 const EMPTY_FORM = {
   name: "",
@@ -106,7 +80,7 @@ const EMPTY_FORM = {
   city: "",
   phone: "",
   email: "",
-  manager: "",
+  managerId: "",
   status: "Active" as OutletStatus,
   openingTime: "09:00",
   closingTime: "18:00",
@@ -128,7 +102,7 @@ function outletToForm(o: Outlet): FormState {
     city: o.city,
     phone: o.phone,
     email: o.email,
-    manager: o.manager,
+    managerId: o.managerId || "",
     status: o.status,
     openingTime: o.openingTime,
     closingTime: o.closingTime,
@@ -151,7 +125,8 @@ function formatDateLabel(dateStr?: string) {
 }
 
 export default function OutletsPage() {
-  const [outlets, setOutlets] = useState<Outlet[]>(SEED_OUTLETS);
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | OutletStatus>("All");
   const [currentPage, setCurrentPage] = useState(1);
@@ -164,6 +139,51 @@ export default function OutletsPage() {
 
   const [selectedOutlet, setSelectedOutlet] = useState<Outlet | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Outlet | null>(null);
+  const [managers, setManagers] = useState<{ id: string; name: string; email: string }[]>([]);
+
+  const loadOutlets = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get("/api/outlets");
+      if (res.data?.success && res.data.data?.locations) {
+        const seen = new Set<string>();
+        const mapped: Outlet[] = [];
+        res.data.data.locations.forEach((loc: any) => {
+          if (loc.id && !seen.has(loc.id)) {
+            seen.add(loc.id);
+            mapped.push(apiLocationToOutlet(loc));
+          }
+        });
+        setOutlets(mapped);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadManagers = useCallback(async () => {
+    try {
+      const res = await axios.get("/api/outlets/managers");
+      if (res.data?.success && res.data.data?.managers) {
+        const seen = new Set<string>();
+        const unique = res.data.data.managers.filter((m: any) => {
+          if (!m.id || seen.has(m.id)) return false;
+          seen.add(m.id);
+          return true;
+        });
+        setManagers(unique);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadOutlets();
+    loadManagers();
+  }, [loadOutlets, loadManagers]);
 
   function openAddModal() {
     setModalMode("add");
@@ -172,71 +192,111 @@ export default function OutletsPage() {
     setModalOpen(true);
   }
 
-  function openEditModal(o: Outlet) {
+  async function openEditModal(o: Outlet) {
     setModalMode("edit");
     setEditingId(o.id);
     setForm(outletToForm(o));
     setModalOpen(true);
+    try {
+      const res = await axios.get(`/api/outlets/${o.id}`);
+      if (res.data?.success && res.data.data?.location) {
+        const fetched = apiLocationToOutlet(res.data.data.location);
+        setForm(outletToForm(fetched));
+      }
+    } catch (err) {
+      console.error("Error fetching location details:", err);
+    }
   }
 
-  function openProfile(o: Outlet) {
+  async function openProfile(o: Outlet) {
     setSelectedOutlet(o);
+    try {
+      const res = await axios.get(`/api/outlets/${o.id}`);
+      if (res.data?.success && res.data.data?.location) {
+        const fetched = apiLocationToOutlet(res.data.data.location);
+        setSelectedOutlet(fetched);
+      }
+    } catch (err) {
+      console.error("Error fetching location details:", err);
+    }
   }
 
   function requestDelete(o: Outlet) {
     setDeleteTarget(o);
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!deleteTarget) return;
-    setOutlets((prev) => prev.filter((o) => o.id !== deleteTarget.id));
-    setSelectedOutlet((prev) => (prev?.id === deleteTarget.id ? null : prev));
-    setDeleteTarget(null);
+    try {
+      const res = await axios.delete(`/api/outlets/${deleteTarget.id}`);
+      if (res.data?.success === false) {
+        alert(res.data?.error || "Failed to delete outlet.");
+        return;
+      }
+      if (selectedOutlet?.id === deleteTarget.id) {
+        setSelectedOutlet(null);
+      }
+      await loadOutlets();
+    } catch (err: any) {
+      console.error("Delete error:", err);
+      alert(err.response?.data?.error || "Failed to delete outlet.");
+    } finally {
+      setDeleteTarget(null);
+    }
   }
 
-  function toggleStatus(o: Outlet) {
-  setOutlets((prev) =>
-    prev.map((x) =>
-      x.id === o.id
-        ? { ...x, status: x.status === "Active" ? "Inactive" : "Active" }
-        : x
-    )
-  );
-  setSelectedOutlet((prev) =>
-    prev && prev.id === o.id
-      ? { ...prev, status: prev.status === "Active" ? "Inactive" : "Active" }
-      : prev
-  );
-}
+  async function toggleStatus(o: Outlet) {
+    try {
+      await axios.patch(`/api/outlets/${o.id}`, {
+        isActive: o.status !== "Active",
+      });
+      await loadOutlets();
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    if (modalMode === "edit" && editingId) {
-      setOutlets((prev) =>
-        prev.map((o) => (o.id === editingId ? { ...o, ...form } : o))
-      );
-      setSelectedOutlet((prev) =>
-        prev && prev.id === editingId ? { ...prev, ...form } : prev
-      );
-    } else {
-      const newOutlet: Outlet = {
-        id: String(Date.now()),
-        outletId: `OUT-${1000 + outlets.length + 1}`,
-        createdDate: new Date().toISOString().slice(0, 10),
-        ...form,
+    try {
+      const payload = {
+        name: form.name,
+        address: form.address,
+        city: form.city,
+        phone: form.phone,
+        email: form.email,
+        openingTime: form.openingTime,
+        closingTime: form.closingTime,
+        notes: form.notes,
+        isActive: form.status === "Active",
+        managerId: form.managerId || null,
       };
-      setOutlets((prev) => [newOutlet, ...prev]);
-      setCurrentPage(1);
-    }
 
-    setForm(EMPTY_FORM);
-    setEditingId(null);
-    setModalOpen(false);
+      if (modalMode === "edit" && editingId) {
+        const res = await axios.patch(`/api/outlets/${editingId}`, payload);
+        if (res.data?.success === false) {
+          alert(res.data?.error || "Failed to update outlet.");
+          return;
+        }
+      } else {
+        const res = await axios.post("/api/outlets", payload);
+        if (res.data?.success === false) {
+          alert(res.data?.error || "Failed to add outlet.");
+          return;
+        }
+      }
+      await loadOutlets();
+      setForm(EMPTY_FORM);
+      setEditingId(null);
+      setModalOpen(false);
+    } catch (err: any) {
+      console.error("Submit outlet error:", err);
+      alert(err.response?.data?.error || "Failed to save outlet.");
+    }
   }
 
   const filtered = useMemo(() => {
@@ -357,27 +417,35 @@ export default function OutletsPage() {
 
           {/* Table */}
           <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-900/5">
-            <table className="w-full min-w-[860px] border-collapse text-left">
+            <table className="w-full min-w-[960px] border-collapse text-left">
               <thead>
                 <tr className="bg-slate-50 text-[0.75rem] font-medium uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-3 font-medium">Outlet</th>
                   <th className="px-5 py-3 font-medium">Address</th>
+                  <th className="px-5 py-3 font-medium">Phone</th>
                   <th className="px-5 py-3 font-medium">Manager</th>
                   <th className="px-5 py-3 font-medium">Hours</th>
+                  <th className="px-5 py-3 font-medium">Created Date</th>
                   <th className="px-5 py-3 font-medium">Status</th>
                   <th className="px-5 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-900/5 bg-white">
-                {paginatedOutlets.map((o) => (
+                {paginatedOutlets.map((o, idx) => (
                   <tr
-                    key={o.id}
+                    key={`${o.id}-${idx}`}
                     onClick={() => openProfile(o)}
                     className="cursor-pointer transition-colors hover:bg-[#7da3b3]/[0.06]"
                   >
                     <td className="px-5 py-4">
-                      <p className="text-[0.9rem] font-semibold text-slate-900">{o.name}</p>
-
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#7da3b3]/15 text-[#345263]">
+                          <Building2 className="h-4 w-4" strokeWidth={2} />
+                        </div>
+                        <div>
+                          <p className="text-[0.9rem] font-semibold text-slate-900">{o.name}</p>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-5 py-4 text-[0.85rem] text-slate-600">
                       <p className="flex items-center gap-1.5">
@@ -385,6 +453,12 @@ export default function OutletsPage() {
                         <span>
                           {o.address}, {o.city}
                         </span>
+                      </p>
+                    </td>
+                    <td className="px-5 py-4 text-[0.85rem] text-slate-600">
+                      <p className="flex items-center gap-1.5">
+                        <Phone className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                        {o.phone || "—"}
                       </p>
                     </td>
                     <td className="px-5 py-4 text-[0.85rem] text-slate-600">
@@ -397,6 +471,12 @@ export default function OutletsPage() {
                       <p className="flex items-center gap-1.5">
                         <Clock className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
                         {formatTimeLabel(o.openingTime)} - {formatTimeLabel(o.closingTime)}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4 text-[0.85rem] text-slate-600">
+                      <p className="flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                        {formatDateLabel(o.createdDate)}
                       </p>
                     </td>
                  <td className="px-5 py-4">
@@ -440,7 +520,7 @@ export default function OutletsPage() {
 
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="bg-white py-16 text-center text-slate-500">
+                    <td colSpan={8} className="bg-white py-16 text-center text-slate-500">
                       No outlets match your filters.
                     </td>
                   </tr>
@@ -598,15 +678,20 @@ export default function OutletsPage() {
                   <label className="block">
                     <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
                       <User className="h-3.5 w-3.5" strokeWidth={2} />
-                      Manager
+                      Branch Manager
                     </span>
-                    <input
-                      required
-                      type="text"
-                      value={form.manager}
-                      onChange={(e) => update("manager", e.target.value)}
+                    <select
+                      value={form.managerId}
+                      onChange={(e) => update("managerId", e.target.value)}
                       className={inputClass}
-                    />
+                    >
+                      <option value="">Select Branch Manager</option>
+                      {managers.map((m, idx) => (
+                        <option key={`${m.id}-${idx}`} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="block">
                     <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
@@ -652,18 +737,7 @@ export default function OutletsPage() {
                   </label>
                 </div>
 
-                <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
-                    Notes
-                  </span>
-                  <textarea
-                    rows={3}
-                    value={form.notes}
-                    onChange={(e) => update("notes", e.target.value)}
-                    className={textareaClass}
-                  />
-                </label>
+
 
                 <div className="flex items-center gap-3 pt-2">
                   <button
@@ -703,14 +777,24 @@ export default function OutletsPage() {
                 <ChevronLeft className="h-4 w-4" strokeWidth={2} />
                 Back
               </button>
-              <button
-                onClick={() => requestDelete(selectedOutlet)}
-                aria-label="Delete outlet"
-                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.85rem] font-medium text-rose-500 transition-colors hover:bg-rose-50"
-              >
-                <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
-                Delete
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openEditModal(selectedOutlet)}
+                  aria-label="Edit outlet"
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.85rem] font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                >
+                  <SquarePen className="h-3.5 w-3.5" strokeWidth={2} />
+                  Edit
+                </button>
+                <button
+                  onClick={() => requestDelete(selectedOutlet)}
+                  aria-label="Delete outlet"
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.85rem] font-medium text-rose-500 transition-colors hover:bg-rose-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                  Delete
+                </button>
+              </div>
             </div>
 
             <div className="px-6 py-6">

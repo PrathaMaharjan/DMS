@@ -11,6 +11,7 @@ export const createLocationSchema = z.object({
   closingTime: z.string().optional(),
   notes: z.string().optional(),
   isActive: z.boolean().optional(),
+  managerId: z.string().optional().nullable(),
 });
 
 export type CreateLocationInput = z.infer<typeof createLocationSchema>;

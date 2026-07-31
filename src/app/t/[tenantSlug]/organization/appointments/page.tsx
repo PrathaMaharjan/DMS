@@ -49,11 +49,7 @@ const STATUS_COLORS: Record<Status, string> = {
   Cancelled: "bg-rose-100 text-rose-700",
 };
 
-const OUTLETS = [
-  { id: "all", name: "All outlets" },
-  { id: "outlet-1", name: "Chitwan Dental" },
-  { id: "outlet-2", name: "Chitwan Dental Home" },
-];
+const OUTLETS_DEFAULT = [{ id: "all", name: "All outlets" }];
 
 interface DoctorOption {
   id: string;
@@ -201,7 +197,8 @@ export default function AppointmentsPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | Status>("All");
   const [dateFilter, setDateFilter] = useState<"All" | "Today" | "Upcoming">("All");
-const [outletFilter, setOutletFilter] = useState("all");
+  const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>(OUTLETS_DEFAULT);
+  const [outletFilter, setOutletFilter] = useState("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     patientName: "",
@@ -213,10 +210,8 @@ const [outletFilter, setOutletFilter] = useState("all");
     status: "Scheduled" as Status,
     notes: "",
   });
-
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [profileTab, setProfileTab] = useState<"detail" | "notes">("detail");
-
   const todayStr = getTodayStr();
 
   const loadData = useCallback(async () => {
@@ -224,6 +219,18 @@ const [outletFilter, setOutletFilter] = useState("all");
       setLoading(true);
       setErrorMsg(null);
 
+      const outletsRes = await axios.get("/api/outlets").catch(() => null);
+      if (outletsRes?.data?.success && outletsRes.data.data?.locations) {
+        const seenOutlets = new Set<string>();
+        const mappedOutlets: { id: string; name: string }[] = [];
+        outletsRes.data.data.locations.forEach((l: any) => {
+          if (l.id && !seenOutlets.has(l.id)) {
+            seenOutlets.add(l.id);
+            mappedOutlets.push({ id: l.id, name: l.name });
+          }
+        });
+        setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutlets]);
+      }
 
       let currentLocId = locationId;
       if (!currentLocId) {
@@ -258,7 +265,13 @@ const [outletFilter, setOutletFilter] = useState("all");
         doctorsRes = await axios.get("/api/doctor").catch(() => null);
       }
       if (doctorsRes?.data?.success && doctorsRes.data.data.doctors) {
-        docs = doctorsRes.data.data.doctors.map((d: any) => ({ id: d.id, name: d.name }));
+        const seenDocs = new Set<string>();
+        doctorsRes.data.data.doctors.forEach((d: any) => {
+          if (d.id && !seenDocs.has(d.id)) {
+            seenDocs.add(d.id);
+            docs.push({ id: d.id, name: d.name });
+          }
+        });
         setDoctorsList(docs);
       }
 
@@ -266,16 +279,20 @@ const [outletFilter, setOutletFilter] = useState("all");
       const treatmentsRes = await axios.get("/api/treatment").catch(() => null);
       let treatments: TreatmentOption[] = [];
       if (treatmentsRes?.data?.success && treatmentsRes.data.data.treatments) {
-        treatments = treatmentsRes.data.data.treatments.map((t: any) => ({
-          id: t.id,
-          name: t.name,
-        }));
+        const seenTreatments = new Set<string>();
+        treatmentsRes.data.data.treatments.forEach((t: any) => {
+          if (t.id && !seenTreatments.has(t.id)) {
+            seenTreatments.add(t.id);
+            treatments.push({ id: t.id, name: t.name });
+          }
+        });
         setTreatmentsList(treatments);
       }
 
 
+      const targetLocId = outletFilter !== "all" ? outletFilter : currentLocId;
       const apptsRes = await axios.get("/api/appoments", {
-        params: { locationId: currentLocId },
+        params: { locationId: targetLocId },
       });
 
       if (apptsRes.data?.success && apptsRes.data.data.appointments) {
@@ -322,7 +339,7 @@ const [outletFilter, setOutletFilter] = useState("all");
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, [loadData, outletFilter]);
 
   function openProfile(a: Appointment) {
     setSelected(a);
@@ -470,8 +487,8 @@ const [outletFilter, setOutletFilter] = useState("all");
         onChange={(e) => setOutletFilter(e.target.value)}
         className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
       >
-        {OUTLETS.map((o) => (
-          <option key={o.id} value={o.id}>
+        {outletsList.map((o, idx) => (
+          <option key={`${o.id}-${idx}`} value={o.id}>
             {o.name}
           </option>
         ))}
@@ -576,14 +593,14 @@ const [outletFilter, setOutletFilter] = useState("all");
               </div>
             ) : (
               <div className="divide-y divide-slate-900/5">
-                {filtered.map((a) => {
+                {filtered.map((a, idx) => {
                   const StatusIcon = STATUS_ICONS[a.status];
                   const statusColor = STATUS_COLORS[a.status];
                   const avatarColor = avatarColorFor(a.patientName);
 
                   return (
                     <div
-                      key={a.id}
+                      key={`${a.id}-${idx}`}
                       onClick={() => openProfile(a)}
                       className={`${LIST_GRID} group cursor-pointer flex-wrap gap-y-3 bg-white px-5 py-4 transition-colors hover:bg-[#7da3b3]/[0.06] max-sm:flex`}
                     >
@@ -723,8 +740,8 @@ const [outletFilter, setOutletFilter] = useState("all");
                       onChange={(e) => updateEdit("treatmentId", e.target.value)}
                       className={inputClass}
                     >
-                      {treatmentsList.map((t) => (
-                        <option key={t.id} value={t.id}>
+                      {treatmentsList.map((t, idx) => (
+                        <option key={`${t.id}-${idx}`} value={t.id}>
                           {t.name}
                         </option>
                       ))}
@@ -743,8 +760,8 @@ const [outletFilter, setOutletFilter] = useState("all");
                       <option value="" disabled>
                         Select doctor
                       </option>
-                      {doctorsList.map((d) => (
-                        <option key={d.id} value={d.id}>
+                      {doctorsList.map((d, idx) => (
+                        <option key={`${d.id}-${idx}`} value={d.id}>
                           {d.name}
                         </option>
                       ))}
