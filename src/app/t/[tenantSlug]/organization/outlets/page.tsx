@@ -728,6 +728,7 @@ export default function OutletsPage() {
                   >
                     {selectedOutlet.status}
                   </button>
+                
 
                   <div className="mt-3 space-y-1 text-[0.85rem] text-slate-600">
                     <div className="flex items-center gap-1.5">
