@@ -51,7 +51,15 @@ export const locations = pgTable(
     orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
+    name: text("name").notNull().default("Main Branch"),
+    address: text("address"),
+    city: text("city"),
+    phone: text("phone"),
+    email: text("email"),
+    openingTime: time("opening_time"),
+    closingTime: time("closing_time"),
+    isActive: boolean("is_active").notNull().default(true),
+    notes: text("notes"),
     timezone: text("timezone").notNull().default("UTC"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
@@ -83,11 +91,16 @@ export const users = pgTable(
   },
   (table) => ({
     orgIdx: index("users_org_id_idx").on(table.orgId),
-  })
+  }),
 );
 
 // src/db/schema/tenancy.ts
-export const staffRoleEnum = pgEnum("staff_role", ["owner", "manager", "clinical", "front_office"]);
+export const staffRoleEnum = pgEnum("staff_role", [
+  "owner",
+  "manager",
+  "clinical",
+  "front_office",
+]);
 
 // owner        - full access: staff, settings, billing, reports, all patients at their locations
 // clinical     - dentist + hygienist merged. Note: in most places a hygienist legally
@@ -161,9 +174,13 @@ export const providerProfiles = pgTable("provider_profiles", {
 export const providerSchedules = pgTable(
   "provider_schedules",
   {
-   id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    locationId: uuid("location_id").notNull().references(() => locations.id, { onDelete: "cascade" }),
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => locations.id, { onDelete: "cascade" }),
     dayOfWeek: integer("day_of_week").notNull(),
     // Nullable now - a day marked isOnLeave has no real hours to store.
     startTime: time("start_time"),
