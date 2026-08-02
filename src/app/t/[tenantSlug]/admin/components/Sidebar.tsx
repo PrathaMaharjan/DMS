@@ -10,6 +10,7 @@ import {
   Users,
   Settings,
   LogOut,
+  Wallet,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { label: "Doctors", href: "/doctors", icon: Stethoscope },
   { label: "Patients", href: "/patients", icon: Users },
   { label: "Treatments", href: "/treatments", icon: CalendarDays },
+  { label: "Billing", href: "/billing", icon: Wallet },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 

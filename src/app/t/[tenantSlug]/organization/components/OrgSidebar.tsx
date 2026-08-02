@@ -13,6 +13,7 @@ import {
   LogOut,
     CalendarDays,
     Stethoscope,
+    Wallet,
 } from "lucide-react";
 
 const ORG_NAV_ITEMS = [
@@ -24,6 +25,7 @@ const ORG_NAV_ITEMS = [
   { label: "Appointments", href: "/appointments", icon: CalendarDays },
     { label: "Patients", href: "/patients", icon:  Users  },
     { label: "Treatments", href: "/treatments", icon: Briefcase },
+    { label: "Billing", href: "/billing", icon: Wallet },
       { label: "Analytics & Reports", href: "/analytics", icon: TrendingUp },
   { label: " Settings", href: "/settings", icon: Settings },
 ];

@@ -43,7 +43,14 @@ import {
   Percent,
 } from "lucide-react";
 
-
+/* ------------------------------------------------------------------ */
+/*  HARDCODED SEED DATA                                                */
+/*  TODO: everything in this block is a placeholder. Once a manager-   */
+/*  level billing/ledger aggregation endpoint exists (rolling up the   */
+/*  same per-patient ledger entries used in BillingPage.tsx across     */
+/*  outlets and doctors), replace this block with a fetch + the same   */
+/*  computeTotals/computeBalance-style aggregation, scoped by outlet.  */
+/* ------------------------------------------------------------------ */
 
 const OUTLETS = [
   { id: "all", name: "All outlets" },
@@ -62,7 +69,7 @@ const METHOD_ICONS: Record<string, typeof Banknote> = {
   Cash: Banknote,
   Card: CreditCard,
   Wallet: Smartphone,
- 
+
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -124,20 +131,19 @@ type OutstandingPatient = {
   name: string;
   phone: string;
   outletId: string;
-  chargedCents: number;
-  paidCents: number;
+  amountDueCents: number;
   lastVisit: string; // display-ready label
 };
 
 const TOP_OUTSTANDING_PATIENTS: OutstandingPatient[] = [
-  { id: "op1", name: "Rita Adhikari", phone: "+977 981-1112223", outletId: "outlet-1", chargedCents: 650000_00, paidCents: 400000_00, lastVisit: "Jul 28, 2026" },
-  { id: "op2", name: "Anjali Poudel", phone: "+977 981-5556667", outletId: "outlet-1", chargedCents: 1500000_00, paidCents: 650000_00, lastVisit: "Aug 1, 2026" },
-  { id: "op3", name: "Kiran Basnet", phone: "+977 981-7778889", outletId: "outlet-1", chargedCents: 150000_00, paidCents: 150000_00, lastVisit: "Aug 2, 2026" },
-  { id: "op4", name: "Sabin Lama", phone: "+977 982-2223334", outletId: "outlet-1", chargedCents: 900000_00, paidCents: 0, lastVisit: "Jul 25, 2026" },
-  { id: "op5", name: "Namrata Sharma", phone: "+977 982-4445556", outletId: "outlet-1", chargedCents: 250000_00, paidCents: 0, lastVisit: "Jul 30, 2026" },
-  { id: "op6", name: "Bishal Karki", phone: "+977 984-1122334", outletId: "outlet-2", chargedCents: 360000_00, paidCents: 0, lastVisit: "Jul 27, 2026" },
-  { id: "op7", name: "Sarita Gurung", phone: "+977 984-5566778", outletId: "outlet-2", chargedCents: 145000_00, paidCents: 0, lastVisit: "Aug 1, 2026" },
-  { id: "op8", name: "Deepak Rai", phone: "+977 985-8899001", outletId: "outlet-2", chargedCents: 220000_00, paidCents: 0, lastVisit: "Jul 29, 2026" },
+  { id: "op1", name: "Rita Adhikari", phone: "+977 981-1112223", outletId: "outlet-1", amountDueCents: 250000_00, lastVisit: "Jul 28, 2026" },
+  { id: "op2", name: "Anjali Poudel", phone: "+977 981-5556667", outletId: "outlet-1", amountDueCents: 850000_00, lastVisit: "Aug 1, 2026" },
+  { id: "op3", name: "Kiran Basnet", phone: "+977 981-7778889", outletId: "outlet-1", amountDueCents: 250000_00, lastVisit: "Aug 2, 2026" },
+  { id: "op4", name: "Sabin Lama", phone: "+977 982-2223334", outletId: "outlet-1", amountDueCents: 410000_00, lastVisit: "Jul 25, 2026" },
+  { id: "op5", name: "Namrata Sharma", phone: "+977 982-4445556", outletId: "outlet-1", amountDueCents: 190000_00, lastVisit: "Jul 30, 2026" },
+  { id: "op6", name: "Bishal Karki", phone: "+977 984-1122334", outletId: "outlet-2", amountDueCents: 360000_00, lastVisit: "Jul 27, 2026" },
+  { id: "op7", name: "Sarita Gurung", phone: "+977 984-5566778", outletId: "outlet-2", amountDueCents: 145000_00, lastVisit: "Aug 1, 2026" },
+  { id: "op8", name: "Deepak Rai", phone: "+977 985-8899001", outletId: "outlet-2", amountDueCents: 220000_00, lastVisit: "Jul 29, 2026" },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -170,7 +176,7 @@ const AVATAR_COLORS = [
   "bg-teal-100 text-teal-700",
 ];
 
-const LIST_GRID = "grid grid-cols-[1.8fr_1.1fr_1fr_0.9fr_0.9fr_0.9fr_1fr] items-center gap-4";
+const LIST_GRID = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1.1fr] items-center gap-4";
 
 export default function ManagerBillingPage() {
   const [outletFilter, setOutletFilter] = useState("all");
@@ -232,7 +238,7 @@ export default function ManagerBillingPage() {
       const matchesQuery =
         !q || p.name.toLowerCase().includes(q) || p.phone.toLowerCase().includes(q);
       return matchesOutlet && matchesQuery;
-    }).sort((a, b) => (b.chargedCents - b.paidCents) - (a.chargedCents - a.paidCents));
+    }).sort((a, b) => b.amountDueCents - a.amountDueCents);
   }, [outletFilter, query]);
 
   const totalPages = Math.max(1, Math.ceil(filteredOutstanding.length / itemsPerPage));
@@ -277,15 +283,50 @@ export default function ManagerBillingPage() {
         <Activity className="absolute right-[32%] bottom-[6%] h-24 w-24 text-[#7da3b3]/[0.07]" strokeWidth={1} />
       </div>
 
-      <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
-          Billing Overview
-        </h1>
+<div className="sticky top-0 z-20 bg-white px-6 py-6 lg:px-10">
+  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 
+    {/* Left side */}
+    <div>
+      <h1 className="text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
+        Billing Overview
+      </h1>
+
+    
+    </div>
+
+    {/* Right side */}
+    <div className="flex flex-col items-end gap-2">
+      <div className="relative">
+        <Building2
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+          strokeWidth={2}
+        />
+
+        <select
+          value={outletFilter}
+          onChange={(e) => {
+            setOutletFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="appearance-none rounded-full border border-slate-200 bg-white py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#7da3b3]"
+        >
+          {OUTLETS.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+        </select>
       </div>
 
+ 
+    </div>
+
+  </div>
+</div>
+
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
-    
+      
 
         {/* Stats */}
         <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -400,33 +441,84 @@ export default function ManagerBillingPage() {
           </div>
         </div>
 
-        {/* Revenue by doctor */}
-        <div className="mt-8 rounded-2xl border border-slate-900/5 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#345263]/10 text-[#345263]">
-              <Stethoscope className="h-4 w-4" strokeWidth={2} />
-            </span>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Revenue by Doctor
-            </h3>
+        {/* Outlet performance + Doctor revenue row */}
+        <div className="mt-8 grid gap-4 lg:grid-cols-3">
+          {/* Outlet performance table — only meaningful when comparing outlets */}
+          <div className="lg:col-span-2 rounded-2xl border border-slate-900/5 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-slate-100 p-5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#7da3b3]/10 text-[#7da3b3]">
+                <Building2 className="h-4 w-4" strokeWidth={2} />
+              </span>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Outlet Performance
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] border-collapse text-left">
+                <thead>
+                  <tr className="bg-slate-50 text-[0.72rem] font-medium uppercase tracking-wide text-slate-500">
+                    <th className="px-5 py-3 font-medium">Outlet</th>
+                    <th className="px-5 py-3 font-medium">Charged</th>
+                    <th className="px-5 py-3 font-medium">Collected</th>
+                    <th className="px-5 py-3 font-medium">Outstanding</th>
+                    <th className="px-5 py-3 font-medium">Collection Rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-900/5">
+                  {OUTLET_BILLING.map((o) => {
+                    const outstandingCents = o.chargedCents - o.collectedCents;
+                    const rate = o.chargedCents > 0 ? (o.collectedCents / o.chargedCents) * 100 : 0;
+                    return (
+                      <tr key={o.outletId} className="text-[0.85rem]">
+                        <td className="px-5 py-4 font-semibold text-slate-800">{o.outletName}</td>
+                        <td className="px-5 py-4 text-slate-700">NPR {centsToDisplay(o.chargedCents)}</td>
+                        <td className="px-5 py-4 text-slate-700">NPR {centsToDisplay(o.collectedCents)}</td>
+                        <td className="px-5 py-4">
+                          <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-1 text-[0.75rem] font-medium text-rose-700">
+                            NPR {centsToDisplay(outstandingCents)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[0.75rem] font-medium text-emerald-700">
+                            {rate.toFixed(1)}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-            {doctorRevenue.map((d) => (
-              <div key={d.name}>
-                <div className="mb-1 flex items-center justify-between text-xs">
-                  <span className="truncate pr-2 font-semibold text-slate-700">{d.name}</span>
-                  <span className="shrink-0 font-medium text-slate-400">
-                    NPR {centsToDisplay(d.revenueCents)}
-                  </span>
+
+          {/* Revenue by doctor */}
+          <div className="rounded-2xl border border-slate-900/5 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#345263]/10 text-[#345263]">
+                <Stethoscope className="h-4 w-4" strokeWidth={2} />
+              </span>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Revenue by Doctor
+              </h3>
+            </div>
+            <div className="space-y-4">
+              {doctorRevenue.map((d) => (
+                <div key={d.name}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="truncate pr-2 font-semibold text-slate-700">{d.name}</span>
+                    <span className="shrink-0 font-medium text-slate-400">
+                      NPR {centsToDisplay(d.revenueCents)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-[#7da3b3] transition-all"
+                      style={{ width: `${Math.max(d.pct, 8)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-[#7da3b3] transition-all"
-                    style={{ width: `${Math.max(d.pct, 8)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
@@ -462,17 +554,14 @@ export default function ManagerBillingPage() {
               <span>Phone</span>
               <span>Outlet</span>
               <span>Last Visit</span>
-              <span>Charged</span>
-              <span>Paid</span>
-              <span>Balance</span>
+              <span>Amount Due</span>
+              <span className="text-right">Status</span>
             </div>
 
             <div className="divide-y divide-slate-900/5">
               {paginatedOutstanding.map((p, i) => {
                 const outlet = OUTLET_BILLING.find((o) => o.outletId === p.outletId);
                 const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
-                const balanceCents = p.chargedCents - p.paidCents;
-                const isSettled = balanceCents <= 0;
                 return (
                   <div
                     key={p.id}
@@ -494,23 +583,12 @@ export default function ManagerBillingPage() {
                       {outlet?.outletName.replace("Chitwan Dental Home - ", "") ?? "—"}
                     </div>
                     <div className="min-w-[6rem] text-[0.85rem] text-slate-600">{p.lastVisit}</div>
-                    <div className="min-w-[6rem] text-[0.85rem] text-slate-700">
-                      NPR {centsToDisplay(p.chargedCents)}
+                    <div className="text-[0.85rem] font-semibold text-slate-800">
+                      NPR {centsToDisplay(p.amountDueCents)}
                     </div>
-                    <div className="min-w-[6rem] text-[0.85rem] text-slate-700">
-                      NPR {centsToDisplay(p.paidCents)}
-                    </div>
-                    <div className="min-w-[7rem]">
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.72rem] font-medium ${
-                          isSettled
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-rose-100 text-rose-700"
-                        }`}
-                      >
-                        {isSettled
-                          ? "NPR 0 settled"
-                          : `NPR ${centsToDisplay(balanceCents)} due`}
+                    <div className="flex justify-end">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-1 text-[0.72rem] font-medium text-rose-700">
+                        Due
                       </span>
                     </div>
                   </div>

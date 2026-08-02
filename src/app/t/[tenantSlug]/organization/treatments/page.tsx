@@ -184,8 +184,16 @@ export default function TreatmentsPage() {
               sessions: String(t.sessions || 1),
               recoveryTime: t.recoveryTime || "",
               anesthesia: t.anesthesia || "None",
-              procedureSteps: t.procedureSteps ? t.procedureSteps.split("\n") : [],
-              aftercare: t.aftercareInstructions ? t.aftercareInstructions.split("\n") : [],
+              procedureSteps: Array.isArray(t.procedureSteps)
+                ? t.procedureSteps
+                : typeof t.procedureSteps === "string"
+                ? t.procedureSteps.split("\n")
+                : [],
+              aftercare: Array.isArray(t.aftercareInstructions)
+                ? t.aftercareInstructions
+                : typeof t.aftercareInstructions === "string"
+                ? t.aftercareInstructions.split("\n")
+                : [],
             });
           }
         });
