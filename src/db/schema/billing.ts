@@ -17,6 +17,12 @@ export const ledgerEntryTypeEnum = pgEnum("ledger_entry_type", [
   "adjustment",
 ]);
 
+export const paymentMethodEnum = pgEnum("payment_method", [
+  "cash",
+  "card",
+  "online",
+]);
+
 export const ledgerEntries = pgTable(
   "ledger_entries",
   {
@@ -30,6 +36,7 @@ export const ledgerEntries = pgTable(
     patientId: uuid("patient_id")
       .notNull()
       .references(() => patients.id, { onDelete: "cascade" }),
+    paymentMethod: paymentMethodEnum("payment_method"),
     appointmentId: uuid("appointment_id").references(() => appointments.id, {
       onDelete: "cascade",
     }),
