@@ -166,6 +166,8 @@ export type GetStaffListResult =
           role: userLocationRoles.role,
           locationId: userLocationRoles.locationId,
           photoUrl: users.photoUrl,
+          address : users.address,
+          createdAt : users.createdAt,
           shift: users.shift,
           isActive: users.isActive,
         })
