@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
-import { Calendar, Users, Eye, LogOut, Settings, LayoutDashboard } from "lucide-react";
+import { Calendar, Users, Eye, LogOut, Settings, LayoutDashboard, Wallet } from "lucide-react";
 
-export type FrontDeskTabType = "dashboard" | "appointments" | "patients" | "availability" | "settings";
+export type FrontDeskTabType = "dashboard" | "appointments" | "patients" | "availability" | "billing" |"settings";
 
 interface FrontDeskHeaderProps {
   activeTab: FrontDeskTabType;
@@ -147,6 +147,17 @@ export default function FrontDeskHeader({
         >
           <Eye className="h-3.5 w-3.5" />
           Schedules
+        </button>
+
+        <button
+          onClick={() => setActiveTab("billing")}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "billing"
+              ? "bg-[#7da3b3] text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            }`}
+        >
+          <Wallet className="h-3.5 w-3.5" />
+          Billing
         </button>
 
         <button

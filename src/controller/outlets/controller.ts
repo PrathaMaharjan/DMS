@@ -70,7 +70,7 @@ export async function createLocation(
         timezone: data.timezone,
         openingTime: data.openingTime,
         closingTime: data.closingTime,
-        notes: data.notes,
+
         isActive: data.isActive,
       })
       .returning();

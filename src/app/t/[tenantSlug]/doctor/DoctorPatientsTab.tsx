@@ -16,6 +16,8 @@ import {
   ChevronDown,
   ChevronLeft,
   Loader2,
+  Wallet,
+  CheckCircle2,
 } from "lucide-react";
 
 export interface TreatmentRecord {
@@ -45,6 +47,29 @@ export interface TreatedPatient {
   lastVisit: string;
   totalVisits: number;
   history: TreatmentRecord[];
+  // TODO: hardcoded placeholder until billing/ledger data is exposed via API.
+  // Replace getHardcodedBalanceDueCents() with the real balanceDueCents
+  // value returned from the backend once that join/column exists.
+  balanceDueCents: number;
+}
+
+// TEMPORARY: deterministic fake balance so the UI has something to show.
+// Same patient always gets the same demo value across re-renders.
+function getHardcodedBalanceDueCents(id: string): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) % 997;
+  }
+  // ~1/3 of patients show as "Settled", the rest show a fake due amount.
+  if (hash % 3 === 0) return 0;
+  return 50000 + (hash % 20) * 10000; // e.g. NPR 500 - 2400
+}
+
+function centsToDisplay(cents: number) {
+  return (cents / 100).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 export default function DoctorPatientsTab() {
@@ -189,6 +214,7 @@ export default function DoctorPatientsTab() {
             lastVisit: lastVisitDate,
             totalVisits: Math.max(1, historyRecords.length),
             history: historyRecords,
+            balanceDueCents: getHardcodedBalanceDueCents(p.id),
           };
         });
 
@@ -398,7 +424,7 @@ export default function DoctorPatientsTab() {
 
             <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-3 text-[0.7rem] font-bold uppercase tracking-wider text-slate-500">
               <span>Patient Directory</span>
-              <span>Last Visit / Service</span>
+              <span>Last Visit / Payment</span>
             </div>
 
 
@@ -453,6 +479,17 @@ export default function DoctorPatientsTab() {
                         <span className="text-[0.62rem] text-slate-400 flex items-center gap-1">
                           <Calendar className="h-2.5 w-2.5" /> {patient.lastVisit}
                         </span>
+                        {patient.balanceDueCents > 0 ? (
+                          <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 font-semibold px-2 py-0.5 rounded border border-rose-200/60 text-[0.62rem]">
+                            <Wallet className="h-2.5 w-2.5 text-rose-500 shrink-0" />
+                            NPR {centsToDisplay(patient.balanceDueCents)} due
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded border border-emerald-200/60 text-[0.62rem]">
+                            <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600 shrink-0" />
+                            Settled
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -523,7 +560,17 @@ export default function DoctorPatientsTab() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-base font-bold text-slate-900">{selectedPatient.name}</h3>
-
+                      {selectedPatient.balanceDueCents > 0 ? (
+                        <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 font-semibold px-2 py-0.5 rounded border border-rose-200/60 text-[0.68rem]">
+                          <Wallet className="h-3 w-3 text-rose-500 shrink-0" />
+                          NPR {centsToDisplay(selectedPatient.balanceDueCents)} due
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded border border-emerald-200/60 text-[0.68rem]">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                          Settled
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
                       {selectedPatient.gender}, {selectedPatient.age} yrs • Phone:{" "}

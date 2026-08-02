@@ -8,8 +8,9 @@ import PatientsTab from "./PatientsTab";
 import DoctorAvailabilityTab from "./DoctorAvailabilityTab";
 import SettingsTab from "./SettingsTab";
 import DashboardTab from "./DashboardTab";
+import BillingTab from "./BillingTab";
 
-type FrontDeskTabType = "dashboard" | "appointments" | "patients" | "availability" | "settings";
+type FrontDeskTabType = "dashboard" | "appointments" | "patients" | "availability" | "billing" | "settings";
 
 export default function FrontDeskPage() {
   const [activeTab, setActiveTabState] = useState<FrontDeskTabType>("dashboard");
@@ -18,7 +19,7 @@ export default function FrontDeskPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const urlTab = params.get("tab") as FrontDeskTabType;
-      const validTabs: FrontDeskTabType[] = ["dashboard", "appointments", "patients", "availability", "settings"];
+      const validTabs: FrontDeskTabType[] = ["dashboard", "appointments", "patients", "availability", "billing", "settings"];
       if (urlTab && validTabs.includes(urlTab)) {
         setActiveTabState(urlTab);
       } else {
@@ -52,6 +53,7 @@ export default function FrontDeskPage() {
           {activeTab === "appointments" && <AppointmentsTab />}
           {activeTab === "patients" && <PatientsTab />}
           {activeTab === "availability" && <DoctorAvailabilityTab />}
+          {activeTab === "billing" && <BillingTab />}
           {activeTab === "settings" && <SettingsTab />}
         </div>
       </div>

@@ -34,17 +34,19 @@ import {
   ImagePlus,
 } from "lucide-react";
 
-const ROLES = ["Front Desk", "Doctor"] as const;
-type Role = (typeof ROLES)[number];
+const ROLES = ["Front Desk", "Manager"] as const;
+type Role = string;
 
 const SHIFTS = ["Morning", "Afternoon", "Evening", "Full Day"];
 const STATUSES = ["Active", "Inactive"] as const;
 type StaffStatus = (typeof STATUSES)[number];
 const GENDERS = ["Female", "Male", "Other"];
 
-const ROLE_COLORS: Record<Role, string> = {
+const ROLE_COLORS: Record<string, string> = {
   "Front Desk": "bg-amber-100 text-amber-700",
+  Manager: "bg-purple-100 text-purple-700",
   Doctor: "bg-sky-100 text-sky-700",
+  Clinical: "bg-sky-100 text-sky-700",
 };
 
 const STATUS_COLORS: Record<StaffStatus, string> = {
@@ -69,7 +71,6 @@ type Staff = {
   joinDate: string;
   gender?: string;
   address?: string;
-  notes?: string;
   imageUrl?: string;
 };
 
@@ -86,21 +87,6 @@ const SEED_STAFF: Staff[] = [
     joinDate: "2024-02-10",
     gender: "Female",
     address: "Bharatpur-10, Chitwan",
-    notes: "Handles walk-ins and appointment scheduling.",
-  },
-  {
-    id: "2",
-    staffId: "STF-1002",
-    name: "Dr. Anish Shrestha",
-    role: "Doctor",
-    email: "anish.shrestha@chitwandental.com",
-    phone: "+977 981-2345672",
-    shift: "Full Day",
-    status: "Active",
-    joinDate: "2023-08-01",
-    gender: "Male",
-    address: "Narayangarh-4, Chitwan",
-    notes: "General dentistry, oversees junior staff.",
   },
   {
     id: "3",
@@ -114,21 +100,6 @@ const SEED_STAFF: Staff[] = [
     joinDate: "2024-05-19",
     gender: "Female",
     address: "Bharatpur-6, Chitwan",
-    notes: "Manages billing and patient records.",
-  },
-  {
-    id: "4",
-    staffId: "STF-1004",
-    name: "Dr. Priya Gurung",
-    role: "Doctor",
-    email: "priya.gurung@chitwandental.com",
-    phone: "+977 981-2345674",
-    shift: "Afternoon",
-    status: "Inactive",
-    joinDate: "2022-11-23",
-    gender: "Female",
-    address: "Bharatpur-2, Chitwan",
-    notes: "On leave until further notice.",
   },
 ];
 
@@ -142,16 +113,12 @@ const EMPTY_FORM = {
   joinDate: "",
   gender: GENDERS[0],
   address: "",
-  notes: "",
   imageUrl: "",
 };
 
 type FormState = typeof EMPTY_FORM;
 
 const inputClass =
-  "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
-
-const textareaClass =
   "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
 
 function staffToForm(s: Staff): FormState {
@@ -165,7 +132,6 @@ function staffToForm(s: Staff): FormState {
     joinDate: s.joinDate,
     gender: s.gender ?? GENDERS[0],
     address: s.address ?? "",
-    notes: s.notes ?? "",
     imageUrl: s.imageUrl ?? "",
   };
 }
@@ -199,6 +165,56 @@ export default function StaffPage() {
   const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>(OUTLETS_DEFAULT);
   const [outletFilter, setOutletFilter] = useState("all");
 
+  const fetchStaff = async () => {
+    try {
+      const params: Record<string, string> = {};
+      if (outletFilter !== "all") {
+        params.locationId = outletFilter;
+      }
+      const res = await axios.get("/api/staff", { params });
+      if (res.data?.success && Array.isArray(res.data.data?.staff)) {
+        const rawStaff = res.data.data.staff;
+        // Filter out doctors from staff list
+        const nonDoctorStaff = rawStaff.filter((s: any) => {
+          const roleLower = (s.role || "").toLowerCase();
+          const nameLower = (s.name || "").toLowerCase();
+          return (
+            roleLower !== "doctor" &&
+            roleLower !== "clinical" &&
+            !roleLower.includes("doctor") &&
+            !nameLower.startsWith("dr.")
+          );
+        });
+
+        const mapped: Staff[] = nonDoctorStaff.map((s: any, idx: number) => {
+          let roleDisplay = "Front Desk";
+          if (s.role === "manager") roleDisplay = "Manager";
+          else if (s.role === "front_office") roleDisplay = "Front Desk";
+          else if (s.role) roleDisplay = s.role;
+
+          return {
+            id: s.id || String(idx),
+            staffId: `STF-${1000 + idx + 1}`,
+            name: s.name,
+            role: roleDisplay,
+            email: s.email || "",
+            phone: s.phone || "",
+            shift: s.shift ? s.shift.charAt(0).toUpperCase() + s.shift.slice(1) : "Morning",
+            status: s.isActive !== false ? "Active" : "Inactive",
+            joinDate: s.joinDate || "",
+            gender: s.gender || "Female",
+            address: s.address || "",
+            imageUrl: s.photoUrl || undefined,
+          };
+        });
+
+        setStaff(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to fetch staff list:", err);
+    }
+  };
+
   useEffect(() => {
     axios.get("/api/outlets").then((res) => {
       if (res.data?.success && res.data.data?.locations) {
@@ -214,6 +230,11 @@ export default function StaffPage() {
       }
     }).catch(() => null);
   }, []);
+
+  useEffect(() => {
+    fetchStaff();
+  }, [outletFilter]);
+
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"All" | Role>("All");
   const [currentPage, setCurrentPage] = useState(1);
@@ -225,7 +246,6 @@ export default function StaffPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
-  const [profileTab, setProfileTab] = useState<"detail" | "notes">("detail");
 
   const [deleteTarget, setDeleteTarget] = useState<Staff | null>(null);
 
@@ -245,15 +265,19 @@ export default function StaffPage() {
 
   function openProfile(s: Staff) {
     setSelectedStaff(s);
-    setProfileTab("detail");
   }
 
   function requestDelete(s: Staff) {
     setDeleteTarget(s);
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!deleteTarget) return;
+    try {
+      await axios.delete(`/api/staff/${deleteTarget.id}`);
+    } catch (err) {
+      console.error("Failed to delete staff:", err);
+    }
     setStaff((prev) => prev.filter((s) => s.id !== deleteTarget.id));
     setSelectedStaff((prev) => (prev?.id === deleteTarget.id ? null : prev));
     setDeleteTarget(null);
@@ -270,10 +294,28 @@ export default function StaffPage() {
     update("imageUrl", url);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     if (modalMode === "edit" && editingId) {
+      try {
+        let roleVal = "front_office";
+        if (form.role === "Manager") roleVal = "manager";
+
+        await axios.patch(`/api/staff/${editingId}`, {
+          name: form.name,
+          role: roleVal,
+          email: form.email,
+          phone: form.phone,
+          shift: form.shift.toLowerCase(),
+          gender: form.gender,
+          address: form.address,
+          isActive: form.status === "Active",
+        });
+        fetchStaff();
+      } catch (err) {
+        console.error("Failed to update staff:", err);
+      }
       setStaff((prev) =>
         prev.map((s) =>
           s.id === editingId
@@ -285,12 +327,36 @@ export default function StaffPage() {
         prev && prev.id === editingId ? { ...prev, ...form } : prev
       );
     } else {
-      const newStaff: Staff = {
-        id: String(Date.now()),
-        staffId: `STF-${1000 + staff.length + 1}`,
-        ...form,
-      };
-      setStaff((prev) => [newStaff, ...prev]);
+      try {
+        let roleVal = "front_office";
+        if (form.role === "Manager") roleVal = "manager";
+
+        const defaultLocationId = outletsList.find((o) => o.id !== "all")?.id;
+        if (defaultLocationId) {
+          await axios.post("/api/staff", {
+            locationId: defaultLocationId,
+            name: form.name,
+            role: roleVal,
+            email: form.email,
+            phone: form.phone,
+            password: "Password@123",
+            shift: form.shift.toLowerCase(),
+            gender: form.gender,
+            address: form.address,
+            isActive: form.status === "Active",
+          });
+          fetchStaff();
+        } else {
+          const newStaff: Staff = {
+            id: String(Date.now()),
+            staffId: `STF-${1000 + staff.length + 1}`,
+            ...form,
+          };
+          setStaff((prev) => [newStaff, ...prev]);
+        }
+      } catch (err) {
+        console.error("Failed to create staff:", err);
+      }
       setCurrentPage(1);
     }
 
@@ -324,11 +390,11 @@ export default function StaffPage() {
 
   const stats = useMemo(() => {
     const active = staff.filter((s) => s.status === "Active").length;
-    const doctors = staff.filter((s) => s.role === "Doctor").length;
+    const frontDesk = staff.filter((s) => s.role === "Front Desk").length;
     return [
       { icon: Users, label: "Total Staff", value: String(staff.length) },
       { icon: UserCheck, label: "Active Staff", value: String(active) },
-      { icon: Stethoscope, label: "Doctors", value: String(doctors) },
+      { icon: Briefcase, label: "Front Desk", value: String(frontDesk) },
       {
         icon: UserX,
         label: "Inactive Staff",
@@ -759,19 +825,6 @@ export default function StaffPage() {
                   />
                 </label>
 
-                <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
-                    Notes
-                  </span>
-                  <textarea
-                    rows={3}
-                    value={form.notes}
-                    onChange={(e) => update("notes", e.target.value)}
-                    className={textareaClass}
-                  />
-                </label>
-
                 <div className="flex items-center gap-3 pt-2">
                   <button
                     type="submit"
@@ -871,90 +924,52 @@ export default function StaffPage() {
                 </div>
               </div>
 
-              {/* Tabs */}
-              <div className="mt-6 flex items-center gap-6 border-b border-slate-900/10">
-                {(
-                  [
-                    { key: "detail", label: "Detail Information" },
-                    { key: "notes", label: "Notes" },
-                  ] as const
-                ).map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setProfileTab(tab.key)}
-                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${profileTab === tab.key
-                      ? "border-[#3f6274] text-[#3f6274]"
-                      : "border-transparent text-slate-500 hover:text-slate-700"
-                      }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {profileTab === "detail" && (
-                <div className="mt-5 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
-                  <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
-                    Staff Information
-                  </p>
-                  <div className="mt-4 grid grid-cols-2 gap-y-4 text-[0.85rem]">
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <IdCard className="h-3.5 w-3.5" strokeWidth={2} />
-                        Staff ID
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">{selectedStaff.staffId}</p>
-                    </div>
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <VenusAndMars className="h-3.5 w-3.5" strokeWidth={2} />
-                        Gender
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">
-                        {selectedStaff.gender ?? "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <Clock className="h-3.5 w-3.5" strokeWidth={2} />
-                        Shift
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">{selectedStaff.shift}</p>
-                    </div>
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} />
-                        Join Date
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">
-                        {formatDateLabel(selectedStaff.joinDate)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="flex items-center gap-1.5 text-slate-400">
-                        <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} />
-                        Status
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">{selectedStaff.status}</p>
-                    </div>
+              <div className="mt-5 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
+                <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
+                  Staff Information
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-y-4 text-[0.85rem]">
+                  <div>
+                    <p className="flex items-center gap-1.5 text-slate-400">
+                      <IdCard className="h-3.5 w-3.5" strokeWidth={2} />
+                      Staff ID
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">{selectedStaff.staffId}</p>
+                  </div>
+                  <div>
+                    <p className="flex items-center gap-1.5 text-slate-400">
+                      <VenusAndMars className="h-3.5 w-3.5" strokeWidth={2} />
+                      Gender
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">
+                      {selectedStaff.gender ?? "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="flex items-center gap-1.5 text-slate-400">
+                      <Clock className="h-3.5 w-3.5" strokeWidth={2} />
+                      Shift
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">{selectedStaff.shift}</p>
+                  </div>
+                  <div>
+                    <p className="flex items-center gap-1.5 text-slate-400">
+                      <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} />
+                      Join Date
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">
+                      {formatDateLabel(selectedStaff.joinDate)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="flex items-center gap-1.5 text-slate-400">
+                      <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} />
+                      Status
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">{selectedStaff.status}</p>
                   </div>
                 </div>
-              )}
-
-              {profileTab === "notes" && (
-                <div className="mt-5 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
-                  <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
-                    Notes
-                  </p>
-                  {selectedStaff.notes ? (
-                    <p className="mt-3 text-[0.85rem] leading-relaxed text-slate-600">
-                      {selectedStaff.notes}
-                    </p>
-                  ) : (
-                    <p className="mt-3 text-[0.85rem] text-slate-500">No notes recorded yet.</p>
-                  )}
-                </div>
-              )}
+              </div>
             </div>
           </div>
         </div>

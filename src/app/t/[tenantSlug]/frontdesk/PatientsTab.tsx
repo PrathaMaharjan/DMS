@@ -24,6 +24,7 @@ import {
   Pencil,
   Trash2,
   Droplet,
+  Wallet,
 } from "lucide-react";
 
 const inputClass =
@@ -60,6 +61,7 @@ interface Patient {
   medicalHistory?: string[];
   medications?: string[];
   history: TreatmentRecord[];
+  balanceDueCents: number | null; // null = no billing data available yet
 }
 
 function calculateAge(dobString: string): number {
@@ -72,6 +74,13 @@ function calculateAge(dobString: string): number {
     age--;
   }
   return age;
+}
+
+function centsToDisplay(cents: number) {
+  return (cents / 100).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 const emptyPatientForm = {
@@ -154,6 +163,11 @@ export default function PatientsTab() {
           treatmentStatus: p.treatmentCompleted ? "Completed" : "In Treatment",
           assignedDoctor: p.assignedDoctorName || "Unassigned",
           history: [],
+          // Not yet returned by /api/patent — expects a future backend join
+          // summing ledger charges/payments per patient. Falls back to
+          // null (shown as "No data") until that column/join exists.
+          balanceDueCents:
+            typeof p.balanceDueCents === "number" ? p.balanceDueCents : null,
         }));
         setPatients(mapped);
       }
@@ -819,9 +833,9 @@ export default function PatientsTab() {
           </div>
         ) : (
           <div className="w-full overflow-x-auto">
-            <div className="min-w-[1250px] w-full">
+            <div className="min-w-[1380px] w-full">
               {/* Header Row */}
-              <div className="grid grid-cols-[2fr_1.3fr_1.5fr_0.8fr_1fr_1.1fr_1.3fr_1.1fr_1fr] border-b border-slate-100 bg-slate-50/70 text-xs font-medium text-slate-500">
+              <div className="grid grid-cols-[2fr_1.3fr_1.5fr_0.8fr_1fr_1.1fr_1.3fr_1.1fr_1.1fr_1fr] border-b border-slate-100 bg-slate-50/70 text-xs font-medium text-slate-500">
                 <div className="p-4 pl-6">Patient Name</div>
                 <div className="p-4">Phone</div>
                 <div className="p-4">Email</div>
@@ -830,6 +844,7 @@ export default function PatientsTab() {
                 <div className="p-4">DOB</div>
                 <div className="p-4">Assigned Doctor</div>
                 <div className="p-4">Status</div>
+                <div className="p-4">Payment</div>
                 <div className="p-4 pr-6 text-center">Action</div>
               </div>
 
@@ -850,7 +865,7 @@ export default function PatientsTab() {
                       <div key={patient.id} className="transition-colors">
                         <div
                           onClick={() => toggleExpand(patient.id)}
-                          className={`grid grid-cols-[2fr_1.3fr_1.5fr_0.8fr_1fr_1.1fr_1.3fr_1.1fr_1fr] items-center text-sm cursor-pointer hover:bg-slate-50/50 transition-colors ${isExpanded ? "bg-sky-50/30" : ""
+                          className={`grid grid-cols-[2fr_1.3fr_1.5fr_0.8fr_1fr_1.1fr_1.3fr_1.1fr_1.1fr_1fr] items-center text-sm cursor-pointer hover:bg-slate-50/50 transition-colors ${isExpanded ? "bg-sky-50/30" : ""
                             }`}
                         >
                           <div className="p-4 pl-6 flex items-center gap-2.5">
@@ -921,6 +936,22 @@ export default function PatientsTab() {
                                 </>
                               )}
                             </button>
+                          </div>
+
+                          <div className="p-4 text-xs whitespace-nowrap">
+                            {patient.balanceDueCents === null ? (
+                              <span className="text-slate-400 text-[0.72rem]">No data</span>
+                            ) : patient.balanceDueCents > 0 ? (
+                              <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 font-semibold px-2 py-0.5 rounded border border-rose-200/60 text-[0.72rem]">
+                                <Wallet className="h-3 w-3 text-rose-500 shrink-0" />
+                                NPR {centsToDisplay(patient.balanceDueCents)} due
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded border border-emerald-200/60 text-[0.72rem]">
+                                <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                                Settled
+                              </span>
+                            )}
                           </div>
 
                           <div className="p-4 pr-6 flex items-center justify-center gap-1.5 text-slate-400">

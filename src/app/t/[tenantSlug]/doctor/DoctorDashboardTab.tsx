@@ -32,6 +32,9 @@ import {
     PieChart as PieChartIcon,
     Loader2,
     AlertCircle,
+    Wallet,
+    Receipt,
+    TrendingDown,
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -80,6 +83,24 @@ interface DoctorDashboardData {
         treatmentName: string;
         date: string;
     }[];
+}
+
+// TODO: hardcoded placeholder until the billing/ledger API is wired into
+// this dashboard (see BillingPage.tsx for the real computation logic —
+// computeTotals/computeBalance over each patient's ledger entries).
+// Swap these for real aggregates (scoped to this doctor's patients) once
+// a /api/billing/summary-style endpoint exists.
+const HARDCODED_BILLING_SNAPSHOT = {
+    collectedTodayCents: 2650000, // NPR 26,500
+    outstandingDuesCents: 7420000, // NPR 74,200
+    patientsWithDues: 4,
+};
+
+function centsToDisplay(cents: number) {
+    return (cents / 100).toLocaleString(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+    });
 }
 
 export default function DoctorDashboardTab({
@@ -524,6 +545,64 @@ export default function DoctorDashboardTab({
                                     </div>
                                     <ArrowRight className="h-4 w-4 text-slate-300" />
                                 </button>
+                            </div>
+                        </div>
+
+                        {/* Billing Snapshot — hardcoded for now, see HARDCODED_BILLING_SNAPSHOT above */}
+                        <div className="rounded-2xl border border-slate-900/5 bg-white/90 shadow-lg backdrop-blur-sm overflow-hidden">
+                            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+                                <div className="flex items-center gap-2">
+                                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#7da3b3]/10 text-[#7da3b3]">
+                                        <Wallet className="h-4 w-4" />
+                                    </span>
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                                        Billing Snapshot
+                                    </h3>
+                                </div>
+                                <button
+                                    onClick={() => onNavigate?.("settings")}
+                                    className="flex items-center gap-1 text-xs font-semibold text-[#7da3b3] hover:underline"
+                                >
+                                    View billing <ArrowRight className="h-3 w-3" />
+                                </button>
+                            </div>
+
+                            <div className="grid gap-4 p-5 sm:grid-cols-3">
+                                <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[0.7rem] font-semibold uppercase tracking-wider text-slate-400">
+                                            Collected Today
+                                        </p>
+                                        <Receipt className="h-3.5 w-3.5 text-emerald-600" />
+                                    </div>
+                                    <p className="mt-1.5 text-lg font-bold text-slate-900">
+                                        NPR {centsToDisplay(HARDCODED_BILLING_SNAPSHOT.collectedTodayCents)}
+                                    </p>
+                                </div>
+
+                                <div className="rounded-xl border border-rose-100 bg-rose-50/50 p-4">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[0.7rem] font-semibold uppercase tracking-wider text-rose-500">
+                                            Outstanding Dues
+                                        </p>
+                                        <TrendingDown className="h-3.5 w-3.5 text-rose-600" />
+                                    </div>
+                                    <p className="mt-1.5 text-lg font-bold text-rose-700">
+                                        NPR {centsToDisplay(HARDCODED_BILLING_SNAPSHOT.outstandingDuesCents)}
+                                    </p>
+                                </div>
+
+                                <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[0.7rem] font-semibold uppercase tracking-wider text-slate-400">
+                                            Patients With Dues
+                                        </p>
+                                        <User className="h-3.5 w-3.5 text-slate-500" />
+                                    </div>
+                                    <p className="mt-1.5 text-lg font-bold text-slate-900">
+                                        {HARDCODED_BILLING_SNAPSHOT.patientsWithDues}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </>
