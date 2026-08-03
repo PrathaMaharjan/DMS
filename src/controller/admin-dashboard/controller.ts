@@ -1,6 +1,8 @@
 import { db } from "@/db";
 import {
   appointments,
+  ledgerEntries,
+  locations,
   patients,
   providerSchedules,
   treatments,
@@ -8,7 +10,7 @@ import {
   users,
 } from "@/db/schema";
 import { requireSession, SessionError } from "@/lib/auth/get-session";
-import { and, desc, eq, gte, lte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, lte, ne, sql } from "drizzle-orm";
 
 export type AdminDashboardErrorCode =
   | "UNAUTHORIZED"
@@ -484,7 +486,9 @@ export type TodaysAppointmentsResult =
     }
   | { success: false; error: string; code: AdminDashboardErrorCode };
 
-  export async function getTodaysAppointmentsAcrossDoctors(locationId: string): Promise<TodaysAppointmentsResult> {
+export async function getTodaysAppointmentsAcrossDoctors(
+  locationId: string,
+): Promise<TodaysAppointmentsResult> {
   try {
     await requireSession();
     const now = new Date();
@@ -506,29 +510,38 @@ export type TodaysAppointmentsResult =
         and(
           eq(appointments.locationId, locationId),
           gte(appointments.startTime, startOfDay(now)),
-          lte(appointments.startTime, endOfDay(now))
-        )
+          lte(appointments.startTime, endOfDay(now)),
+        ),
       )
       .orderBy(appointments.startTime);
-          return {
+    return {
       success: true,
-      appointments: rows.map((r) => ({ ...r, startTime: r.startTime.toTimeString().slice(0, 5) })),
+      appointments: rows.map((r) => ({
+        ...r,
+        startTime: r.startTime.toTimeString().slice(0, 5),
+      })),
     };
   } catch (err) {
     if (err instanceof SessionError) {
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong loading today's appointments.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong loading today's appointments.",
+      code: "SERVER_ERROR",
+    };
   }
 }
-
-
 
 export type ActivityFeedErrorCode = "UNAUTHORIZED" | "SERVER_ERROR";
 
 export type ActivityItem = {
-  type: "appointment_booked" | "patient_registered" | "treatment_added" | "schedule_updated";
+  type:
+    | "appointment_booked"
+    | "patient_registered"
+    | "treatment_added"
+    | "schedule_updated";
   title: string;
   description: string;
   timestamp: Date;
@@ -543,11 +556,19 @@ export type ActivityFeedResult =
 // this way, since nothing records WHEN a status changed, only what it
 // currently is. A true activity feed needs a dedicated audit table that
 // every action writes to - this is a working approximation until then.
-export async function getRecentActivityFeed(locationId: string, limit: number = 10): Promise<ActivityFeedResult> {
+export async function getRecentActivityFeed(
+  locationId: string,
+  limit: number = 10,
+): Promise<ActivityFeedResult> {
   try {
     const session = await requireSession();
 
-    const [recentAppointments, recentPatients, recentTreatments, recentSchedules] = await Promise.all([
+    const [
+      recentAppointments,
+      recentPatients,
+      recentTreatments,
+      recentSchedules,
+    ] = await Promise.all([
       db
         .select({
           patientName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`,
@@ -578,7 +599,10 @@ export async function getRecentActivityFeed(locationId: string, limit: number = 
         .orderBy(desc(treatments.createdAt))
         .limit(limit),
       db
-        .select({ doctorName: users.name, createdAt: providerSchedules.createdAt })
+        .select({
+          doctorName: users.name,
+          createdAt: providerSchedules.createdAt,
+        })
         .from(providerSchedules)
         .innerJoin(users, eq(providerSchedules.userId, users.id))
         .where(eq(providerSchedules.locationId, locationId))
@@ -624,12 +648,13 @@ export async function getRecentActivityFeed(locationId: string, limit: number = 
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong loading the activity feed.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong loading the activity feed.",
+      code: "SERVER_ERROR",
+    };
   }
 }
-
-
-
 
 // getAll
 export type AdminDoctorPanelResult =
@@ -665,15 +690,18 @@ export type AdminDoctorPanelResult =
 // Appointments Across Doctors, Recent Activity Feed) in one call - three
 // genuinely independent panels, run concurrently rather than as three
 // separate frontend requests.
-export async function getAllAdminDoctorPanel(locationId: string): Promise<AdminDoctorPanelResult> {
+export async function getAllAdminDoctorPanel(
+  locationId: string,
+): Promise<AdminDoctorPanelResult> {
   try {
     await requireSession(); // fail fast, once, before running three queries for nothing
 
-    const [utilizationResult, appointmentsResult, activityResult] = await Promise.all([
-      getDoctorUtilization(locationId),
-      getTodaysAppointmentsAcrossDoctors(locationId),
-      getRecentActivityFeed(locationId, 10),
-    ]);
+    const [utilizationResult, appointmentsResult, activityResult] =
+      await Promise.all([
+        getDoctorUtilization(locationId),
+        getTodaysAppointmentsAcrossDoctors(locationId),
+        getRecentActivityFeed(locationId, 10),
+      ]);
 
     const failures = [utilizationResult, appointmentsResult, activityResult];
     const firstFailure = failures.find((r) => !r.success);
@@ -684,9 +712,21 @@ export async function getAllAdminDoctorPanel(locationId: string): Promise<AdminD
     return {
       success: true,
       panel: {
-        doctorUtilization: (utilizationResult as Extract<typeof utilizationResult, { success: true }>).doctors,
-        todaysAppointments: (appointmentsResult as Extract<typeof appointmentsResult, { success: true }>).appointments,
-        activityFeed: (activityResult as Extract<typeof activityResult, { success: true }>).activities,
+        doctorUtilization: (
+          utilizationResult as Extract<
+            typeof utilizationResult,
+            { success: true }
+          >
+        ).doctors,
+        todaysAppointments: (
+          appointmentsResult as Extract<
+            typeof appointmentsResult,
+            { success: true }
+          >
+        ).appointments,
+        activityFeed: (
+          activityResult as Extract<typeof activityResult, { success: true }>
+        ).activities,
       },
     };
   } catch (err) {
@@ -694,11 +734,431 @@ export async function getAllAdminDoctorPanel(locationId: string): Promise<AdminD
       return { success: false, error: err.message };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong loading the dashboard panel." };
+    return {
+      success: false,
+      error: "Something went wrong loading the dashboard panel.",
+    };
   }
 }
 
+// ---------------------------------------------- Billing PART ------------------------------------------------------------------------
 
+export type AdminBillingErrorCode = "UNAUTHORIZED" | "SERVER_ERROR";
 
+export type AdminBillingStatsResult =
+  | {
+      success: true;
+      stats: {
+        totalRevenueCents: number;
+        totalCollectedCents: number;
+        outstandingDuesCents: number;
+        collectionRatePercent: number;
+      };
+    }
+  | { success: false; error: string; code: AdminBillingErrorCode };
 
+// "Total Revenue" here is the same underlying figure as "Total Charged"
+// on the front-desk billing screen (getBillingStats) - relabeled for this
+// admin-level framing, since revenue = collected + still-outstanding.
+// Collection Rate is the one genuinely new metric this dashboard adds.
+export async function getAdminBillingStats(
+  locationId: string,
+): Promise<AdminBillingStatsResult> {
+  try {
+    const session = await requireSession();
 
+    const [totals] = await db
+      .select({
+        totalRevenueCents: sql<number>`coalesce(sum(${ledgerEntries.amountCents}) filter (where ${ledgerEntries.type} = 'charge'), 0)::int`,
+        totalCollectedCents: sql<number>`abs(coalesce(sum(${ledgerEntries.amountCents}) filter (where ${ledgerEntries.type} = 'payment'), 0))::int`,
+      })
+      .from(ledgerEntries)
+      .innerJoin(patients, eq(ledgerEntries.patientId, patients.id))
+      .where(
+        and(
+          eq(patients.orgId, session.orgId),
+          eq(patients.locationId, locationId),
+        ),
+      );
+
+    const totalRevenueCents = totals?.totalRevenueCents ?? 0;
+    const totalCollectedCents = totals?.totalCollectedCents ?? 0;
+    const outstandingDuesCents = Math.max(
+      totalRevenueCents - totalCollectedCents,
+      0,
+    );
+    // Guard against division by zero for a brand-new location with no
+    // billing activity yet - 0% is the honest answer, not NaN.
+    const collectionRatePercent =
+      totalRevenueCents > 0
+        ? Math.round((totalCollectedCents / totalRevenueCents) * 1000) / 10
+        : 0;
+
+    return {
+      success: true,
+      stats: {
+        totalRevenueCents,
+        totalCollectedCents,
+        outstandingDuesCents,
+        collectionRatePercent,
+      },
+    };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return {
+      success: false,
+      error: "Something went wrong loading billing stats.",
+      code: "SERVER_ERROR",
+    };
+  }
+}
+
+// ---------- Payment Method Mix donut ----------
+export type PaymentMethodMixResult =
+  | { success: true; breakdown: { method: string; amountCents: number }[] }
+  | { success: false; error: string; code: AdminBillingErrorCode };
+
+export async function getPaymentMethodMix(
+  locationId: string,
+): Promise<PaymentMethodMixResult> {
+  try {
+    const session = await requireSession();
+
+    const rows = await db
+      .select({
+        method: ledgerEntries.paymentMethod,
+        amountCents: sql<number>`abs(sum(${ledgerEntries.amountCents}))::int`,
+      })
+      .from(ledgerEntries)
+      .innerJoin(patients, eq(ledgerEntries.patientId, patients.id))
+      .where(
+        and(
+          eq(patients.orgId, session.orgId),
+          eq(patients.locationId, locationId),
+          eq(ledgerEntries.type, "payment"),
+        ),
+      )
+      .groupBy(ledgerEntries.paymentMethod);
+
+    // Real enum values only - "cash", "card", "online" - "Wallet" never
+    // existed on the backend, so it correctly never appears here.
+    const breakdown = rows
+      .filter(
+        (r: any): r is { method: string; amountCents: number } =>
+          r.method !== null,
+      )
+      .map((r) => ({ method: r.method, amountCents: r.amountCents }));
+
+    return { success: true, breakdown };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return {
+      success: false,
+      error: "Something went wrong loading payment method mix.",
+      code: "SERVER_ERROR",
+    };
+  }
+}
+
+// -------------------------- get BarChart Data -----------------------------------------------
+export type CollectionsErrorCode =
+  | "UNAUTHORIZED"
+  | "VALIDATION"
+  | "SERVER_ERROR";
+
+export type CollectionsRange = "7d" | "1m" | "6m" | "1y";
+
+export type CollectionsChartResult =
+  | { success: true; chart: { label: string; amountCents: number }[] }
+  | { success: false; error: string; code: CollectionsErrorCode };
+
+// ---------- 7d - real weekday names, matching the screenshot exactly ----------
+
+async function getDailyCollections(
+  orgId: string,
+  locationId: string,
+): Promise<CollectionsChartResult> {
+  const now = new Date();
+  const scaffold: { label: string; date: string; amountCents: number }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    scaffold.push({
+      label: d.toLocaleDateString("en-US", { weekday: "short" }),
+      date: d.toISOString().slice(0, 10),
+      amountCents: 0,
+    });
+  }
+  const rangeStart = startOfDay(new Date(scaffold[0].date));
+  const rows = await db
+    .select({
+      date: sql<string>`to_char(${ledgerEntries.createdAt}, 'YYYY-MM-DD')`,
+      amountCents: sql<number>`abs(sum(${ledgerEntries.amountCents}))::int`,
+    })
+    .from(ledgerEntries)
+    .innerJoin(patients, eq(ledgerEntries.patientId, patients.id))
+    .where(
+      and(
+        eq(patients.orgId, orgId),
+        eq(patients.locationId, locationId),
+        eq(ledgerEntries.type, "payment"),
+        gte(ledgerEntries.createdAt, rangeStart),
+        lte(ledgerEntries.createdAt, endOfDay(now)),
+      ),
+    )
+    .groupBy(sql`to_char(${ledgerEntries.createdAt}, 'YYYY-MM-DD')`);
+
+  const byDate = new Map(rows.map((r) => [r.date, r.amountCents]));
+  const chart = scaffold.map((d) => ({
+    label: d.label,
+    amountCents: byDate.get(d.date) ?? 0,
+  }));
+
+  return { success: true, chart };
+}
+
+// ---------- 1m - W1..W4, same bucketing pattern as the patient trend chart ----------
+
+async function getWeeklyCollections(
+  orgId: string,
+  locationId: string,
+): Promise<CollectionsChartResult> {
+  const now = new Date();
+
+  const weekStarts: Date[] = [];
+  for (let i = 3; i >= 0; i--) {
+    const d = startOfDay(new Date(now));
+    d.setDate(d.getDate() - i * 7 - 6);
+    weekStarts.push(d);
+  }
+  const rows = await db
+    .select({
+      createdAt: ledgerEntries.createdAt,
+      amountCents: ledgerEntries.amountCents,
+    })
+    .from(ledgerEntries)
+    .innerJoin(patients, eq(ledgerEntries.patientId, patients.id))
+    .where(
+      and(
+        eq(patients.orgId, orgId),
+        eq(patients.locationId, locationId),
+        eq(ledgerEntries.type, "payment"),
+        gte(ledgerEntries.createdAt, weekStarts[0]),
+        lte(ledgerEntries.createdAt, endOfDay(now)),
+      ),
+    );
+  const totals = [0, 0, 0, 0];
+  for (const row of rows) {
+    for (let i = 3; i >= 0; i--) {
+      const weekEnd = new Date(weekStarts[i]);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+      if (row.createdAt >= weekStarts[i] && row.createdAt < weekEnd) {
+        totals[i] += Math.abs(row.amountCents);
+        break;
+      }
+    }
+  }
+
+  const chart = totals.map((amountCents, i) => ({
+    label: `W${i + 1}`,
+    amountCents,
+  }));
+  return { success: true, chart };
+}
+
+async function getMonthlyCollections(
+  orgId: string,
+  locationId: string,
+  monthCount: number,
+): Promise<CollectionsChartResult> {
+  const now = new Date();
+  const rangeStart = new Date(
+    now.getFullYear(),
+    now.getMonth() - (monthCount - 1),
+    1,
+  );
+
+  const rows = await db
+    .select({
+      year: sql<number>`extract(year from ${ledgerEntries.createdAt})::int`,
+      month: sql<number>`extract(month from ${ledgerEntries.createdAt})::int`,
+      amountCents: sql<number>`abs(sum(${ledgerEntries.amountCents}))::int`,
+    })
+    .from(ledgerEntries)
+    .innerJoin(patients, eq(ledgerEntries.patientId, patients.id))
+    .where(
+      and(
+        eq(patients.orgId, orgId),
+        eq(patients.locationId, locationId),
+        eq(ledgerEntries.type, "payment"),
+        gte(ledgerEntries.createdAt, rangeStart),
+        lte(ledgerEntries.createdAt, endOfDay(now)),
+      ),
+    )
+    .groupBy(
+      sql`extract(year from ${ledgerEntries.createdAt})`,
+      sql`extract(month from ${ledgerEntries.createdAt})`,
+    );
+  const byKey = new Map(
+    rows.map((r) => [`${r.year}-${r.month}`, r.amountCents]),
+  );
+
+  const chart: { label: string; amountCents: number }[] = [];
+  for (let i = monthCount - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+    chart.push({
+      label: d.toLocaleDateString("en-US", { month: "short" }),
+      amountCents: byKey.get(key) ?? 0,
+    });
+  }
+
+  return { success: true, chart };
+}
+
+// "Collections" sums only PAYMENT-type entries - actual money received,
+// not charges billed or discounts given, matching the panel's own label.
+export async function getCollectionsChart(
+  locationId: string,
+  range: CollectionsRange,
+): Promise<CollectionsChartResult> {
+  try {
+    const session = await requireSession();
+
+    if (range === "7d") return getDailyCollections(session.orgId, locationId);
+    if (range === "1m") return getWeeklyCollections(session.orgId, locationId);
+    if (range === "6m")
+      return getMonthlyCollections(session.orgId, locationId, 6);
+    return getMonthlyCollections(session.orgId, locationId, 12);
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return {
+      success: false,
+      error: "Something went wrong loading collections.",
+      code: "SERVER_ERROR",
+    };
+  }
+}
+
+// ------------------ doctor stats ---------------------------------------
+
+export type RevenueByDoctorResult =
+  | { success: true; doctors: { doctorId: string; doctorName: string; revenueCents: number }[] }
+  | { success: false; error: string; code: AdminBillingErrorCode };
+
+export async function getRevenueByDoctor(locationId?: string): Promise<RevenueByDoctorResult> {
+  try {
+    const session = await requireSession();
+
+    const conditions = [
+      eq(patients.orgId, session.orgId),
+      eq(ledgerEntries.type, "charge"),
+      isNotNull(ledgerEntries.appointmentId),
+    ];
+    // Narrows to ONE outlet only if explicitly asked for - omitted
+    // entirely, this stays org-wide across every location, exactly
+    // matching the screenshot's default behavior.
+    if (locationId) {
+      conditions.push(eq(patients.locationId, locationId));
+    }
+
+    const rows = await db
+      .select({
+        doctorId: users.id,
+        doctorName: users.name,
+        revenueCents: sql<number>`sum(${ledgerEntries.amountCents})::int`,
+      })
+      .from(ledgerEntries)
+      .innerJoin(patients, eq(ledgerEntries.patientId, patients.id))
+      .innerJoin(appointments, eq(ledgerEntries.appointmentId, appointments.id))
+      .innerJoin(users, eq(appointments.providerId, users.id))
+      .where(and(...conditions))
+      .groupBy(users.id, users.name)
+      .orderBy(sql`sum(${ledgerEntries.amountCents}) desc`);
+
+    return { success: true, doctors: rows };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return { success: false, error: "Something went wrong loading revenue by doctor.", code: "SERVER_ERROR" };
+  }
+}
+const DEFAULT_LIMIT = 5;
+const MAX_LIMIT = 50;
+export type TopOutstandingResult =
+  | {
+      success: true;
+      patients: {
+        patientId: string;
+        patientName: string;
+        patientPhone: string | null;
+        outletName: string;
+        lastActivity: Date | null;
+        chargedCents: number;
+        paidCents: number;
+        balanceCents: number;
+      }[];
+      pagination: { total: number; limit: number; offset: number };
+    }
+  | { success: false; error: string; code: AdminBillingErrorCode };
+// top out;et patent
+export async function getTopOutstandingPatients(
+  options?: { locationId?: string; search?: string; limit?: number; offset?: number }
+): Promise<TopOutstandingResult> {
+  try {
+    const session = await requireSession();
+
+    const limit = Math.min(Math.max(options?.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+    const offset = Math.max(options?.offset ?? 0, 0);
+
+    const conditions = [eq(patients.orgId, session.orgId)];
+    if (options?.locationId) {
+      conditions.push(eq(patients.locationId, options.locationId));
+    }
+    if (options?.search) {
+      conditions.push(
+        sql`(${patients.firstName} || ' ' || ${patients.lastName} ilike ${"%" + options.search + "%"} or ${patients.phone} ilike ${"%" + options.search + "%"})`
+      );
+    }
+
+    const allRows = await db
+      .select({
+        patientId: patients.id,
+        patientName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`,
+        patientPhone: patients.phone,
+        outletName: locations.name,
+        lastActivity: sql<Date | null>`max(${ledgerEntries.createdAt})`,
+        chargedCents: sql<number>`coalesce(sum(${ledgerEntries.amountCents}) filter (where ${ledgerEntries.type} = 'charge'), 0)::int`,
+        paidCents: sql<number>`abs(coalesce(sum(${ledgerEntries.amountCents}) filter (where ${ledgerEntries.type} = 'payment'), 0))::int`,
+        balanceCents: sql<number>`coalesce(sum(${ledgerEntries.amountCents}), 0)::int`,
+      })
+      .from(patients)
+      .innerJoin(locations, eq(patients.locationId, locations.id))
+      .leftJoin(ledgerEntries, eq(ledgerEntries.patientId, patients.id))
+      .where(and(...conditions))
+      .groupBy(patients.id, patients.firstName, patients.lastName, patients.phone, locations.name);
+
+    const withDues = allRows.filter((p) => p.balanceCents > 0).sort((a, b) => b.balanceCents - a.balanceCents);
+    const total = withDues.length;
+    const paged = withDues.slice(offset, offset + limit);
+
+    return { success: true, patients: paged, pagination: { total, limit, offset } };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return { success: false, error: "Something went wrong loading outstanding patients.", code: "SERVER_ERROR" };
+  }
+}

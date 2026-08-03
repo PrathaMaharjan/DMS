@@ -28,6 +28,7 @@ import {
   assignAppointmentSchema,
   bookAppointmentSchema,
 } from "@/lib/validators/appoments";
+import { sendAppointmentCancelledEmail, sendAppointmentConfirmedEmail } from "@/lib/email/sendAppomentStatus";
 // import { bookAppointmentSchema } from "@/lib/validators/appointments";
 
 export type BookAppointmentErrorCode =
@@ -376,54 +377,62 @@ const VALID_STATUSES = [
   "cancelled",
   "no_show",
 ];
-export async function updateAppointmentStatus(
-  appointmentId: string,
-  status: string,
-): Promise<UpdateStatusResult> {
+export async function updateAppointmentStatus(appointmentId: string, status: string): Promise<UpdateStatusResult> {
   try {
     const session = await requireSession();
 
     if (!VALID_STATUSES.includes(status)) {
-      return {
-        success: false,
-        error: "Invalid status value.",
-        code: "VALIDATION",
-      };
+      return { success: false, error: "Invalid status value.", code: "VALIDATION" };
     }
-    const existing = await db
-      .select({ id: appointments.id })
+
+    // Fetches everything an email would need (patient name/email, treatment
+    // name, time) in the SAME query that already confirms ownership - no
+    // separate lookup needed just to build the email later.
+    const [existingAppointment] = await db
+      .select({
+        id: appointments.id,
+        patientName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`,
+        patientEmail: patients.email,
+        treatmentName: treatments.name,
+        startTime: appointments.startTime,
+      })
       .from(appointments)
       .innerJoin(locations, eq(appointments.locationId, locations.id))
-      .where(
-        and(
-          eq(appointments.id, appointmentId),
-          eq(locations.orgId, session.orgId),
-        ),
-      )
+      .innerJoin(patients, eq(appointments.patientId, patients.id))
+      .innerJoin(treatments, eq(appointments.treatmentId, treatments.id))
+      .where(and(eq(appointments.id, appointmentId), eq(locations.orgId, session.orgId)))
       .limit(1);
 
-    let existingAppointment = existing[0];
     if (!existingAppointment) {
-      const direct = await db
-        .select({ id: appointments.id })
-        .from(appointments)
-        .where(eq(appointments.id, appointmentId))
-        .limit(1);
-      existingAppointment = direct[0];
+      return { success: false, error: "Appointment not found.", code: "NOT_FOUND" };
     }
 
-    if (!existingAppointment) {
-      return {
-        success: false,
-        error: "Appointment not found.",
-        code: "NOT_FOUND",
-      };
-    }
+    await db.update(appointments).set({ status: status as any }).where(eq(appointments.id, appointmentId));
 
-    await db
-      .update(appointments)
-      .set({ status: status as any })
-      .where(eq(appointments.id, appointmentId));
+    // Email is deliberately best-effort, AFTER the status change already
+    // succeeded - a flaky email must never roll back or fail an otherwise
+    // successful status update, same reasoning as the doctor welcome email.
+    if (existingAppointment.patientEmail) {
+      try {
+        if (status === "confirmed") {
+          await sendAppointmentConfirmedEmail(
+            existingAppointment.patientEmail,
+            existingAppointment.patientName,
+            existingAppointment.treatmentName,
+            existingAppointment.startTime
+          );
+        } else if (status === "cancelled") {
+          await sendAppointmentCancelledEmail(
+            existingAppointment.patientEmail,
+            existingAppointment.patientName,
+            existingAppointment.treatmentName,
+            existingAppointment.startTime
+          );
+        }
+      } catch (emailErr) {
+        console.error("Appointment status updated, but email failed to send:", emailErr);
+      }
+    }
 
     return { success: true };
   } catch (err) {
@@ -431,11 +440,7 @@ export async function updateAppointmentStatus(
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return {
-      success: false,
-      error: "Something went wrong updating the appointment.",
-      code: "SERVER_ERROR",
-    };
+    return { success: false, error: "Something went wrong updating the appointment.", code: "SERVER_ERROR" };
   }
 }
 

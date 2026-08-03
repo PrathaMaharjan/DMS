@@ -1,24 +1,21 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import {
   Search,
   Plus,
   Wallet,
-  TrendingUp,
   TrendingDown,
   Filter,
   ChevronLeft,
   ChevronRight,
-  IdCard,
   Clock,
   User,
   Receipt,
   Banknote,
   CreditCard,
   Smartphone,
-  ShieldCheck,
   ArrowUpCircle,
   ArrowDownCircle,
   Scale,
@@ -28,7 +25,6 @@ import {
   Cross,
   Pill,
   Activity,
-  MapPin,
   ClipboardList,
   CalendarDays,
   Printer,
@@ -36,16 +32,17 @@ import {
   Phone,
 } from "lucide-react";
 
-const OUTLETS = [
-  { id: "all", name: "All outlets" },
-  { id: "outlet-1", name: "Chitwan Dental Home - Bharatpur" },
-  { id: "outlet-2", name: "Chitwan Dental Home - Narayangarh" },
-];
-
 const ENTRY_TYPES = ["charge", "payment", "adjustment"] as const;
 type EntryType = (typeof ENTRY_TYPES)[number];
 
-const PAYMENT_METHODS = ["Cash", "Card", "Wallet"];
+// Matches paymentMethodEnum exactly - "Wallet" was never a real backend
+// option, "online" is, so the mock's list is corrected here.
+const PAYMENT_METHODS = ["cash", "card", "online"] as const;
+const PAYMENT_METHOD_LABELS: Record<(typeof PAYMENT_METHODS)[number], string> = {
+  cash: "Cash",
+  card: "Card",
+  online: "Online",
+};
 
 const ENTRY_TYPE_LABELS: Record<EntryType, string> = {
   charge: "Charge",
@@ -65,112 +62,42 @@ const ENTRY_TYPE_ICONS: Record<EntryType, typeof ArrowUpCircle> = {
   adjustment: Scale,
 };
 
+// Real shape returned by GET /api/patients/[id]/ledger's `entries` array.
 type LedgerEntry = {
   id: string;
   type: EntryType;
-  amountCents: number;
-  createdAt: string; // ISO
-  appointmentId?: string;
-  treatmentName?: string;
-  method?: string; // local-only, not in schema yet
-  note?: string; // local-only, not in schema yet
+  amountCents: number; // already signed by the backend - charge positive, payment/adjustment negative
+  paymentMethod: string | null;
+  note: string | null;
+  appointmentTreatmentName: string | null;
+  createdAt: string;
 };
 
-type PatientLedger = {
+type LedgerSummary = { totalChargedCents: number; totalPaidCents: number; balanceDueCents: number };
+
+type BillingPatientRow = {
   patientId: string;
   patientName: string;
-  phone: string;
-  entries: LedgerEntry[];
+  patientPhone: string | null;
+  lastActivity: string | null;
+  chargedCents: number;
+  paidCents: number;
+  balanceCents: number;
 };
 
-const SEED_LEDGERS: PatientLedger[] = [
-  {
-    patientId: "p1",
-    patientName: "Rita Adhikari",
-    phone: "+977 981-1112223",
-    entries: [
-      {
-        id: "e1",
-        type: "charge",
-        amountCents: 650000,
-        createdAt: "2026-07-28T10:15:00",
-        appointmentId: "apt-101",
-        treatmentName: "Root Canal Treatment",
-      },
-      {
-        id: "e2",
-        type: "payment",
-        amountCents: 400000,
-        createdAt: "2026-07-28T10:20:00",
-        method: "Cash",
-      },
-    ],
-  },
-  {
-    patientId: "p2",
-    patientName: "Suman Rai",
-    phone: "+977 981-3334445",
-    entries: [
-      {
-        id: "e3",
-        type: "charge",
-        amountCents: 150000,
-        createdAt: "2026-07-30T09:00:00",
-        appointmentId: "apt-102",
-        treatmentName: "Dental Cleaning",
-      },
-      {
-        id: "e4",
-        type: "payment",
-        amountCents: 150000,
-        createdAt: "2026-07-30T09:10:00",
-        method: "Card",
-      },
-    ],
-  },
-  {
-    patientId: "p3",
-    patientName: "Anjali Poudel",
-    phone: "+977 981-5556667",
-    entries: [
-      {
-        id: "e5",
-        type: "charge",
-        amountCents: 900000,
-        createdAt: "2026-08-01T11:30:00",
-        appointmentId: "apt-103",
-        treatmentName: "Orthodontic Consultation",
-      },
-      {
-        id: "e6",
-        type: "adjustment",
-        amountCents: -50000,
-        createdAt: "2026-08-01T11:35:00",
-        note: "Loyalty discount",
-      },
-    ],
-  },
-  {
-    patientId: "p4",
-    patientName: "Kiran Basnet",
-    phone: "+977 981-7778889",
-    entries: [
-      {
-        id: "e7",
-        type: "charge",
-        amountCents: 250000,
-        createdAt: "2026-08-02T08:45:00",
-        appointmentId: "apt-104",
-        treatmentName: "Teeth Whitening",
-      },
-    ],
-  },
-];
+type BillingStats = {
+  totalChargedCents: number;
+  totalCollectedCents: number;
+  outstandingDuesCents: number;
+  patientsWithDuesCount: number;
+};
+
+type Location = { id: string; name: string };
 
 const EMPTY_ENTRY_FORM = {
   type: "charge" as EntryType,
   amount: "",
-  method: PAYMENT_METHODS[0],
+  paymentMethod: PAYMENT_METHODS[0] as string,
   note: "",
 };
 
@@ -179,69 +106,23 @@ type EntryFormState = typeof EMPTY_ENTRY_FORM;
 const inputClass =
   "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
 
-const textareaClass =
-  "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
+const textareaClass = inputClass;
 
 function centsToDisplay(cents: number) {
   const value = Number.isFinite(cents) ? cents : 0;
-  return (value / 100).toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
-}
-
-function computeBalance(entries: LedgerEntry[]) {
-  return entries.reduce((sum, e) => {
-    if (e.type === "charge") return sum + e.amountCents;
-    if (e.type === "payment") return sum - e.amountCents;
-    return sum + e.amountCents; // adjustment: signed (negative = discount, positive = fee)
-  }, 0);
-}
-
-function computeTotals(entries: LedgerEntry[]) {
-  const charged = entries
-    .filter((e) => e.type === "charge")
-    .reduce((s, e) => s + e.amountCents, 0);
-  const paid = entries
-    .filter((e) => e.type === "payment")
-    .reduce((s, e) => s + e.amountCents, 0);
-  return { charged, paid };
-}
-
-// Running balance immediately after a given entry, based on all entries
-// up to and including it (sorted chronologically).
-function balanceAfterEntry(entries: LedgerEntry[], entryId: string) {
-  const sorted = [...entries].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  let running = 0;
-  for (const e of sorted) {
-    if (e.type === "charge") running += e.amountCents;
-    else if (e.type === "payment") running -= e.amountCents;
-    else running += e.amountCents;
-    if (e.id === entryId) break;
-  }
-  return running;
+  return (value / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 function formatDateTime(iso: string) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function formatDateOnly(iso: string) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  return d.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 
 function getInitials(name: string) {
@@ -252,12 +133,25 @@ function getInitials(name: string) {
   return (first + last).toUpperCase();
 }
 
-// Placeholder receipt number derived from the entry id — once a real
-// receiptNumber column/table exists on the backend, swap this out.
+// Still fabricated - no real receipt-numbering system exists on the
+// backend. Kept exactly as the original mock had it, not silently hidden.
 function receiptNumberFor(entryId: string) {
   const digits = entryId.replace(/\D/g, "");
   const suffix = (digits || entryId).slice(-4).padStart(4, "0");
   return `RCP-2026-${suffix}`;
+}
+
+// Running balance up to and including a given entry - computed client-side
+// from the already-signed amounts the backend returns. No branching by
+// type needed anymore, since the sign is already correct on arrival.
+function balanceAfterEntry(entries: LedgerEntry[], entryId: string) {
+  const sorted = [...entries].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  let running = 0;
+  for (const e of sorted) {
+    running += e.amountCents;
+    if (e.id === entryId) break;
+  }
+  return running;
 }
 
 const AVATAR_COLORS = [
@@ -270,153 +164,165 @@ const AVATAR_COLORS = [
 ];
 
 const METHOD_ICONS: Record<string, typeof Banknote> = {
-  Cash: Banknote,
-  Card: CreditCard,
-  Wallet: Smartphone,
-  Insurance: ShieldCheck,
+  cash: Banknote,
+  card: CreditCard,
+  online: Smartphone,
 };
 
+const ITEMS_PER_PAGE = 8;
+
 export default function BillingPage() {
-  const [ledgers, setLedgers] = useState<PatientLedger[]>(SEED_LEDGERS);
-  const [outletFilter, setOutletFilter] = useState("all");
-  const [billingTimeframe, setBillingTimeframe] = useState<"7days" | "20days" | "1year">("7days");
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [locationId, setLocationId] = useState<string>("");
+
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [balanceFilter, setBalanceFilter] = useState<"All" | "Due" | "Settled">("All");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+
+  const [stats, setStats] = useState<BillingStats | null>(null);
+  const [rows, setRows] = useState<BillingPatientRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loadingTable, setLoadingTable] = useState(true);
 
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [selectedPatientName, setSelectedPatientName] = useState<string>("");
+  const [selectedPatientPhone, setSelectedPatientPhone] = useState<string>("");
+  const [ledgerSummary, setLedgerSummary] = useState<LedgerSummary | null>(null);
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [loadingLedger, setLoadingLedger] = useState(false);
 
   const [entryModalOpen, setEntryModalOpen] = useState(false);
   const [entryTargetPatientId, setEntryTargetPatientId] = useState<string | null>(null);
   const [entryForm, setEntryForm] = useState<EntryFormState>(EMPTY_ENTRY_FORM);
+  const [submittingEntry, setSubmittingEntry] = useState(false);
+  const [entryError, setEntryError] = useState<string | null>(null);
 
   const [receiptEntryId, setReceiptEntryId] = useState<string | null>(null);
 
+  // Debounce search - avoids firing a request on every keystroke.
   useEffect(() => {
-    async function fetchBillingData() {
+    const t = setTimeout(() => {
+      setDebouncedQuery(query);
+      setCurrentPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Locations populate the outlet selector - no "All outlets" option,
+  // since neither getBillingStats nor getBillingPatients supports an
+  // org-wide aggregate. Defaults to the first real location.
+  useEffect(() => {
+    async function loadLocations() {
       try {
-        const [patientsRes, outletsRes] = await Promise.all([
-          axios.get("/api/patent").catch(() => null),
-          axios.get("/api/outlets").catch(() => null),
-        ]);
-        if (patientsRes?.data?.success && Array.isArray(patientsRes.data.data.patients)) {
-          const apiPatients = patientsRes.data.data.patients;
-          if (apiPatients.length > 0) {
-            setLedgers((prev) => {
-              const existingIds = new Set(prev.map((l) => l.patientId));
-              const newLedgers: PatientLedger[] = apiPatients
-                .filter((p: any) => !existingIds.has(p.id))
-                .map((p: any) => ({
-                  patientId: p.id,
-                  patientName: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
-                  phone: p.phone || "-",
-                  entries: [
-                    {
-                      id: `entry-${p.id}-1`,
-                      type: "charge",
-                      amountCents: 500000,
-                      createdAt: new Date().toISOString(),
-                      treatmentName: "Consultation & Examination",
-                    },
-                  ],
-                }));
-              return [...prev, ...newLedgers];
-            });
-          }
+        const { data: responseBody } = await axios.get("/api/locations");
+        if (responseBody?.success) {
+          const list: Location[] = responseBody.data.locations;
+          setLocations(list);
+          if (list.length > 0) setLocationId(list[0].id);
         }
-      } catch (err) {
+      } catch {
+        // Left silent - the outlet selector just stays empty if this fails.
       }
     }
-    fetchBillingData();
+    loadLocations();
   }, []);
 
-  const rows = useMemo(() => {
-    return ledgers.map((l) => {
-      const { charged, paid } = computeTotals(l.entries);
-      const balance = computeBalance(l.entries);
-      const lastActivity = l.entries.reduce(
-        (latest, e) => (e.createdAt > latest ? e.createdAt : latest),
-        l.entries[0]?.createdAt ?? ""
-      );
-      return { ...l, charged, paid, balance, lastActivity };
-    });
-  }, [ledgers]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
-      const matchesQuery =
-        !q ||
-        r.patientName.toLowerCase().includes(q) ||
-        r.phone.toLowerCase().includes(q);
-      const matchesBalance =
-        balanceFilter === "All" ||
-        (balanceFilter === "Due" && r.balance > 0) ||
-        (balanceFilter === "Settled" && r.balance <= 0);
-      return matchesQuery && matchesBalance;
-    });
-  }, [rows, query, balanceFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedRows = filtered.slice(startIndex, startIndex + itemsPerPage);
-
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
+  const loadStats = useCallback(async () => {
+    if (!locationId) return;
+    try {
+      const { data: responseBody } = await axios.get(`/api/billing/stats?locationId=${locationId}`);
+      if (responseBody?.success) setStats(responseBody.data.stats);
+    } catch {
+      // Stat cards just stay at their previous value if this fails.
     }
-  };
+  }, [locationId]);
 
-  const selectedLedger = useMemo(
-    () => ledgers.find((l) => l.patientId === selectedPatientId) ?? null,
-    [ledgers, selectedPatientId]
-  );
+  const loadPatients = useCallback(async () => {
+    if (!locationId) return;
+    setLoadingTable(true);
+    try {
+      const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+      const balanceFilterParam =
+        balanceFilter === "Due" ? "due" : balanceFilter === "Settled" ? "settled" : "all";
 
-  // Ledger + entry currently shown in the receipt modal.
-  // Searches every ledger's entries directly by id, so it doesn't depend
-  // on selectedLedger being open at the same time.
+      const { data: responseBody } = await axios.get("/api/billing/patentDetail", {
+        params: {
+          locationId,
+          search: debouncedQuery || undefined,
+          balanceFilter: balanceFilterParam,
+          limit: ITEMS_PER_PAGE,
+          offset,
+        },
+      });
+
+      if (responseBody?.success) {
+        setRows(responseBody.data.patients);
+        setTotal(responseBody.data.pagination.total);
+      }
+    } catch {
+      setRows([]);
+      setTotal(0);
+    } finally {
+      setLoadingTable(false);
+    }
+  }, [locationId, debouncedQuery, balanceFilter, currentPage]);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  useEffect(() => {
+    loadPatients();
+  }, [loadPatients]);
+
+  const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+
+  function handlePageChange(newPage: number) {
+    if (newPage >= 1 && newPage <= totalPages) setCurrentPage(newPage);
+  }
+
+  async function loadLedgerFor(patientId: string, name: string, phone: string) {
+    setSelectedPatientId(patientId);
+    setSelectedPatientName(name);
+    setSelectedPatientPhone(phone);
+    setLoadingLedger(true);
+    try {
+      const { data: responseBody } = await axios.get(`/api/patient/${patientId}/ledger`);
+      if (responseBody?.success) {
+        setLedgerSummary(responseBody.data.summary);
+        setLedgerEntries(responseBody.data.entries);
+      }
+    } catch {
+      setLedgerSummary(null);
+      setLedgerEntries([]);
+    } finally {
+      setLoadingLedger(false);
+    }
+  }
+
   const receiptContext = useMemo(() => {
     if (!receiptEntryId) return null;
-    for (const l of ledgers) {
-      const entry = l.entries.find((e) => e.id === receiptEntryId);
-      if (entry) return { ledger: l, entry };
-    }
-    return null;
-  }, [ledgers, receiptEntryId]);
+    const entry = ledgerEntries.find((e) => e.id === receiptEntryId);
+    if (!entry) return null;
+    return { entry, patientName: selectedPatientName, patientPhone: selectedPatientPhone };
+  }, [receiptEntryId, ledgerEntries, selectedPatientName, selectedPatientPhone]);
 
-  const stats = useMemo(() => {
-    const totalCharged = rows.reduce((s, r) => s + r.charged, 0);
-    const totalPaid = rows.reduce((s, r) => s + r.paid, 0);
-    const totalDue = rows.reduce((s, r) => s + Math.max(0, r.balance), 0);
-    const patientsWithDue = rows.filter((r) => r.balance > 0).length;
+  const statCards = useMemo(() => {
+    if (!stats) return [];
     return [
-      {
-        icon: Receipt,
-        label: "Total Charged",
-        value: `NPR ${centsToDisplay(totalCharged)}`,
-      },
-      {
-        icon: Wallet,
-        label: "Total Collected",
-        value: `NPR ${centsToDisplay(totalPaid)}`,
-      },
-      {
-        icon: TrendingDown,
-        label: "Outstanding Dues",
-        value: `NPR ${centsToDisplay(totalDue)}`,
-      },
-      {
-        icon: User,
-        label: "Patients With Dues",
-        value: String(patientsWithDue),
-      },
+      { icon: Receipt, label: "Total Charged", value: `NPR ${centsToDisplay(stats.totalChargedCents)}` },
+      { icon: Wallet, label: "Total Collected", value: `NPR ${centsToDisplay(stats.totalCollectedCents)}` },
+      { icon: TrendingDown, label: "Outstanding Dues", value: `NPR ${centsToDisplay(stats.outstandingDuesCents)}` },
+      { icon: User, label: "Patients With Dues", value: String(stats.patientsWithDuesCount) },
     ];
-  }, [rows]);
+  }, [stats]);
 
   function openEntryModal(patientId: string) {
     setEntryTargetPatientId(patientId);
     setEntryForm(EMPTY_ENTRY_FORM);
+    setEntryError(null);
     setEntryModalOpen(true);
   }
 
@@ -424,42 +330,51 @@ export default function BillingPage() {
     setEntryForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleAddEntry(e: React.FormEvent) {
+  async function handleAddEntry(e: React.FormEvent) {
     e.preventDefault();
-    if (!entryTargetPatientId) return;
+    if (!entryTargetPatientId || !locationId) return;
+    setEntryError(null);
 
     const amountNumber = Number(entryForm.amount) || 0;
-    let amountCents = Math.round(amountNumber * 100);
+    const amountCents = Math.round(amountNumber * 100);
 
-    // Payments and positive charges are stored as positive amounts.
-    // Adjustments can be negative (discount) or positive (extra fee) —
-    // for this static demo we treat a plain positive input as a discount
-    // reduction by default, matching the most common front-desk use case.
-    if (entryForm.type === "adjustment" && amountCents > 0) {
-      amountCents = -amountCents;
+    setSubmittingEntry(true);
+    try {
+      const { data: responseBody } = await axios.post(`/api/patient/${entryTargetPatientId}/ledger`, {
+        locationId,
+        type: entryForm.type,
+        amountCents,
+        paymentMethod: entryForm.type === "payment" ? entryForm.paymentMethod : undefined,
+        note: entryForm.note || undefined,
+      });
+
+      if (!responseBody?.success) {
+        setEntryError(responseBody?.error ?? "Something went wrong adding this entry.");
+        return;
+      }
+
+      setEntryModalOpen(false);
+      setEntryForm(EMPTY_ENTRY_FORM);
+
+      // Refresh everything this entry could have changed - the table row's
+      // own totals, the org-wide stat cards, and (if the side panel for
+      // this same patient happens to be open) their ledger history too.
+      await Promise.all([
+        loadPatients(),
+        loadStats(),
+        selectedPatientId === entryTargetPatientId
+          ? loadLedgerFor(entryTargetPatientId, selectedPatientName, selectedPatientPhone)
+          : Promise.resolve(),
+      ]);
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        setEntryError(err.response?.data?.error ?? "Something went wrong adding this entry.");
+      } else {
+        setEntryError("Something went wrong adding this entry.");
+      }
+    } finally {
+      setSubmittingEntry(false);
     }
-
-    const newEntry: LedgerEntry = {
-      id: String(Date.now()),
-      type: entryForm.type,
-      amountCents:
-        Math.abs(amountCents) *
-        (entryForm.type === "adjustment" ? Math.sign(amountCents) || -1 : 1),
-      createdAt: new Date().toISOString(),
-      method: entryForm.type === "payment" ? entryForm.method : undefined,
-      note: entryForm.note || undefined,
-    };
-
-    setLedgers((prev) =>
-      prev.map((l) =>
-        l.patientId === entryTargetPatientId
-          ? { ...l, entries: [...l.entries, newEntry] }
-          : l
-      )
-    );
-
-    setEntryForm(EMPTY_ENTRY_FORM);
-    setEntryModalOpen(false);
   }
 
   return (
@@ -474,37 +389,36 @@ export default function BillingPage() {
       </div>
 
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-lg font-bold text-slate-800">Billing Overview</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500">Period:</span>
+        {locations.length > 1 && (
+          <div className="mb-4">
             <select
-              value={billingTimeframe}
-              onChange={(e) => setBillingTimeframe(e.target.value as any)}
-              className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-[#7da3b3]"
+              value={locationId}
+              onChange={(e) => {
+                setLocationId(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="rounded-full border border-slate-900/10 bg-white px-4 py-2 text-[0.85rem] text-slate-700 outline-none focus:border-[#7da3b3]"
             >
-              <option value="7days">7 Days</option>
-              <option value="20days">20 Days</option>
-              <option value="1year">1 Year</option>
+              {locations.map((loc) => (
+                <option key={loc.id} value={loc.id}>
+                  {loc.name}
+                </option>
+              ))}
             </select>
           </div>
-        </div>
+        )}
 
-        <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className="rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm"
-            >
+        {/* Stats */}
+        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {statCards.map((stat) => (
+            <div key={stat.label} className="rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between">
                 <p className="text-[0.85rem] font-medium text-slate-500">{stat.label}</p>
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#7da3b3]/15 text-[#3f6274]">
                   <stat.icon className="h-4 w-4" strokeWidth={2} />
                 </div>
               </div>
-              <p className="mt-4 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-                {stat.value}
-              </p>
+              <p className="mt-4 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{stat.value}</p>
             </div>
           ))}
         </div>
@@ -516,10 +430,7 @@ export default function BillingPage() {
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
                 <input
                   value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setCurrentPage(1);
-                  }}
+                  onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search patient, phone..."
                   className="w-56 rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-4 text-[0.9rem] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#7da3b3]"
                 />
@@ -558,31 +469,27 @@ export default function BillingPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-900/5 bg-white">
-                {paginatedRows.map((r, i) => {
+                {rows.map((r, i) => {
                   const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
-                  const hasDue = r.balance > 0;
+                  const hasDue = r.balanceCents > 0;
                   return (
                     <tr
                       key={r.patientId}
-                      onClick={() => setSelectedPatientId(r.patientId)}
+                      onClick={() => loadLedgerFor(r.patientId, r.patientName, r.patientPhone ?? "")}
                       className="cursor-pointer transition-colors hover:bg-[#7da3b3]/[0.06]"
                     >
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div
-                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[0.8rem] font-semibold ${color}`}
-                          >
+                          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[0.8rem] font-semibold ${color}`}>
                             {getInitials(r.patientName)}
                           </div>
-                          <p className="truncate text-[0.9rem] font-semibold text-slate-900">
-                            {r.patientName}
-                          </p>
+                          <p className="truncate text-[0.9rem] font-semibold text-slate-900">{r.patientName}</p>
                         </div>
                       </td>
                       <td className="px-5 py-4 text-[0.85rem] text-slate-600">
                         <p className="flex items-center gap-1.5">
                           <Phone className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                          {r.phone}
+                          {r.patientPhone ?? "—"}
                         </p>
                       </td>
                       <td className="px-5 py-4 text-[0.85rem] text-slate-600">
@@ -591,22 +498,15 @@ export default function BillingPage() {
                           {r.lastActivity ? formatDateTime(r.lastActivity) : "—"}
                         </p>
                       </td>
-                      <td className="px-5 py-4 text-[0.85rem] text-slate-700">
-                        NPR {centsToDisplay(r.charged)}
-                      </td>
-                      <td className="px-5 py-4 text-[0.85rem] text-slate-700">
-                        NPR {centsToDisplay(r.paid)}
-                      </td>
+                      <td className="px-5 py-4 text-[0.85rem] text-slate-700">NPR {centsToDisplay(r.chargedCents)}</td>
+                      <td className="px-5 py-4 text-[0.85rem] text-slate-700">NPR {centsToDisplay(r.paidCents)}</td>
                       <td className="px-5 py-4">
                         <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.78rem] font-medium ${
-                            hasDue
-                              ? "bg-rose-100 text-rose-700"
-                              : "bg-emerald-100 text-emerald-700"
-                          }`}
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.78rem] font-medium ${hasDue ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"
+                            }`}
                         >
-                          NPR {centsToDisplay(Math.abs(r.balance))}
-                          {hasDue ? " due" : r.balance < 0 ? " credit" : " settled"}
+                          NPR {centsToDisplay(Math.abs(r.balanceCents))}
+                          {hasDue ? " due" : r.balanceCents < 0 ? " credit" : " settled"}
                         </span>
                       </td>
                       <td className="px-5 py-4">
@@ -627,10 +527,17 @@ export default function BillingPage() {
                   );
                 })}
 
-                {filtered.length === 0 && (
+                {!loadingTable && rows.length === 0 && (
                   <tr>
                     <td colSpan={7} className="bg-white py-16 text-center text-slate-500">
                       No patients match your filters.
+                    </td>
+                  </tr>
+                )}
+                {loadingTable && (
+                  <tr>
+                    <td colSpan={7} className="bg-white py-16 text-center text-slate-400">
+                      Loading...
                     </td>
                   </tr>
                 )}
@@ -639,23 +546,19 @@ export default function BillingPage() {
           </div>
 
           {/* Pagination Controls */}
-          {filtered.length > 0 && (
+          {total > 0 && (
             <div className="mt-4 flex items-center justify-between border-t border-slate-100 px-1 pt-4 text-xs">
-              <span className="text-[0.7rem] text-slate-500 font-medium">
-                Showing{" "}
-                <strong className="text-slate-800">{startIndex + 1}</strong>{" "}
-                to{" "}
-                <strong className="text-slate-800">
-                  {Math.min(startIndex + itemsPerPage, filtered.length)}
-                </strong>{" "}
-                of <strong className="text-slate-800">{filtered.length}</strong> patients
+              <span className="text-[0.7rem] font-medium text-slate-500">
+                Showing <strong className="text-slate-800">{startIndex + 1}</strong> to{" "}
+                <strong className="text-slate-800">{Math.min(startIndex + ITEMS_PER_PAGE, total)}</strong> of{" "}
+                <strong className="text-slate-800">{total}</strong> patients
               </span>
 
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
@@ -664,11 +567,10 @@ export default function BillingPage() {
                   <button
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
-                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${
-                      currentPage === pageNum
+                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
                         ? "bg-[#7da3b3] text-white shadow-sm"
                         : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                    }`}
+                      }`}
                   >
                     {pageNum}
                   </button>
@@ -677,7 +579,7 @@ export default function BillingPage() {
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
@@ -688,13 +590,9 @@ export default function BillingPage() {
       </div>
 
       {/* Ledger detail side panel */}
-      {selectedLedger && (
+      {selectedPatientId && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40">
-          <div
-            onClick={() => setSelectedPatientId(null)}
-            className="absolute inset-0"
-            aria-hidden
-          />
+          <div onClick={() => setSelectedPatientId(null)} className="absolute inset-0" aria-hidden />
           <div className="relative flex h-full w-full max-w-xl flex-col overflow-y-auto bg-slate-50 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-900/5 bg-slate-50 px-6 py-4">
               <button
@@ -705,7 +603,7 @@ export default function BillingPage() {
                 Back
               </button>
               <button
-                onClick={() => openEntryModal(selectedLedger.patientId)}
+                onClick={() => openEntryModal(selectedPatientId)}
                 className="inline-flex items-center gap-1.5 rounded-full bg-[#7da3b3] px-4 py-2 text-[0.85rem] font-medium text-white transition-colors hover:bg-[#345263]"
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2} />
@@ -717,64 +615,56 @@ export default function BillingPage() {
               {/* Identity */}
               <div className="flex items-start gap-4">
                 <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[#7da3b3]/15 text-[1.3rem] font-semibold text-[#3f6274] ring-4 ring-white">
-                  {getInitials(selectedLedger.patientName)}
+                  {getInitials(selectedPatientName)}
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900">
-                    {selectedLedger.patientName}
-                  </h2>
+                  <h2 className="text-xl font-semibold text-slate-900">{selectedPatientName}</h2>
                   <p className="mt-1 flex items-center gap-1.5 text-[0.85rem] text-slate-500">
                     <Phone className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                    {selectedLedger.phone}
+                    {selectedPatientPhone || "—"}
                   </p>
 
-                  {(() => {
-                    const balance = computeBalance(selectedLedger.entries);
-                    const hasDue = balance > 0;
-                    return (
-                      <span
-                        className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8rem] font-medium ${
-                          hasDue
-                            ? "bg-rose-100 text-rose-700"
-                            : "bg-emerald-100 text-emerald-700"
+                  {ledgerSummary && (
+                    <span
+                      className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8rem] font-medium ${ledgerSummary.balanceDueCents > 0
+                          ? "bg-rose-100 text-rose-700"
+                          : "bg-emerald-100 text-emerald-700"
                         }`}
-                      >
-                        NPR {centsToDisplay(Math.abs(balance))}
-                        {hasDue ? " due" : balance < 0 ? " credit" : " settled"}
-                      </span>
-                    );
-                  })()}
+                    >
+                      NPR {centsToDisplay(Math.abs(ledgerSummary.balanceDueCents))}
+                      {ledgerSummary.balanceDueCents > 0
+                        ? " due"
+                        : ledgerSummary.balanceDueCents < 0
+                          ? " credit"
+                          : " settled"}
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* Summary */}
-              <div className="mt-6 grid grid-cols-2 gap-4">
-                {(() => {
-                  const { charged, paid } = computeTotals(selectedLedger.entries);
-                  return (
-                    <>
-                      <div className="rounded-2xl border border-slate-900/5 bg-white p-4 shadow-sm">
-                        <p className="flex items-center gap-1.5 text-[0.78rem] text-slate-400">
-                          <Receipt className="h-3.5 w-3.5" strokeWidth={2} />
-                          Total Charged
-                        </p>
-                        <p className="mt-1 text-[1.1rem] font-semibold text-slate-800">
-                          NPR {centsToDisplay(charged)}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-900/5 bg-white p-4 shadow-sm">
-                        <p className="flex items-center gap-1.5 text-[0.78rem] text-slate-400">
-                          <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
-                          Total Paid
-                        </p>
-                        <p className="mt-1 text-[1.1rem] font-semibold text-slate-800">
-                          NPR {centsToDisplay(paid)}
-                        </p>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
+              {ledgerSummary && (
+                <div className="mt-6 grid grid-cols-2 gap-4">
+                  <div className="rounded-2xl border border-slate-900/5 bg-white p-4 shadow-sm">
+                    <p className="flex items-center gap-1.5 text-[0.78rem] text-slate-400">
+                      <Receipt className="h-3.5 w-3.5" strokeWidth={2} />
+                      Total Charged
+                    </p>
+                    <p className="mt-1 text-[1.1rem] font-semibold text-slate-800">
+                      NPR {centsToDisplay(ledgerSummary.totalChargedCents)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-900/5 bg-white p-4 shadow-sm">
+                    <p className="flex items-center gap-1.5 text-[0.78rem] text-slate-400">
+                      <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
+                      Total Paid
+                    </p>
+                    <p className="mt-1 text-[1.1rem] font-semibold text-slate-800">
+                      NPR {centsToDisplay(ledgerSummary.totalPaidCents)}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Ledger history */}
               <div className="mt-6 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
@@ -782,52 +672,40 @@ export default function BillingPage() {
                   Ledger History
                 </p>
 
-                {selectedLedger.entries.length === 0 ? (
+                {loadingLedger ? (
+                  <p className="mt-4 text-[0.85rem] text-slate-500">Loading...</p>
+                ) : ledgerEntries.length === 0 ? (
                   <p className="mt-4 text-[0.85rem] text-slate-500">No entries recorded yet.</p>
                 ) : (
                   <div className="mt-4 space-y-3">
-                    {[...selectedLedger.entries]
+                    {[...ledgerEntries]
                       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
                       .map((entry) => {
-                        const TypeIcon = ENTRY_TYPE_ICONS[entry.type];
-                        const MethodIcon = entry.method ? METHOD_ICONS[entry.method] : null;
-                        const isNegativeAdjustment =
-                          entry.type === "adjustment" && entry.amountCents < 0;
+                        const TypeIcon = ENTRY_TYPE_ICONS[entry.type as EntryType];
+                        const MethodIcon = entry.paymentMethod ? METHOD_ICONS[entry.paymentMethod] : null;
+                        const isNegativeAdjustment = entry.type === "adjustment" && entry.amountCents < 0;
                         return (
-                          <div
-                            key={entry.id}
-                            className="flex items-start justify-between gap-3 rounded-xl border border-slate-900/5 p-3"
-                          >
+                          <div key={entry.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-900/5 p-3">
                             <div className="flex items-start gap-3">
-                              <span
-                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${ENTRY_TYPE_COLORS[entry.type]}`}
-                              >
+                              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${ENTRY_TYPE_COLORS[entry.type as EntryType]}`}>
                                 <TypeIcon className="h-4 w-4" strokeWidth={2} />
                               </span>
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <span
-                                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-medium ${ENTRY_TYPE_COLORS[entry.type]}`}
-                                  >
-                                    {ENTRY_TYPE_LABELS[entry.type]}
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-medium ${ENTRY_TYPE_COLORS[entry.type as EntryType]}`}>
+                                    {ENTRY_TYPE_LABELS[entry.type as EntryType]}
                                   </span>
-                                  {entry.method && (
+                                  {entry.paymentMethod && (
                                     <span className="inline-flex items-center gap-1 text-[0.75rem] text-slate-500">
-                                      {MethodIcon && (
-                                        <MethodIcon className="h-3 w-3" strokeWidth={2} />
-                                      )}
-                                      {entry.method}
+                                      {MethodIcon && <MethodIcon className="h-3 w-3" strokeWidth={2} />}
+                                      {PAYMENT_METHOD_LABELS[entry.paymentMethod as (typeof PAYMENT_METHODS)[number]] ?? entry.paymentMethod}
                                     </span>
                                   )}
                                 </div>
-                                {entry.treatmentName && (
-                                  <p className="mt-1 text-[0.82rem] text-slate-700">
-                                    {entry.treatmentName}
-                                  </p>
+                                {entry.appointmentTreatmentName && (
+                                  <p className="mt-1 text-[0.82rem] text-slate-700">{entry.appointmentTreatmentName}</p>
                                 )}
-                                {entry.note && (
-                                  <p className="mt-1 text-[0.8rem] text-slate-500">{entry.note}</p>
-                                )}
+                                {entry.note && <p className="mt-1 text-[0.8rem] text-slate-500">{entry.note}</p>}
                                 <p className="mt-1 flex items-center gap-1 text-[0.75rem] text-slate-400">
                                   <CalendarDays className="h-3 w-3" strokeWidth={2} />
                                   {formatDateTime(entry.createdAt)}
@@ -836,14 +714,8 @@ export default function BillingPage() {
                             </div>
 
                             <div className="flex shrink-0 flex-col items-end gap-2">
-                              <p
-                                className={`text-[0.9rem] font-semibold ${
-                                  entry.type === "payment" || isNegativeAdjustment
-                                    ? "text-emerald-600"
-                                    : "text-slate-800"
-                                }`}
-                              >
-                                {entry.type === "payment" || isNegativeAdjustment ? "−" : "+"}
+                              <p className={`text-[0.9rem] font-semibold ${entry.type === "payment" || isNegativeAdjustment ? "text-emerald-600" : "text-slate-800"}`}>
+                                {entry.amountCents < 0 ? "−" : "+"}
                                 NPR {centsToDisplay(Math.abs(entry.amountCents))}
                               </p>
                               {entry.type === "payment" && (
@@ -871,16 +743,20 @@ export default function BillingPage() {
       {/* Add ledger entry modal */}
       {entryModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 px-4">
-          <div
-            onClick={() => setEntryModalOpen(false)}
-            className="absolute inset-0"
-            aria-hidden
-          />
+          <div onClick={() => setEntryModalOpen(false)} className="absolute inset-0" aria-hidden />
           <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="text-[1.05rem] font-semibold text-slate-900">Add Ledger Entry</h3>
             <p className="mt-1 text-[0.8rem] text-slate-500">
-              {ledgers.find((l) => l.patientId === entryTargetPatientId)?.patientName}
+              {entryTargetPatientId === selectedPatientId
+                ? selectedPatientName
+                : rows.find((r) => r.patientId === entryTargetPatientId)?.patientName}
             </p>
+
+            {entryError && (
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[0.78rem] text-rose-700">
+                {entryError}
+              </div>
+            )}
 
             <form onSubmit={handleAddEntry} className="mt-4 space-y-4">
               <label className="block">
@@ -888,11 +764,7 @@ export default function BillingPage() {
                   <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
                   Entry type
                 </span>
-                <select
-                  value={entryForm.type}
-                  onChange={(e) => update("type", e.target.value as EntryType)}
-                  className={inputClass}
-                >
+                <select value={entryForm.type} onChange={(e) => update("type", e.target.value as EntryType)} className={inputClass}>
                   {ENTRY_TYPES.map((t) => (
                     <option key={t} value={t}>
                       {ENTRY_TYPE_LABELS[t]}
@@ -918,7 +790,7 @@ export default function BillingPage() {
                 />
                 {entryForm.type === "adjustment" && (
                   <p className="mt-1.5 text-[0.75rem] text-slate-400">
-                    Treated as a discount (reduces balance). Use a negative-effect note to clarify.
+                    Treated as a discount (reduces balance).
                   </p>
                 )}
               </label>
@@ -929,13 +801,11 @@ export default function BillingPage() {
                     <CreditCard className="h-3.5 w-3.5" strokeWidth={2} />
                     Payment method
                   </span>
-                  <select
-                    value={entryForm.method}
-                    onChange={(e) => update("method", e.target.value)}
-                    className={inputClass}
-                  >
+                  <select value={entryForm.paymentMethod} onChange={(e) => update("paymentMethod", e.target.value)} className={inputClass}>
                     {PAYMENT_METHODS.map((m) => (
-                      <option key={m}>{m}</option>
+                      <option key={m} value={m}>
+                        {PAYMENT_METHOD_LABELS[m]}
+                      </option>
                     ))}
                   </select>
                 </label>
@@ -958,9 +828,10 @@ export default function BillingPage() {
               <div className="flex items-center gap-3 pt-1">
                 <button
                   type="submit"
-                  className="rounded-full bg-[#7da3b3] px-6 py-2.5 text-[0.9rem] font-medium text-white transition-colors hover:bg-[#345263]"
+                  disabled={submittingEntry}
+                  className="rounded-full bg-[#7da3b3] px-6 py-2.5 text-[0.9rem] font-medium text-white transition-colors hover:bg-[#345263] disabled:opacity-60"
                 >
-                  Add Entry
+                  {submittingEntry ? "Adding..." : "Add Entry"}
                 </button>
                 <button
                   type="button"
@@ -975,17 +846,12 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Receipt modal */}
+      {/* Receipt modal - still fabricated, no real receipt system on the backend */}
       {receiptEntryId && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 px-4 print-receipt-overlay">
-          <div
-            onClick={() => setReceiptEntryId(null)}
-            className="absolute inset-0 print-hide"
-            aria-hidden
-          />
+          <div onClick={() => setReceiptEntryId(null)} className="absolute inset-0 print-hide" aria-hidden />
 
           <div className="relative flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl print-receipt-card">
-            {/* Modal chrome — hidden on print */}
             <div className="print-hide flex items-center justify-between border-b border-slate-900/5 px-5 py-4">
               <h3 className="text-[0.95rem] font-semibold text-slate-900">Receipt</h3>
               <div className="flex items-center gap-2">
@@ -1010,22 +876,18 @@ export default function BillingPage() {
               </div>
             </div>
 
-            {/* Printable receipt content */}
             <div id="receipt-print-area" className="overflow-y-auto px-6 py-6">
               {!receiptContext ? (
                 <div className="py-10 text-center text-[0.85rem] text-slate-500">
-                  Couldn't find this payment entry. It may have been removed — close this
-                  and try again from the ledger.
+                  Couldn't find this payment entry. It may have been removed — close this and try again from the
+                  ledger.
                 </div>
               ) : (
                 <>
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-[1.05rem] font-semibold text-[#345263]">
-                        Chitwan Dental Home
-                      </p>
-                      <p className="mt-0.5 text-[0.78rem] text-slate-500">
-                        {OUTLETS.find((o) => o.id !== "all")?.name ?? "Chitwan, Nepal"}
+                        {locations.find((l) => l.id === locationId)?.name ?? "Clinic"}
                       </p>
                     </div>
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#7da3b3]/15 text-[#3f6274]">
@@ -1035,44 +897,35 @@ export default function BillingPage() {
 
                   <div className="mt-5 flex items-center justify-between border-y border-dashed border-slate-300 py-3 text-[0.8rem]">
                     <span className="text-slate-500">Receipt No.</span>
-                    <span className="font-medium text-slate-800">
-                      {receiptNumberFor(receiptContext.entry.id)}
-                    </span>
+                    <span className="font-medium text-slate-800">{receiptNumberFor(receiptContext.entry.id)}</span>
                   </div>
 
                   <div className="mt-4 space-y-2 text-[0.85rem]">
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Date</span>
-                      <span className="font-medium text-slate-800">
-                        {formatDateOnly(receiptContext.entry.createdAt)}
-                      </span>
+                      <span className="font-medium text-slate-800">{formatDateOnly(receiptContext.entry.createdAt)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Patient</span>
-                      <span className="font-medium text-slate-800">
-                        {receiptContext.ledger.patientName}
-                      </span>
+                      <span className="font-medium text-slate-800">{receiptContext.patientName}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Phone</span>
-                      <span className="font-medium text-slate-800">
-                        {receiptContext.ledger.phone}
-                      </span>
+                      <span className="font-medium text-slate-800">{receiptContext.patientPhone || "—"}</span>
                     </div>
-                    {receiptContext.entry.method && (
+                    {receiptContext.entry.paymentMethod && (
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500">Payment Method</span>
                         <span className="font-medium text-slate-800">
-                          {receiptContext.entry.method}
+                          {PAYMENT_METHOD_LABELS[receiptContext.entry.paymentMethod as (typeof PAYMENT_METHODS)[number]] ??
+                            receiptContext.entry.paymentMethod}
                         </span>
                       </div>
                     )}
                     {receiptContext.entry.note && (
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500">Reference</span>
-                        <span className="font-medium text-slate-800">
-                          {receiptContext.entry.note}
-                        </span>
+                        <span className="font-medium text-slate-800">{receiptContext.entry.note}</span>
                       </div>
                     )}
                   </div>
@@ -1081,7 +934,7 @@ export default function BillingPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-[0.85rem] text-slate-600">Amount Paid</span>
                       <span className="text-[1.15rem] font-semibold text-slate-900">
-                        NPR {centsToDisplay(receiptContext.entry.amountCents)}
+                        NPR {centsToDisplay(Math.abs(receiptContext.entry.amountCents))}
                       </span>
                     </div>
                   </div>
@@ -1089,10 +942,7 @@ export default function BillingPage() {
                   <div className="mt-4 flex items-center justify-between text-[0.8rem]">
                     <span className="text-slate-500">Balance After Payment</span>
                     {(() => {
-                      const bal = balanceAfterEntry(
-                        receiptContext.ledger.entries,
-                        receiptContext.entry.id
-                      );
+                      const bal = balanceAfterEntry(ledgerEntries, receiptContext.entry.id);
                       const due = bal > 0;
                       return (
                         <span className={`font-medium ${due ? "text-rose-600" : "text-emerald-600"}`}>
@@ -1103,7 +953,7 @@ export default function BillingPage() {
                   </div>
 
                   <p className="mt-6 border-t border-dashed border-slate-300 pt-4 text-center text-[0.75rem] text-slate-400">
-                    Thank you for visiting Chitwan Dental Home.
+                    Thank you for your visit.
                   </p>
                 </>
               )}
@@ -1112,62 +962,46 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Print-only styles: show just the receipt when printing */}
-     <style jsx global>{`
-@media print {
-  body * {
-    visibility: hidden;
-  }
-
-  #receipt-print-area,
-  #receipt-print-area * {
-    visibility: visible;
-  }
-
-  /*
-   * The receipt modal's ancestors (fixed overlay + a max-h/overflow-hidden
-   * card) stay in the render tree even though "visibility: hidden" is set
-   * on them — their box, positioning and clipping still apply to visible
-   * descendants. That was clipping the receipt content and causing the
-   * fixed, full-viewport overlay to paginate oddly (blank / extra page).
-   * Reset them to normal static flow just for print so the receipt can
-   * render like an ordinary block of content on the page.
-   */
-  .print-receipt-overlay {
-    position: static !important;
-    inset: auto !important;
-    background: none !important;
-    padding: 0 !important;
-    display: block !important;
-  }
-
-  .print-receipt-card {
-    position: static !important;
-    max-height: none !important;
-    overflow: visible !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  #receipt-print-area {
-    position: static !important;
-    overflow: visible !important;
-    width: 100%;
-    background: white;
-    padding: 20px;
-  }
-
-  .print-hide {
-    display: none !important;
-  }
-
-  @page {
-    margin: 10mm;
-  }
-}
-`}</style>
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #receipt-print-area,
+          #receipt-print-area * {
+            visibility: visible;
+          }
+          .print-receipt-overlay {
+            position: static !important;
+            inset: auto !important;
+            background: none !important;
+            padding: 0 !important;
+            display: block !important;
+          }
+          .print-receipt-card {
+            position: static !important;
+            max-height: none !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          #receipt-print-area {
+            position: static !important;
+            overflow: visible !important;
+            width: 100%;
+            background: white;
+            padding: 20px;
+          }
+          .print-hide {
+            display: none !important;
+          }
+          @page {
+            margin: 10mm;
+          }
+        }
+      `}</style>
     </div>
   );
 }
