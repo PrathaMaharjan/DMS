@@ -4,6 +4,34 @@ import { requireSession, SessionError } from "@/lib/auth/get-session";
 import { addLedgerEntrySchema } from "@/lib/validators/billing";
 import { and, desc, eq, sql } from "drizzle-orm";
 
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+async function reconcilePatientCharges(tx: Transaction, patientId: string) {
+  const allEntries = await tx
+    .select({
+      id: ledgerEntries.id,
+      type: ledgerEntries.type,
+      amountCents: ledgerEntries.amountCents,
+      createdAt: ledgerEntries.createdAt,
+    })
+    .from(ledgerEntries)
+    .where(eq(ledgerEntries.patientId, patientId))
+    .orderBy(ledgerEntries.createdAt);
+
+  const charges = allEntries.filter((e) => e.type === "charge");
+  const totalCredit = allEntries
+    .filter((e) => e.type === "payment" || e.type === "adjustment")
+    .reduce((sum, e) => sum + Math.abs(e.amountCents), 0);
+
+  let remainingCredit = totalCredit;
+  for (const charge of charges) {
+    const newStatus = remainingCredit >= charge.amountCents ? "settled" : "due";
+    if (newStatus === "settled") remainingCredit -= charge.amountCents;
+    await tx.update(ledgerEntries).set({ status: newStatus }).where(eq(ledgerEntries.id, charge.id));
+  }
+}
+
+
 export type LedgerErrorCode =
   | "UNAUTHORIZED"
   | "VALIDATION"
@@ -14,82 +42,77 @@ export type AddLedgerEntryResult =
   | { success: true; entryId: string; newBalanceCents: number }
   | { success: false; error: string; code: LedgerErrorCode };
 
-export async function addLedgerEntry(
-  input: unknown,
-): Promise<AddLedgerEntryResult> {
+export async function addLedgerEntry(input: unknown): Promise<AddLedgerEntryResult> {
   try {
     const session = await requireSession();
 
     const parsed = addLedgerEntrySchema.safeParse(input);
     if (!parsed.success) {
-      return {
-        success: false,
-        error: parsed.error.issues[0]?.message ?? "Invalid input.",
-        code: "VALIDATION",
-      };
+      return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input.", code: "VALIDATION" };
     }
     const data = parsed.data;
 
-    // "Payment method" only makes sense for a real payment - the form
-    // itself hides that field for Charge/Adjustment, enforced here too
-    // so the API can't be called with a mismatched combination.
     if (data.type === "payment" && !data.paymentMethod) {
-      return {
-        success: false,
-        error: "Please select a payment method.",
-        code: "VALIDATION",
-      };
+      return { success: false, error: "Please select a payment method.", code: "VALIDATION" };
     }
 
     const patient = await db.query.patients.findFirst({
-      where: and(
-        eq(patients.id, data.patientId),
-        eq(patients.orgId, session.orgId),
-      ),
+      where: and(eq(patients.id, data.patientId), eq(patients.orgId, session.orgId)),
     });
     if (!patient) {
       return { success: false, error: "Patient not found.", code: "NOT_FOUND" };
     }
-    // Charge INCREASES what's owed. Payment and Adjustment both DECREASE
-    // it - same direction, different meaning (money received vs. a
-    // discount/write-off) - matching the form's own "reduces balance" note.
-    const signedAmount =
-      data.type === "charge" ? data.amountCents : -data.amountCents;
 
-    const [entry] = await db
-      .insert(ledgerEntries)
-      .values({
-        orgId: session.orgId,
-        locationId: data.locationId,
-        patientId: data.patientId,
-        appointmentId: data.appointmentId,
-        type: data.type,
-        amountCents: signedAmount,
-        paymentMethod: data.type === "payment" ? data.paymentMethod : null,
-      })
-      .returning();
+    if (data.appointmentId) {
+      const appointment = await db.query.appointments.findFirst({
+        where: and(eq(appointments.id, data.appointmentId), eq(appointments.patientId, data.patientId)),
+      });
+      if (!appointment) {
+        return { success: false, error: "Appointment not found for this patient.", code: "NOT_FOUND" };
+      }
+    }
+
+    const signedAmount = data.type === "charge" ? data.amountCents : -data.amountCents;
+
+    const entryId = await db.transaction(async (tx) => {
+      const [entry] = await tx
+        .insert(ledgerEntries)
+        .values({
+          orgId: session.orgId,
+          locationId: data.locationId,
+          patientId: data.patientId,
+          appointmentId: data.appointmentId,
+          type: data.type,
+          amountCents: signedAmount,
+          paymentMethod: data.type === "payment" ? data.paymentMethod : null,
+          // Payments/adjustments are always settled immediately - only
+          // a fresh charge genuinely starts as due. Reconciliation below
+          // may then flip THIS row too, if existing unallocated credit
+          // already covers it.
+          status: data.type === "charge" ? "due" : "settled",
+        })
+        .returning();
+
+      // Re-run allocation across ALL this patient's charges - a new
+      // charge might immediately settle if old credit was sitting
+      // unused; a new payment might settle one or more old charges.
+      await reconcilePatientCharges(tx, data.patientId);
+
+      return entry.id;
+    });
+
     const [balanceResult] = await db
-      .select({
-        balance: sql<number>`coalesce(sum(${ledgerEntries.amountCents}), 0)::int`,
-      })
+      .select({ balance: sql<number>`coalesce(sum(${ledgerEntries.amountCents}), 0)::int` })
       .from(ledgerEntries)
       .where(eq(ledgerEntries.patientId, data.patientId));
 
-    return {
-      success: true,
-      entryId: entry.id,
-      newBalanceCents: balanceResult.balance,
-    };
+    return { success: true, entryId, newBalanceCents: balanceResult.balance };
   } catch (err) {
     if (err instanceof SessionError) {
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return {
-      success: false,
-      error: "Something went wrong adding the ledger entry.",
-      code: "SERVER_ERROR",
-    };
+    return { success: false, error: "Something went wrong adding the ledger entry.", code: "SERVER_ERROR" };
   }
 }
 
@@ -244,6 +267,7 @@ export type BillingPatientRow = {
   chargedCents: number;
   paidCents: number;
   balanceCents: number;
+  status: "due" | "settled"; // derived from balanceCents, same rule as every other badge in this project
 };
 
 export type BillingPatientsResult =
@@ -269,7 +293,8 @@ export async function getBillingPatients(
         sql`(${patients.firstName} || ' ' || ${patients.lastName} ilike ${"%" + options.search + "%"} or ${patients.phone} ilike ${"%" + options.search + "%"})`
       );
     }
-        const rows = await db
+
+    const rows = await db
       .select({
         patientId: patients.id,
         patientName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`,
@@ -284,14 +309,19 @@ export async function getBillingPatients(
       .where(and(...conditions))
       .groupBy(patients.id, patients.firstName, patients.lastName, patients.phone);
 
-          // Balance filter applied after aggregation, since the balance itself
-    // only exists once the sums are computed - can't filter on it in the
-    // same WHERE clause that produces it.
-    let filtered = rows;
+    // status is derived here, in application code, from the balance
+    // already computed above - same rule used everywhere else in this
+    // project (balanceCents > 0 ? "due" : "settled"), not a new column.
+    const withStatus = rows.map((r) => ({
+      ...r,
+      status: (r.balanceCents > 0 ? "due" : "settled") as "due" | "settled",
+    }));
+
+    let filtered = withStatus;
     if (options?.balanceFilter === "due") {
-      filtered = rows.filter((p) => p.balanceCents > 0);
+      filtered = withStatus.filter((p) => p.status === "due");
     } else if (options?.balanceFilter === "settled") {
-      filtered = rows.filter((p) => p.balanceCents <= 0);
+      filtered = withStatus.filter((p) => p.status === "settled");
     }
 
     const total = filtered.length;

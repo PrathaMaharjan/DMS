@@ -5,6 +5,7 @@ import {
   timestamp,
   pgEnum,
   index,
+  text,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { organizations, locations } from "./tenancy";
@@ -22,6 +23,7 @@ export const paymentMethodEnum = pgEnum("payment_method", [
   "card",
   "online",
 ]);
+export const paymentStatusEnum = pgEnum("payment_status", ["due", "settled"]);
 
 export const ledgerEntries = pgTable(
   "ledger_entries",
@@ -40,6 +42,8 @@ export const ledgerEntries = pgTable(
     appointmentId: uuid("appointment_id").references(() => appointments.id, {
       onDelete: "cascade",
     }),
+    status: paymentStatusEnum("status").notNull().default("due"),
+    note : text("note"),
     type: ledgerEntryTypeEnum("type").notNull(),
     amountCents: integer("amount_cents").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
