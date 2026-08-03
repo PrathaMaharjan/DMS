@@ -58,6 +58,7 @@ export default function LoginPage() {
         setError(responseBody?.error ?? "Invalid email/phone or password");
         return;
       }
+      localStorage.setItem("locationId",responseBody?.data?.org?.locationId)
 
       const redirectTo = responseBody?.data?.redirectTo;
       router.push(redirectTo ?? "/login");
