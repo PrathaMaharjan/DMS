@@ -37,6 +37,8 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 interface AdminStats {
@@ -151,6 +153,22 @@ export default function AdminDashboardPage() {
   const [doctorUtilization, setDoctorUtilization] = useState<DoctorUtilizationItem[]>([]);
   const [todaysAppointments, setTodaysAppointments] = useState<TodaysAppointmentItem[]>([]);
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
+
+  const [apptsPage, setApptsPage] = useState(1);
+  const [activityPage, setActivityPage] = useState(1);
+  const ITEMS_PER_PAGE = 5;
+
+  const totalApptsPages = Math.max(1, Math.ceil(todaysAppointments.length / ITEMS_PER_PAGE));
+  const paginatedAppts = useMemo(() => {
+    const start = (apptsPage - 1) * ITEMS_PER_PAGE;
+    return todaysAppointments.slice(start, start + ITEMS_PER_PAGE);
+  }, [todaysAppointments, apptsPage]);
+
+  const totalActivityPages = Math.max(1, Math.ceil(activityFeed.length / ITEMS_PER_PAGE));
+  const paginatedActivity = useMemo(() => {
+    const start = (activityPage - 1) * ITEMS_PER_PAGE;
+    return activityFeed.slice(start, start + ITEMS_PER_PAGE);
+  }, [activityFeed, activityPage]);
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -589,37 +607,59 @@ export default function AdminDashboardPage() {
                 No appointments scheduled for today.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-[0.7rem] font-bold uppercase tracking-wider text-slate-400">
-                      <th className="pb-3 pr-4">Patient</th>
-                      <th className="pb-3 px-4">Doctor</th>
-                      <th className="pb-3 px-4">Service</th>
-                      <th className="pb-3 px-4">Time</th>
-                      <th className="pb-3 pl-4 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {todaysAppointments.map((apt) => {
-                      const badge = getStatusBadge(apt.status);
-                      return (
-                        <tr key={apt.id} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="py-3 pr-4 font-bold text-slate-900">{apt.patientName}</td>
-                          <td className="py-3 px-4 text-slate-600 font-medium">{apt.doctorName}</td>
-                          <td className="py-3 px-4 text-slate-500">{apt.treatmentName}</td>
-                          <td className="py-3 px-4 font-semibold text-slate-800">{formatTime(apt.startTime)}</td>
-                          <td className="py-3 pl-4 text-right">
-                            <span className={`px-2.5 py-1 rounded-full text-[0.65rem] font-bold ${badge.class}`}>
-                              {badge.label}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-[0.7rem] font-bold uppercase tracking-wider text-slate-400">
+                        <th className="pb-3 pr-4">Patient</th>
+                        <th className="pb-3 px-4">Doctor</th>
+                        <th className="pb-3 px-4">Service</th>
+                        <th className="pb-3 px-4">Time</th>
+                        <th className="pb-3 pl-4 text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {paginatedAppts.map((apt) => {
+                        const badge = getStatusBadge(apt.status);
+                        return (
+                          <tr key={apt.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="py-3 pr-4 font-bold text-slate-900">{apt.patientName}</td>
+                            <td className="py-3 px-4 text-slate-600 font-medium">{apt.doctorName}</td>
+                            <td className="py-3 px-4 text-slate-500">{apt.treatmentName}</td>
+                            <td className="py-3 px-4 font-semibold text-slate-800">{formatTime(apt.startTime)}</td>
+                            <td className="py-3 pl-4 text-right">
+                              <span className={`px-2.5 py-1 rounded-full text-[0.65rem] font-bold ${badge.class}`}>
+                                {badge.label}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+                  <span>Page {apptsPage} of {totalApptsPages}</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      disabled={apptsPage <= 1}
+                      onClick={() => setApptsPage((p) => Math.max(1, p - 1))}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      disabled={apptsPage >= totalApptsPages}
+                      onClick={() => setApptsPage((p) => Math.min(totalApptsPages, p + 1))}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
@@ -634,23 +674,45 @@ export default function AdminDashboardPage() {
                 No recent activity logged yet.
               </div>
             ) : (
-              <div className="space-y-4">
-                {activityFeed.map((act, index) => {
-                  const { icon: Icon, iconBg } = getActivityIcon(act.type);
-                  return (
-                    <div key={`${act.type}-${index}`} className="flex gap-3 text-xs">
-                      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
-                        <Icon className="h-3.5 w-3.5" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-slate-900">{act.title}</p>
-                        <p className="text-[0.75rem] text-slate-500 line-clamp-2 mt-0.5">{act.description}</p>
-                        <span className="text-[0.65rem] text-slate-400">{getRelativeTime(act.timestamp)}</span>
+              <>
+                <div className="space-y-4">
+                  {paginatedActivity.map((act, index) => {
+                    const { icon: Icon, iconBg } = getActivityIcon(act.type);
+                    return (
+                      <div key={`${act.type}-${index}`} className="flex gap-3 text-xs">
+                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
+                          <Icon className="h-3.5 w-3.5" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-slate-900">{act.title}</p>
+                          <p className="text-[0.75rem] text-slate-500 line-clamp-2 mt-0.5">{act.description}</p>
+                          <span className="text-[0.65rem] text-slate-400">{getRelativeTime(act.timestamp)}</span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+                  <span>Page {activityPage} of {totalActivityPages}</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      disabled={activityPage <= 1}
+                      onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      disabled={activityPage >= totalActivityPages}
+                      onClick={() => setActivityPage((p) => Math.min(totalActivityPages, p + 1))}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>

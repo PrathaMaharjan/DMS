@@ -11,12 +11,17 @@ export default function SiteChrome({
 }) {
   const pathname = usePathname();
 
-
-  const isInternalDashboard = pathname 
-    ? /^\/t\/[^/]+\/(admin|frontdesk|doctor|organization)(\/|$)/.test(pathname) 
+ 
+  const isTenantDashboard = pathname
+    ? /^\/t\/[^/]+\/(admin|frontdesk|doctor|organization)(\/|$)/.test(pathname)
     : false;
 
-  if (isInternalDashboard) return <>{children}</>;
+ 
+  const isSuperAdmin = pathname?.startsWith("/superadmin");
+
+  if (isTenantDashboard || isSuperAdmin) {
+    return <>{children}</>;
+  }
 
   return (
     <>

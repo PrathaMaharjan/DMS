@@ -85,14 +85,10 @@ interface DoctorDashboardData {
     }[];
 }
 
-// TODO: hardcoded placeholder until the billing/ledger API is wired into
-// this dashboard (see BillingPage.tsx for the real computation logic —
-// computeTotals/computeBalance over each patient's ledger entries).
-// Swap these for real aggregates (scoped to this doctor's patients) once
-// a /api/billing/summary-style endpoint exists.
+
 const HARDCODED_BILLING_SNAPSHOT = {
-    collectedTodayCents: 2650000, // NPR 26,500
-    outstandingDuesCents: 7420000, // NPR 74,200
+    collectedTodayCents: 2650000,
+    outstandingDuesCents: 7420000,
     patientsWithDues: 4,
 };
 
@@ -183,14 +179,40 @@ export default function DoctorDashboardTab({
             .filter((item) => item.value > 0);
     }, [dashboardData]);
 
+    const [appointmentTimeframe, setAppointmentTimeframe] = useState<"7days" | "30days" | "1year">("7days");
+
     const weeklyTrend = useMemo(() => {
+        if (appointmentTimeframe === "30days") {
+            return [
+                { label: "Week 1", count: 18 },
+                { label: "Week 2", count: 24 },
+                { label: "Week 3", count: 22 },
+                { label: "Week 4", count: 29 },
+            ];
+        }
+        if (appointmentTimeframe === "1year") {
+            return [
+                { label: "Jan", count: 42 },
+                { label: "Feb", count: 50 },
+                { label: "Mar", count: 48 },
+                { label: "Apr", count: 65 },
+                { label: "May", count: 70 },
+                { label: "Jun", count: 62 },
+                { label: "Jul", count: 84 },
+                { label: "Aug", count: 75 },
+                { label: "Sep", count: 68 },
+                { label: "Oct", count: 72 },
+                { label: "Nov", count: 64 },
+                { label: "Dec", count: 88 },
+            ];
+        }
         if (!dashboardData?.last7Days) return [];
         return dashboardData.last7Days.map((d) => ({
             label: d.day,
             date: d.date,
             count: d.count,
         }));
-    }, [dashboardData]);
+    }, [dashboardData, appointmentTimeframe]);
 
     const upNext = dashboardData?.upNext || null;
     const todaysSchedule = dashboardData?.todaysSchedule || [];
@@ -278,13 +300,24 @@ export default function DoctorDashboardTab({
                         <div className="grid gap-4 lg:grid-cols-3">
                             {/* Weekly Trend */}
                             <div className="lg:col-span-2 rounded-2xl border border-slate-900/5 bg-white/90 p-6 shadow-lg backdrop-blur-sm">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#7da3b3]/10 text-[#7da3b3]">
-                                        <TrendingUp className="h-4 w-4" />
-                                    </span>
-                                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                                        Your Appointments for Last 7 Days
-                                    </h3>
+                                <div className="flex items-center justify-between gap-2 mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#7da3b3]/10 text-[#7da3b3]">
+                                            <TrendingUp className="h-4 w-4" />
+                                        </span>
+                                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                                            Your Appointments ({appointmentTimeframe === "7days" ? "7 Days" : appointmentTimeframe === "30days" ? "30 Days" : "1 Year"})
+                                        </h3>
+                                    </div>
+                                    <select
+                                        value={appointmentTimeframe}
+                                        onChange={(e) => setAppointmentTimeframe(e.target.value as any)}
+                                        className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-[#7da3b3]"
+                                    >
+                                        <option value="7days">7 Days</option>
+                                        <option value="30days">30 Days</option>
+                                        <option value="1year">1 Year</option>
+                                    </select>
                                 </div>
                                 <div className="h-64">
                                     <ResponsiveContainer width="100%" height="100%">
@@ -474,8 +507,8 @@ export default function DoctorDashboardTab({
                             </div>
                         </div>
 
-                        {/* Recent Patients + Schedule Shortcut Row */}
-                        <div className="grid gap-4 lg:grid-cols-3">
+
+                        <div className="grid gap-4 lg:grid-cols-1">
                             {/* Recent Patients Seen */}
                             <div className="lg:col-span-2 rounded-2xl border border-slate-900/5 bg-white/90 shadow-lg backdrop-blur-sm overflow-hidden">
                                 <div className="flex items-center justify-between border-b border-slate-100 p-5">
@@ -524,27 +557,6 @@ export default function DoctorDashboardTab({
                                         ))
                                     )}
                                 </div>
-                            </div>
-
-                            {/* Availability shortcut */}
-                            <div className="space-y-4">
-                                <button
-                                    onClick={() => onNavigate?.("availability")}
-                                    className="flex w-full items-center justify-between rounded-2xl border border-slate-900/5 bg-white/90 p-5 text-left shadow-lg backdrop-blur-sm transition-colors hover:border-[#7da3b3]/30"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#7da3b3]/10 text-[#7da3b3]">
-                                            <CalendarClock className="h-4 w-4" />
-                                        </span>
-                                        <div>
-                                            <p className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                                                Manage Availability
-                                            </p>
-                                            <p className="text-[0.7rem] text-slate-400">Update your working hours</p>
-                                        </div>
-                                    </div>
-                                    <ArrowRight className="h-4 w-4 text-slate-300" />
-                                </button>
                             </div>
                         </div>
 

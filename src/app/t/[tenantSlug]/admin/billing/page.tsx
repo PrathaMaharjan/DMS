@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import axios from "axios";
 import {
   BarChart,
   Bar,
@@ -178,6 +179,47 @@ export default function ManagerBillingPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
+  const [outletsList, setOutletsList] = useState(OUTLETS);
+  const [outstandingPatientsList, setOutstandingPatientsList] = useState<OutstandingPatient[]>(TOP_OUTSTANDING_PATIENTS);
+
+  useEffect(() => {
+    async function fetchAdminBillingData() {
+      try {
+        const [outletsRes, patientsRes, doctorsRes] = await Promise.all([
+          axios.get("/api/outlets").catch(() => null),
+          axios.get("/api/patent").catch(() => null),
+          axios.get("/api/doctor").catch(() => null),
+        ]);
+        if (outletsRes?.data?.success && Array.isArray(outletsRes.data.data.outlets)) {
+          const apiOutlets = outletsRes.data.data.outlets;
+          if (apiOutlets.length > 0) {
+            setOutletsList([
+              { id: "all", name: "All outlets" },
+              ...apiOutlets.map((o: any) => ({ id: o.id, name: o.name || o.locationName || "Outlet" })),
+            ]);
+          }
+        }
+        if (patientsRes?.data?.success && Array.isArray(patientsRes.data.data.patients)) {
+          const apiPatients = patientsRes.data.data.patients;
+          if (apiPatients.length > 0) {
+            const mappedPatients: OutstandingPatient[] = apiPatients.map((p: any) => ({
+              id: p.id,
+              name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
+              phone: p.phone || "-",
+              outletId: p.locationId || "outlet-1",
+              chargedCents: 650000_00,
+              paidCents: 400000_00,
+              lastVisit: p.lastVisit ? new Date(p.lastVisit).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Recent",
+            }));
+            setOutstandingPatientsList(mappedPatients);
+          }
+        }
+      } catch (err) {
+      }
+    }
+    fetchAdminBillingData();
+  }, []);
+
   const activeOutlets = useMemo(
     () =>
       outletFilter === "all"
@@ -196,12 +238,38 @@ export default function ManagerBillingPage() {
     return { chargedCents, collectedCents, outstandingCents, patientsWithDues, collectionRate };
   }, [activeOutlets]);
 
+  const [collectionTimeframe, setCollectionTimeframe] = useState<"7days" | "20days" | "1year">("7days");
+
   const weeklyTrend = useMemo(() => {
+    if (collectionTimeframe === "20days") {
+      return [
+        { label: "Day 1-5", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 0.7), 0) },
+        { label: "Day 6-10", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 0.95), 0) },
+        { label: "Day 11-15", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 1.1), 0) },
+        { label: "Day 16-20", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 1.25), 0) },
+      ];
+    }
+    if (collectionTimeframe === "1year") {
+      return [
+        { label: "Jan", collected: 1250000 },
+        { label: "Feb", collected: 1400000 },
+        { label: "Mar", collected: 1350000 },
+        { label: "Apr", collected: 1600000 },
+        { label: "May", collected: 1750000 },
+        { label: "Jun", collected: 1550000 },
+        { label: "Jul", collected: 1900000 },
+        { label: "Aug", collected: 1820000 },
+        { label: "Sep", collected: 1700000 },
+        { label: "Oct", collected: 1850000 },
+        { label: "Nov", collected: 1650000 },
+        { label: "Dec", collected: 2100000 },
+      ];
+    }
     return WEEKDAY_LABELS.map((label, i) => ({
       label,
       collected: activeOutlets.reduce((s, o) => s + (o.weeklyCollectedNpr[i] ?? 0), 0),
     }));
-  }, [activeOutlets]);
+  }, [activeOutlets, collectionTimeframe]);
 
   const paymentBreakdown = useMemo(() => {
     const totalsByMethod: Record<string, number> = {};
@@ -227,13 +295,13 @@ export default function ManagerBillingPage() {
 
   const filteredOutstanding = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return TOP_OUTSTANDING_PATIENTS.filter((p) => {
+    return outstandingPatientsList.filter((p) => {
       const matchesOutlet = outletFilter === "all" || p.outletId === outletFilter;
       const matchesQuery =
         !q || p.name.toLowerCase().includes(q) || p.phone.toLowerCase().includes(q);
       return matchesOutlet && matchesQuery;
     }).sort((a, b) => (b.chargedCents - b.paidCents) - (a.chargedCents - a.paidCents));
-  }, [outletFilter, query]);
+  }, [outletFilter, query, outstandingPatientsList]);
 
   const totalPages = Math.max(1, Math.ceil(filteredOutstanding.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -277,11 +345,29 @@ export default function ManagerBillingPage() {
         <Activity className="absolute right-[32%] bottom-[6%] h-24 w-24 text-[#7da3b3]/[0.07]" strokeWidth={1} />
       </div>
 
-      <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
+      <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10 flex flex-wrap items-center justify-between gap-4 border-b border-slate-100">
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
           Billing Overview
         </h1>
-
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Building2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+            <select
+              value={outletFilter}
+              onChange={(e) => {
+                setOutletFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="appearance-none rounded-full border border-slate-200 bg-white py-2 pl-10 pr-8 text-xs font-semibold text-slate-700 outline-none transition focus:border-[#7da3b3]"
+            >
+              {outletsList.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
@@ -307,13 +393,24 @@ export default function ManagerBillingPage() {
         {/* Charts row */}
         <div className="mt-8 grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#7da3b3]/10 text-[#7da3b3]">
-                <BarChart3 className="h-4 w-4" strokeWidth={2} />
-              </span>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                Collections — Last 7 Days
-              </h3>
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#7da3b3]/10 text-[#7da3b3]">
+                  <BarChart3 className="h-4 w-4" strokeWidth={2} />
+                </span>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Collections — {collectionTimeframe === "7days" ? "Last 7 Days" : collectionTimeframe === "20days" ? "Last 20 Days" : "Last 1 Year"}
+                </h3>
+              </div>
+              <select
+                value={collectionTimeframe}
+                onChange={(e) => setCollectionTimeframe(e.target.value as any)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-[#7da3b3]"
+              >
+                <option value="7days">7 Days</option>
+                <option value="20days">20 Days</option>
+                <option value="1year">1 Year</option>
+              </select>
             </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">

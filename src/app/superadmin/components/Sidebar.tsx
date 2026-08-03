@@ -6,27 +6,34 @@ import axios from "axios";
 import {
   LayoutDashboard,
   Building2,
-  CreditCard,
-  ShieldCheck,
-  Activity,
   Settings,
   LogOut,
 } from "lucide-react";
 
-const SUPERADMIN_NAV_ITEMS = [
-  { label: "Overview", href: "", icon: LayoutDashboard, exact: true },
-  { label: "Clinics & Tenants", href: "/tenants", icon: Building2 },
-  { label: "Subscriptions", href: "/subscriptions", icon: CreditCard },
-  { label: "Global Users", href: "/users", icon: ShieldCheck },
-  { label: "System Logs", href: "/logs", icon: Activity },
-  { label: "Platform Settings", href: "/settings", icon: Settings },
+const NAV_ITEMS = [
+  {
+    label: "Dashboard",
+    href: "",
+    icon: LayoutDashboard,
+    exact: true,
+  },
+  {
+    label: "Organizations",
+    href: "/organizations",
+    icon: Building2,
+  },
+  {
+    label: "Settings",
+    href: "/settings",
+    icon: Settings,
+  },
 ];
 
 function SuperAdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const superAdminRoot = `/superadmin`;
+  const superAdminRoot = "/superadmin";
 
   async function handleLogout() {
     try {
@@ -35,7 +42,8 @@ function SuperAdminSidebar() {
         {},
         { withCredentials: true }
       );
-      router.push(`/login`);
+
+      router.push("/login");
       router.refresh();
     } catch (error) {
       console.error("Logout failed:", error);
@@ -44,24 +52,22 @@ function SuperAdminSidebar() {
 
   return (
     <aside className="sticky top-0 flex h-screen w-70 shrink-0 flex-col self-start bg-[#3f6274] py-6">
-
-      {/* Brand & Badge */}
-      <div className="flex flex-col gap-1 px-6">
+      {/* Brand */}
+      <div className="flex items-center gap-2 px-6">
         <span className="text-2xl font-semibold tracking-tight text-white">
           Chitwan Dental
-        </span>
-        <span className="w-fit rounded-md bg-white/15 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider text-white/90">
-          Superadmin Portal
         </span>
       </div>
 
       {/* Nav */}
       <nav className="mt-10 flex flex-1 flex-col gap-2">
-        {SUPERADMIN_NAV_ITEMS.map(({ label, href, icon: Icon, exact }) => {
+        {NAV_ITEMS.map(({ label, href, icon: Icon, exact }) => {
           const fullHref = `${superAdminRoot}${href}`;
+
           const active = exact
             ? pathname === fullHref
-            : pathname === fullHref || pathname?.startsWith(`${fullHref}/`);
+            : pathname === fullHref ||
+              pathname?.startsWith(`${fullHref}/`);
 
           return (
             <Link
@@ -70,25 +76,31 @@ function SuperAdminSidebar() {
               className={[
                 "flex w-full items-center gap-3 rounded-none pl-5 pr-6 py-3 text-[0.9rem] font-medium transition-colors",
                 active
-                  ? "bg-white text-[#3f6274] border-l-4 border-[#7da3b3]"
+                  ? "bg-white text-[#3f6274] border-l-4 border-[#3f6274]"
                   : "text-white/85 hover:bg-white/10 hover:text-white border-l-4 border-transparent",
               ].join(" ")}
             >
-              <Icon className="h-[1.05rem] w-[1.05rem]" strokeWidth={2} />
+              <Icon
+                className="h-[1.05rem] w-[1.05rem]"
+                strokeWidth={2}
+              />
               {label}
             </Link>
           );
         })}
       </nav>
 
-      {/* Centered Logout Section */}
+      {/* Logout */}
       <div className="mt-auto border-t border-white/15 px-4 pt-4">
         <button
           type="button"
           onClick={handleLogout}
-          className="group flex w-full items-center justify-center gap-2.5 rounded-xl border border-white/10 bg-white/5 py-2.5 px-4 text-[0.9rem] font-medium text-white/90 shadow-xs transition-all duration-200 hover:border-rose-300/30 hover:bg-red-500 hover:text-white hover:shadow-md cursor-pointer"
+          className="group flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-[0.9rem] font-medium text-white/90 shadow-xs transition-all duration-200 hover:border-rose-300/30 hover:bg-red-500 hover:text-white hover:shadow-md"
         >
-          <LogOut className="h-[1.05rem] w-[1.05rem] transition-transform duration-200 group-hover:-translate-x-0.5" strokeWidth={2} />
+          <LogOut
+            className="h-[1.05rem] w-[1.05rem] transition-transform duration-200 group-hover:-translate-x-0.5"
+            strokeWidth={2}
+          />
           <span>Log out</span>
         </button>
       </div>

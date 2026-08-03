@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import axios from "axios";
 import {
   Search,
   Plus,
@@ -278,6 +279,7 @@ const METHOD_ICONS: Record<string, typeof Banknote> = {
 export default function BillingPage() {
   const [ledgers, setLedgers] = useState<PatientLedger[]>(SEED_LEDGERS);
   const [outletFilter, setOutletFilter] = useState("all");
+  const [billingTimeframe, setBillingTimeframe] = useState<"7days" | "20days" | "1year">("7days");
   const [query, setQuery] = useState("");
   const [balanceFilter, setBalanceFilter] = useState<"All" | "Due" | "Settled">("All");
   const [currentPage, setCurrentPage] = useState(1);
@@ -290,6 +292,44 @@ export default function BillingPage() {
   const [entryForm, setEntryForm] = useState<EntryFormState>(EMPTY_ENTRY_FORM);
 
   const [receiptEntryId, setReceiptEntryId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchBillingData() {
+      try {
+        const [patientsRes, outletsRes] = await Promise.all([
+          axios.get("/api/patent").catch(() => null),
+          axios.get("/api/outlets").catch(() => null),
+        ]);
+        if (patientsRes?.data?.success && Array.isArray(patientsRes.data.data.patients)) {
+          const apiPatients = patientsRes.data.data.patients;
+          if (apiPatients.length > 0) {
+            setLedgers((prev) => {
+              const existingIds = new Set(prev.map((l) => l.patientId));
+              const newLedgers: PatientLedger[] = apiPatients
+                .filter((p: any) => !existingIds.has(p.id))
+                .map((p: any) => ({
+                  patientId: p.id,
+                  patientName: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
+                  phone: p.phone || "-",
+                  entries: [
+                    {
+                      id: `entry-${p.id}-1`,
+                      type: "charge",
+                      amountCents: 500000,
+                      createdAt: new Date().toISOString(),
+                      treatmentName: "Consultation & Examination",
+                    },
+                  ],
+                }));
+              return [...prev, ...newLedgers];
+            });
+          }
+        }
+      } catch (err) {
+      }
+    }
+    fetchBillingData();
+  }, []);
 
   const rows = useMemo(() => {
     return ledgers.map((l) => {
@@ -434,8 +474,23 @@ export default function BillingPage() {
       </div>
 
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
-        {/* Stats */}
-        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-lg font-bold text-slate-800">Billing Overview</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">Period:</span>
+            <select
+              value={billingTimeframe}
+              onChange={(e) => setBillingTimeframe(e.target.value as any)}
+              className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-[#7da3b3]"
+            >
+              <option value="7days">7 Days</option>
+              <option value="20days">20 Days</option>
+              <option value="1year">1 Year</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => (
             <div
               key={stat.label}

@@ -26,7 +26,7 @@ const ORG_NAV_ITEMS = [
     { label: "Patients", href: "/patients", icon:  Users  },
     { label: "Treatments", href: "/treatments", icon: Briefcase },
     { label: "Billing", href: "/billing", icon: Wallet },
-      { label: "Analytics & Reports", href: "/analytics", icon: TrendingUp },
+
   { label: " Settings", href: "/settings", icon: Settings },
 ];
 
