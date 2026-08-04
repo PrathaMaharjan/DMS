@@ -149,26 +149,32 @@ export default function PatientsTab() {
       // Fetch Patients
       const res = await axios.get("/api/patent");
       if (res.data?.success && res.data.data.patients) {
-        const mapped: Patient[] = res.data.data.patients.map((p: any) => ({
-          id: p.id,
-          name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
-          firstName: p.firstName || "",
-          lastName: p.lastName || "",
-          age: p.age != null ? String(p.age) : "",
-          dob: p.dob || "",
-          phone: p.phone || "-",
-          email: p.email || "-",
-          gender: p.gender || "Male",
-          bloodGroup: p.bloodGroup || "-",
-          treatmentStatus: p.treatmentCompleted ? "Completed" : "In Treatment",
-          assignedDoctor: p.assignedDoctorName || "Unassigned",
-          history: [],
-          // Not yet returned by /api/patent — expects a future backend join
-          // summing ledger charges/payments per patient. Falls back to
-          // null (shown as "No data") until that column/join exists.
-          balanceDueCents:
-            typeof p.balanceDueCents === "number" ? p.balanceDueCents : null,
-        }));
+        const rawPatients = res.data.data.patients;
+        const mappedPromises = rawPatients.map(async (p: any) => {
+          const ledgerRes = await axios.get(`/api/patent/${p.id}/ledger`).catch(() => null);
+          const summary = ledgerRes?.data?.success ? ledgerRes.data.data.summary : null;
+          const balanceDueCents = summary
+            ? summary.balanceDueCents
+            : (typeof p.balanceDueCents === "number" ? p.balanceDueCents : 0);
+
+          return {
+            id: p.id,
+            name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
+            firstName: p.firstName || "",
+            lastName: p.lastName || "",
+            age: p.age != null ? String(p.age) : "",
+            dob: p.dob || "",
+            phone: p.phone || "-",
+            email: p.email || "-",
+            gender: p.gender || "Male",
+            bloodGroup: p.bloodGroup || "-",
+            treatmentStatus: p.treatmentCompleted ? "Completed" : "In Treatment",
+            assignedDoctor: p.assignedDoctorName || "Unassigned",
+            history: [],
+            balanceDueCents,
+          };
+        });
+        const mapped: Patient[] = await Promise.all(mappedPromises);
         setPatients(mapped);
       }
     } catch (err: any) {

@@ -32,14 +32,14 @@ function endOfDay(date: Date): Date {
 
 export type AdminStatsResult =
   | {
-      success: true;
-      stats: {
-        totalPatients: number;
-        appointmentsToday: number;
-        activeDoctors: number;
-        pendingRequests: number;
-      };
-    }
+    success: true;
+    stats: {
+      totalPatients: number;
+      appointmentsToday: number;
+      activeDoctors: number;
+      pendingRequests: number;
+    };
+  }
   | { success: false; error: string; code: AdminDashboardErrorCode };
 
 export async function getAdminDashboardStats(
@@ -354,15 +354,15 @@ async function getMonthlyTrend(
 // doctor-utilization
 export type DoctorUtilizationResult =
   | {
-      success: true;
-      doctors: {
-        doctorId: string;
-        name: string;
-        bookedSlots: number;
-        openSlots: number;
-        percentBooked: number;
-      }[];
-    }
+    success: true;
+    doctors: {
+      doctorId: string;
+      name: string;
+      bookedSlots: number;
+      openSlots: number;
+      percentBooked: number;
+    }[];
+  }
   | { success: false; error: string; code: AdminDashboardErrorCode };
 
 // "Doctor Utilization & Open Slots" - reuses the exact same shift-to-slots
@@ -406,20 +406,20 @@ export async function getDoctorUtilization(
     const doctorIds = doctorRows.map((d) => d.id);
     const bookedRows = doctorIds.length
       ? await db
-          .select({
-            providerId: appointments.providerId,
-            count: sql<number>`count(*)::int`,
-          })
-          .from(appointments)
-          .where(
-            and(
-              eq(appointments.locationId, locationId),
-              gte(appointments.startTime, startOfDay(now)),
-              lte(appointments.startTime, endOfDay(now)),
-              ne(appointments.status, "cancelled"),
-            ),
-          )
-          .groupBy(appointments.providerId)
+        .select({
+          providerId: appointments.providerId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(appointments)
+        .where(
+          and(
+            eq(appointments.locationId, locationId),
+            gte(appointments.startTime, startOfDay(now)),
+            lte(appointments.startTime, endOfDay(now)),
+            ne(appointments.status, "cancelled"),
+          ),
+        )
+        .groupBy(appointments.providerId)
       : [];
     const bookedByDoctor = new Map(
       bookedRows.map((b) => [b.providerId, b.count]),
@@ -474,16 +474,16 @@ export async function getDoctorUtilization(
 
 export type TodaysAppointmentsResult =
   | {
-      success: true;
-      appointments: {
-        id: string;
-        patientName: string;
-        doctorName: string;
-        treatmentName: string;
-        startTime: string;
-        status: string;
-      }[];
-    }
+    success: true;
+    appointments: {
+      id: string;
+      patientName: string;
+      doctorName: string;
+      treatmentName: string;
+      startTime: string;
+      status: string;
+    }[];
+  }
   | { success: false; error: string; code: AdminDashboardErrorCode };
 
 export async function getTodaysAppointmentsAcrossDoctors(
@@ -538,10 +538,10 @@ export type ActivityFeedErrorCode = "UNAUTHORIZED" | "SERVER_ERROR";
 
 export type ActivityItem = {
   type:
-    | "appointment_booked"
-    | "patient_registered"
-    | "treatment_added"
-    | "schedule_updated";
+  | "appointment_booked"
+  | "patient_registered"
+  | "treatment_added"
+  | "schedule_updated";
   title: string;
   description: string;
   timestamp: Date;
@@ -659,31 +659,31 @@ export async function getRecentActivityFeed(
 // getAll
 export type AdminDoctorPanelResult =
   | {
-      success: true;
-      panel: {
-        doctorUtilization: {
-          doctorId: string;
-          name: string;
-          bookedSlots: number;
-          openSlots: number;
-          percentBooked: number;
-        }[];
-        todaysAppointments: {
-          id: string;
-          patientName: string;
-          doctorName: string;
-          treatmentName: string;
-          startTime: string;
-          status: string;
-        }[];
-        activityFeed: {
-          type: string;
-          title: string;
-          description: string;
-          timestamp: Date;
-        }[];
-      };
-    }
+    success: true;
+    panel: {
+      doctorUtilization: {
+        doctorId: string;
+        name: string;
+        bookedSlots: number;
+        openSlots: number;
+        percentBooked: number;
+      }[];
+      todaysAppointments: {
+        id: string;
+        patientName: string;
+        doctorName: string;
+        treatmentName: string;
+        startTime: string;
+        status: string;
+      }[];
+      activityFeed: {
+        type: string;
+        title: string;
+        description: string;
+        timestamp: Date;
+      }[];
+    };
+  }
   | { success: false; error: string };
 
 // Everything on this specific screen (Doctor Utilization, Today's
@@ -747,14 +747,14 @@ export type AdminBillingErrorCode = "UNAUTHORIZED" | "SERVER_ERROR";
 
 export type AdminBillingStatsResult =
   | {
-      success: true;
-      stats: {
-        totalRevenueCents: number;
-        totalCollectedCents: number;
-        outstandingDuesCents: number;
-        collectionRatePercent: number;
-      };
-    }
+    success: true;
+    stats: {
+      totalRevenueCents: number;
+      totalCollectedCents: number;
+      outstandingDuesCents: number;
+      collectionRatePercent: number;
+    };
+  }
   | { success: false; error: string; code: AdminBillingErrorCode };
 
 // "Total Revenue" here is the same underlying figure as "Total Charged"
@@ -843,14 +843,10 @@ export async function getPaymentMethodMix(
       )
       .groupBy(ledgerEntries.paymentMethod);
 
-    // Real enum values only - "cash", "card", "online" - "Wallet" never
-    // existed on the backend, so it correctly never appears here.
+
     const breakdown = rows
-      .filter(
-        (r: any): r is { method: string; amountCents: number } =>
-          r.method !== null,
-      )
-      .map((r) => ({ method: r.method, amountCents: r.amountCents }));
+      .filter((r) => r.method !== null)
+      .map((r) => ({ method: r.method as string, amountCents: r.amountCents }));
 
     return { success: true, breakdown };
   } catch (err) {
@@ -1098,19 +1094,19 @@ const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 50;
 export type TopOutstandingResult =
   | {
-      success: true;
-      patients: {
-        patientId: string;
-        patientName: string;
-        patientPhone: string | null;
-        outletName: string;
-        lastActivity: Date | null;
-        chargedCents: number;
-        paidCents: number;
-        balanceCents: number;
-      }[];
-      pagination: { total: number; limit: number; offset: number };
-    }
+    success: true;
+    patients: {
+      patientId: string;
+      patientName: string;
+      patientPhone: string | null;
+      outletName: string;
+      lastActivity: Date | null;
+      chargedCents: number;
+      paidCents: number;
+      balanceCents: number;
+    }[];
+    pagination: { total: number; limit: number; offset: number };
+  }
   | { success: false; error: string; code: AdminBillingErrorCode };
 // top out;et patent
 export async function getTopOutstandingPatients(

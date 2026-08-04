@@ -182,7 +182,8 @@ export default function DoctorPatientsTab() {
 
 
       if (patientsRes?.data?.success && patientsRes.data.data.patients) {
-        const mapped: TreatedPatient[] = patientsRes.data.data.patients.map((p: any) => {
+        const rawPatients = patientsRes.data.data.patients;
+        const mappedPromises = rawPatients.map(async (p: any) => {
           const patientName = `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient";
           const normName = patientName.toLowerCase();
           const appts = patientApptsMap[p.id] || patientNameApptsMap[normName] || [];
@@ -203,6 +204,10 @@ export default function DoctorPatientsTab() {
             historyRecords[0]?.date ||
             (p.lastVisit ? new Date(p.lastVisit).toISOString().split("T")[0] : "N/A");
 
+          const ledgerRes = await axios.get(`/api/patent/${p.id}/ledger`).catch(() => null);
+          const summary = ledgerRes?.data?.success ? ledgerRes.data.data.summary : null;
+          const balanceDueCents = summary ? summary.balanceDueCents : 0;
+
           return {
             id: p.id,
             name: patientName,
@@ -214,10 +219,11 @@ export default function DoctorPatientsTab() {
             lastVisit: lastVisitDate,
             totalVisits: Math.max(1, historyRecords.length),
             history: historyRecords,
-            balanceDueCents: getHardcodedBalanceDueCents(p.id),
+            balanceDueCents,
           };
         });
 
+        const mapped: TreatedPatient[] = await Promise.all(mappedPromises);
         setPatients(mapped);
       }
     } catch (err: any) {

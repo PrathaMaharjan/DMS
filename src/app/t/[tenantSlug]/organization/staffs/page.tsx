@@ -331,7 +331,7 @@ export default function StaffPage() {
         let roleVal = "front_office";
         if (form.role === "Manager") roleVal = "manager";
 
-        const defaultLocationId = outletsList.find((o) => o.id !== "all")?.id;
+        const defaultLocationId = outletFilter !== "all" ? outletFilter : outletsList.find((o) => o.id !== "all")?.id;
         if (defaultLocationId) {
           await axios.post("/api/staff", {
             locationId: defaultLocationId,

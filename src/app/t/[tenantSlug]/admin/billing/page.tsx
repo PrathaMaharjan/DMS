@@ -54,16 +54,24 @@ const OUTLETS = [
 
 const PAYMENT_METHOD_COLORS: Record<string, string> = {
   Cash: "#7da3b3",
+  cash: "#7da3b3",
   Card: "#345263",
+  card: "#345263",
   Wallet: "#10b981",
- 
+  wallet: "#10b981",
+  Online: "#38bdf8",
+  online: "#38bdf8",
 };
 
 const METHOD_ICONS: Record<string, typeof Banknote> = {
   Cash: Banknote,
+  cash: Banknote,
   Card: CreditCard,
+  card: CreditCard,
   Wallet: Smartphone,
- 
+  wallet: Smartphone,
+  Online: Smartphone,
+  online: Smartphone,
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -181,35 +189,95 @@ export default function ManagerBillingPage() {
 
   const [outletsList, setOutletsList] = useState(OUTLETS);
   const [outstandingPatientsList, setOutstandingPatientsList] = useState<OutstandingPatient[]>(TOP_OUTSTANDING_PATIENTS);
+  const [adminStats, setAdminStats] = useState<{ chargedCents: number; collectedCents: number; outstandingCents: number; collectionRate: number } | null>(null);
+  const [barchartData, setBarchartData] = useState<{ label: string; collected: number }[]>([]);
+  const [piechartData, setPiechartData] = useState<{ method: string; amountCents: number }[]>([]);
+  const [doctorRevenueData, setDoctorRevenueData] = useState<{ name: string; revenueCents: number; pct: number }[]>([]);
+  const [adminOutletName, setAdminOutletName] = useState<string>("");
+  const [collectionTimeframe, setCollectionTimeframe] = useState<"7days" | "20days" | "1year">("7days");
 
   useEffect(() => {
-    async function fetchAdminBillingData() {
+    async function loadAdminLocationAndBilling() {
       try {
-        const [outletsRes, patientsRes, doctorsRes] = await Promise.all([
+        const [outletsRes, servicesRes, treatmentsRes, patientsRes] = await Promise.all([
           axios.get("/api/outlets").catch(() => null),
+          axios.get("/api/services").catch(() => null),
+          axios.get("/api/treatment").catch(() => null),
           axios.get("/api/patent").catch(() => null),
-          axios.get("/api/doctor").catch(() => null),
         ]);
-        if (outletsRes?.data?.success && Array.isArray(outletsRes.data.data.outlets)) {
-          const apiOutlets = outletsRes.data.data.outlets;
-          if (apiOutlets.length > 0) {
-            setOutletsList([
-              { id: "all", name: "All outlets" },
-              ...apiOutlets.map((o: any) => ({ id: o.id, name: o.name || o.locationName || "Outlet" })),
-            ]);
-          }
+
+        let targetLocId = "";
+        let targetName = "";
+        if (outletsRes?.data?.success && Array.isArray(outletsRes.data.data.locations) && outletsRes.data.data.locations.length > 0) {
+          targetLocId = outletsRes.data.data.locations[0].id;
+          targetName = outletsRes.data.data.locations[0].name || outletsRes.data.data.locations[0].locationName || "";
         }
-        if (patientsRes?.data?.success && Array.isArray(patientsRes.data.data.patients)) {
-          const apiPatients = patientsRes.data.data.patients;
-          if (apiPatients.length > 0) {
-            const mappedPatients: OutstandingPatient[] = apiPatients.map((p: any) => ({
-              id: p.id,
-              name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
-              phone: p.phone || "-",
-              outletId: p.locationId || "outlet-1",
-              chargedCents: 650000_00,
-              paidCents: 400000_00,
-              lastVisit: p.lastVisit ? new Date(p.lastVisit).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Recent",
+
+        if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
+          targetLocId = servicesRes.data.data.services[0].locationId || targetLocId;
+        } else if (treatmentsRes?.data?.success && treatmentsRes.data.data.treatments?.length > 0) {
+          targetLocId = treatmentsRes.data.data.treatments[0].locationId || targetLocId;
+        } else if (patientsRes?.data?.success && patientsRes.data.data.patients?.length > 0) {
+          targetLocId = patientsRes.data.data.patients[0].locationId || targetLocId;
+        }
+
+        if (targetLocId) {
+          setAdminOutletName(targetName);
+          const rangeParam = collectionTimeframe === "1year" ? "1y" : collectionTimeframe === "20days" ? "1m" : "7d";
+          const [statsRes, chartRes, pieRes, doctorRes, topPatientsRes, patientsDetailRes] = await Promise.all([
+            axios.get(`/api/admin-dashboard/billing?locationId=${targetLocId}`).catch(() => null),
+            axios.get(`/api/admin-dashboard/billing/barchart?locationId=${targetLocId}&range=${rangeParam}`).catch(() => null),
+            axios.get(`/api/admin-dashboard/billing/piecart?locationId=${targetLocId}`).catch(() => null),
+            axios.get(`/api/admin-dashboard/billing/doctor-revenue?locationId=${targetLocId}`).catch(() => null),
+            axios.get(`/api/admin-dashboard/billing/top-patent?locationId=${targetLocId}`).catch(() => null),
+            axios.get(`/api/billing/patentDetail?locationId=${targetLocId}`).catch(() => null),
+          ]);
+
+          if (statsRes?.data?.success && statsRes.data.data.stats) {
+            const s = statsRes.data.data.stats;
+            setAdminStats({
+              chargedCents: s.totalRevenueCents ?? 0,
+              collectedCents: s.totalCollectedCents ?? 0,
+              outstandingCents: s.outstandingDuesCents ?? 0,
+              collectionRate: s.collectionRatePercent ?? 0,
+            });
+          }
+          if (chartRes?.data?.success && Array.isArray(chartRes.data.data.chart)) {
+            setBarchartData(
+              chartRes.data.data.chart.map((item: any) => ({
+                label: item.label,
+                collected: (item.amountCents ?? 0) / 100,
+              }))
+            );
+          }
+          if (pieRes?.data?.success && Array.isArray(pieRes.data.data.breakdown)) {
+            setPiechartData(pieRes.data.data.breakdown);
+          }
+          if (doctorRes?.data?.success && Array.isArray(doctorRes.data.data.doctors)) {
+            const apiDocs = doctorRes.data.data.doctors;
+            const maxRev = Math.max(1, ...apiDocs.map((d: any) => d.revenueCents ?? 0));
+            setDoctorRevenueData(
+              apiDocs.map((d: any) => ({
+                name: d.doctorName || d.name || "Doctor",
+                revenueCents: d.revenueCents ?? 0,
+                pct: Math.round(((d.revenueCents ?? 0) / maxRev) * 100),
+              }))
+            );
+          }
+
+          const rawPatients = topPatientsRes?.data?.success && Array.isArray(topPatientsRes.data.data.patients)
+            ? topPatientsRes.data.data.patients
+            : (patientsDetailRes?.data?.success && Array.isArray(patientsDetailRes.data.data.patients) ? patientsDetailRes.data.data.patients : []);
+
+          if (rawPatients.length > 0) {
+            const mappedPatients: OutstandingPatient[] = rawPatients.map((p: any) => ({
+              id: p.patientId || p.id,
+              name: p.patientName || `${p.firstName || ""} ${p.lastName || ""}`.trim(),
+              phone: p.patientPhone || p.phone || "-",
+              outletId: targetLocId,
+              chargedCents: p.chargedCents ?? 0,
+              paidCents: p.paidCents ?? 0,
+              lastVisit: p.lastActivity ? new Date(p.lastActivity).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Recent",
             }));
             setOutstandingPatientsList(mappedPatients);
           }
@@ -217,8 +285,8 @@ export default function ManagerBillingPage() {
       } catch (err) {
       }
     }
-    fetchAdminBillingData();
-  }, []);
+    loadAdminLocationAndBilling();
+  }, [collectionTimeframe]);
 
   const activeOutlets = useMemo(
     () =>
@@ -228,19 +296,18 @@ export default function ManagerBillingPage() {
     [outletFilter]
   );
 
-  // Aggregate totals across whatever outlets are currently in view.
   const totals = useMemo(() => {
+    if (adminStats) return adminStats;
     const chargedCents = activeOutlets.reduce((s, o) => s + o.chargedCents, 0);
     const collectedCents = activeOutlets.reduce((s, o) => s + o.collectedCents, 0);
     const outstandingCents = chargedCents - collectedCents;
     const patientsWithDues = activeOutlets.reduce((s, o) => s + o.patientsWithDues, 0);
     const collectionRate = chargedCents > 0 ? (collectedCents / chargedCents) * 100 : 0;
     return { chargedCents, collectedCents, outstandingCents, patientsWithDues, collectionRate };
-  }, [activeOutlets]);
-
-  const [collectionTimeframe, setCollectionTimeframe] = useState<"7days" | "20days" | "1year">("7days");
+  }, [activeOutlets, adminStats]);
 
   const weeklyTrend = useMemo(() => {
+    if (barchartData.length > 0) return barchartData;
     if (collectionTimeframe === "20days") {
       return [
         { label: "Day 1-5", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 0.7), 0) },
@@ -269,9 +336,10 @@ export default function ManagerBillingPage() {
       label,
       collected: activeOutlets.reduce((s, o) => s + (o.weeklyCollectedNpr[i] ?? 0), 0),
     }));
-  }, [activeOutlets, collectionTimeframe]);
+  }, [activeOutlets, collectionTimeframe, barchartData]);
 
   const paymentBreakdown = useMemo(() => {
+    if (piechartData.length > 0) return piechartData;
     const totalsByMethod: Record<string, number> = {};
     activeOutlets.forEach((o) =>
       o.paymentBreakdown.forEach((p) => {
@@ -282,16 +350,17 @@ export default function ManagerBillingPage() {
       method,
       amountCents,
     }));
-  }, [activeOutlets]);
+  }, [activeOutlets, piechartData]);
 
   const doctorRevenue = useMemo(() => {
+    if (doctorRevenueData.length > 0) return doctorRevenueData;
     const combined: { name: string; revenueCents: number }[] = [];
     activeOutlets.forEach((o) => combined.push(...o.doctors));
     const maxRevenue = Math.max(1, ...combined.map((d) => d.revenueCents));
     return combined
       .sort((a, b) => b.revenueCents - a.revenueCents)
       .map((d) => ({ ...d, pct: Math.round((d.revenueCents / maxRevenue) * 100) }));
-  }, [activeOutlets]);
+  }, [activeOutlets, doctorRevenueData]);
 
   const filteredOutstanding = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -345,33 +414,17 @@ export default function ManagerBillingPage() {
         <Activity className="absolute right-[32%] bottom-[6%] h-24 w-24 text-[#7da3b3]/[0.07]" strokeWidth={1} />
       </div>
 
-      <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10 flex flex-wrap items-center justify-between gap-4 border-b border-slate-100">
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
-          Billing Overview
-        </h1>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Building2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
-            <select
-              value={outletFilter}
-              onChange={(e) => {
-                setOutletFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="appearance-none rounded-full border border-slate-200 bg-white py-2 pl-10 pr-8 text-xs font-semibold text-slate-700 outline-none transition focus:border-[#7da3b3]"
-            >
-              {outletsList.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </div>
+      <div className="sticky top-0 z-20 flex w-full items-center justify-between bg-white px-6 py-6 lg:px-10 shadow-sm">
+        <div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
+            Billing Overview
+          </h1>
+
         </div>
       </div>
 
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
-    
+
 
         {/* Stats */}
         <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -428,18 +481,18 @@ export default function ManagerBillingPage() {
                     tickLine={false}
                     tickFormatter={(v) => `${Math.round(v / 1000)}k`}
                   />
-                <Tooltip
-  cursor={{ fill: "#f1f5f9" }}
-  formatter={(value) => {
-    const amount = Number(value ?? 0);
-    return [`NPR ${amount.toLocaleString()}`, "Collected"];
-  }}
-  contentStyle={{
-    borderRadius: 12,
-    border: "1px solid #e2e8f0",
-    fontSize: 12,
-  }}
-/>
+                  <Tooltip
+                    cursor={{ fill: "#f1f5f9" }}
+                    formatter={(value) => {
+                      const amount = Number(value ?? 0);
+                      return [`NPR ${amount.toLocaleString()}`, "Collected"];
+                    }}
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: "1px solid #e2e8f0",
+                      fontSize: 12,
+                    }}
+                  />
                   <Bar dataKey="collected" name="Collected" fill="#7da3b3" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -473,17 +526,17 @@ export default function ManagerBillingPage() {
                       />
                     ))}
                   </Pie>
-              <Tooltip
-  formatter={(value) => {
-    const amount = Number(value ?? 0);
-    return `NPR ${centsToDisplay(amount)}`;
-  }}
-  contentStyle={{
-    borderRadius: 12,
-    border: "1px solid #e2e8f0",
-    fontSize: 12,
-  }}
-/>
+                  <Tooltip
+                    formatter={(value) => {
+                      const amount = Number(value ?? 0);
+                      return `NPR ${centsToDisplay(amount)}`;
+                    }}
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: "1px solid #e2e8f0",
+                      fontSize: 12,
+                    }}
+                  />
                   <Legend
                     verticalAlign="bottom"
                     height={36}
@@ -599,11 +652,10 @@ export default function ManagerBillingPage() {
                     </div>
                     <div className="min-w-[7rem]">
                       <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.72rem] font-medium ${
-                          isSettled
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.72rem] font-medium ${isSettled
                             ? "bg-emerald-100 text-emerald-700"
                             : "bg-rose-100 text-rose-700"
-                        }`}
+                          }`}
                       >
                         {isSettled
                           ? "NPR 0 settled"
@@ -646,11 +698,10 @@ export default function ManagerBillingPage() {
                   <button
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
-                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${
-                      currentPage === pageNum
+                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
                         ? "bg-[#7da3b3] text-white shadow-sm"
                         : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                    }`}
+                      }`}
                   >
                     {pageNum}
                   </button>

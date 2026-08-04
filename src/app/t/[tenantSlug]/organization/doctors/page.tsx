@@ -230,7 +230,7 @@ export default function DoctorsPage() {
         setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutlets]);
       }
 
-      const activeLoc = outletFilter !== "all" ? outletFilter : locId;
+      const activeLoc = outletFilter !== "all" ? outletFilter : undefined;
       const res = await axios.get("/api/doctor", {
         params: activeLoc ? { locationId: activeLoc } : undefined,
       });
@@ -517,14 +517,15 @@ export default function DoctorsPage() {
           );
         }
       } else {
-        if (!locationId) {
+        const targetLocId = outletFilter !== "all" ? outletFilter : (locationId || outletsList.find(o => o.id !== "all")?.id);
+        if (!targetLocId) {
           setSubmitError("Could not determine location ID. Please configure services first.");
           setSubmitting(false);
           return;
         }
 
         const payload: Record<string, unknown> = {
-          locationId,
+          locationId: targetLocId,
           name: form.name,
           email: form.email,
           password: form.password,

@@ -29,6 +29,8 @@ import {
   User,
   Loader2,
   FileText,
+  Wallet,
+  CheckCircle2,
 } from "lucide-react";
 
 const STATUSES = ["Active", "Inactive"] as const;
@@ -59,6 +61,7 @@ type Patient = {
   medicalHistory?: string[];
   medications?: string[];
   locationId?: string;
+  balanceDueCents: number | null; // null = no billing data available yet
 };
 
 function initialsOf(name: string) {
@@ -69,6 +72,13 @@ function initialsOf(name: string) {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+}
+
+function centsToDisplay(cents: number) {
+  return (cents / 100).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 const AVATAR_COLORS = [
@@ -144,6 +154,7 @@ function apiPatientToPatient(p: any): Patient {
     medicalHistory: p.medicalHistory || [],
     medications: p.medications || [],
     locationId: p.locationId || "",
+    balanceDueCents: typeof p.balanceDueCents === "number" ? p.balanceDueCents : 0,
   };
 }
 
@@ -228,14 +239,32 @@ export default function PatientsPage() {
       ]);
       if (res.data?.success && res.data.data?.patients) {
         const seenPatients = new Set<string>();
-        const mapped: Patient[] = [];
+        const rawUnique: any[] = [];
         res.data.data.patients.forEach((raw: any) => {
-          const pt = apiPatientToPatient(raw);
-          if (pt.id && !seenPatients.has(pt.id)) {
-            seenPatients.add(pt.id);
-            mapped.push(pt);
+          if (raw.id && !seenPatients.has(raw.id)) {
+            seenPatients.add(raw.id);
+            rawUnique.push(raw);
           }
         });
+
+        const mapped: Patient[] = await Promise.all(
+          rawUnique.map(async (raw: any) => {
+            let locId = raw.locationId || "";
+            if (!locId) {
+              const detailRes = await axios.get(`/api/patent/${raw.id}`).catch(() => null);
+              if (detailRes?.data?.success && detailRes.data.data?.patient?.locationId) {
+                locId = detailRes.data.data.patient.locationId;
+              }
+            }
+            const base = apiPatientToPatient({ ...raw, locationId: locId });
+            const ledgerRes = await axios.get(`/api/patent/${raw.id}/ledger`).catch(() => null);
+            const summary = ledgerRes?.data?.success ? ledgerRes.data.data.summary : null;
+            const balanceDueCents = summary
+              ? summary.balanceDueCents
+              : (typeof raw.balanceDueCents === "number" ? raw.balanceDueCents : 0);
+            return { ...base, balanceDueCents };
+          })
+        );
         setPatients(mapped);
       }
       if (outletsRes?.data?.success && outletsRes.data.data?.locations) {
@@ -344,10 +373,12 @@ export default function PatientsPage() {
           return;
         }
       } else {
-        let locId = "";
-        const servicesRes = await axios.get("/api/services").catch(() => null);
-        if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
-          locId = servicesRes.data.data.services[0].locationId;
+        let locId = outletFilter !== "all" ? outletFilter : (outletsList[0]?.id || "");
+        if (!locId) {
+          const servicesRes = await axios.get("/api/services").catch(() => null);
+          if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
+            locId = servicesRes.data.data.services[0].locationId;
+          }
         }
 
         const payload: Record<string, any> = {
@@ -377,10 +408,10 @@ export default function PatientsPage() {
       setForm(EMPTY_FORM);
       setEditingId(null);
       setModalOpen(false);
-      
+
     } catch (err: any) {
       console.error("Failed to save patient:", err);
-      
+
       alert(err.response?.data?.error || "Failed to save patient.");
     }
   }
@@ -493,32 +524,32 @@ export default function PatientsPage() {
 
   return (
     <div className="relative min-h-screen bg-slate-50">
-     <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
-  <div className="flex flex-wrap items-center justify-between gap-3">
-    <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
-     Patients
-    </h1>
+      <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
+            Patients
+          </h1>
 
-    <div className="relative">
-      <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
-      <select
-        value={outletFilter}
-        onChange={(e) => setOutletFilter(e.target.value)}
-        className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
-      >
-        <option value="all">All outlets</option>
-                  {outletsList.map((o, idx) => (
-                    <option key={`${o.id}-${idx}`} value={o.id}>
-                      {o.name}
-                    </option>
-                  ))}
-      </select>
-    </div>
-  </div>
-</div>
+          <div className="relative">
+            <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+            <select
+              value={outletFilter}
+              onChange={(e) => setOutletFilter(e.target.value)}
+              className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
+            >
+              <option value="all">All outlets</option>
+              {outletsList.map((o, idx) => (
+                <option key={`${o.id}-${idx}`} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
 
-    
-                                           
+
+
 
 
       <div className="mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
@@ -604,7 +635,7 @@ export default function PatientsPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] border-collapse text-left">
+            <table className="w-full min-w-[1200px] border-collapse text-left">
               <thead>
                 <tr className="border-y border-slate-900/5 bg-slate-50/60">
                   <th className="px-6 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
@@ -634,6 +665,9 @@ export default function PatientsPage() {
                   <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
                     Status
                   </th>
+                  <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Payment
+                  </th>
                   <th className="px-6 py-3 text-right text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
                     Actions
                   </th>
@@ -642,7 +676,7 @@ export default function PatientsPage() {
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-16 text-center text-slate-500">
+                    <td colSpan={11} className="px-6 py-16 text-center text-slate-500">
                       <span className="inline-flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin text-[#7da3b3]" />
                         Loading patients...
@@ -653,7 +687,7 @@ export default function PatientsPage() {
 
                 {!loading && loadError && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-16 text-center text-rose-500">
+                    <td colSpan={11} className="px-6 py-16 text-center text-rose-500">
                       {loadError}
                     </td>
                   </tr>
@@ -719,6 +753,21 @@ export default function PatientsPage() {
                             {p.status}
                           </span>
                         </td>
+                        <td className="px-4 py-4 text-xs whitespace-nowrap">
+                          {p.balanceDueCents === null ? (
+                            <span className="text-slate-400 text-[0.72rem]">No data</span>
+                          ) : p.balanceDueCents > 0 ? (
+                            <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 font-semibold px-2 py-0.5 rounded border border-rose-200/60 text-[0.72rem]">
+                              <Wallet className="h-3 w-3 text-rose-500 shrink-0" />
+                              NPR {centsToDisplay(p.balanceDueCents)} due
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded border border-emerald-200/60 text-[0.72rem]">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                              Settled
+                            </span>
+                          )}
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-1">
                             <button
@@ -751,7 +800,7 @@ export default function PatientsPage() {
 
                 {!loading && !loadError && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-16 text-center text-slate-500">
+                    <td colSpan={11} className="px-6 py-16 text-center text-slate-500">
                       No patients match your filters.
                     </td>
                   </tr>
@@ -956,6 +1005,20 @@ export default function PatientsPage() {
                     >
                       {selectedPatient.status}
                     </span>
+                    <span className="text-slate-300">|</span>
+                    {selectedPatient.balanceDueCents === null ? (
+                      <span className="text-slate-400">No billing data</span>
+                    ) : selectedPatient.balanceDueCents > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-rose-600">
+                        <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
+                        NPR {centsToDisplay(selectedPatient.balanceDueCents)} due
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-emerald-600">
+                        <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />
+                        Settled
+                      </span>
+                    )}
                   </div>
 
                   <div className="mt-3 space-y-1 text-[0.85rem] text-slate-600">
@@ -1108,16 +1171,16 @@ export default function PatientsPage() {
                       return (
 
                         <div className=" mt-3 list-disc space-y-1.5 pl-5 ">
-                          
+
                           {hasPres && (
                             <div className="rounded-xl text-xs space-y-1">
-                                <ul className="mt-3 list-disc space-y-1.5  text-[0.85rem] text-slate-600">
+                              <ul className="mt-3 list-disc space-y-1.5  text-[0.85rem] text-slate-600">
                                 <li>{latestPrescriptionAppt.prescription || latestPrescriptionAppt.prescriptionText}</li>
                               </ul>
                             </div>
                           )}
                           {hasMeds && (
-                           <ul className="list-disc list-inside space-y-1.5 text-[0.85rem] text-slate-600">
+                            <ul className="list-disc list-inside space-y-1.5 text-[0.85rem] text-slate-600">
                               {medsList.map((item, idx) => (
                                 <li key={idx}>{item}</li>
                               ))}

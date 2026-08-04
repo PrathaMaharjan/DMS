@@ -259,7 +259,7 @@ export function generateFullHistoryPdf(
     if (data.visits.length === 0) {
       doc.fontSize(9.5).fillColor(MUTED).font("Helvetica-Oblique").text("No visits on record.", MARGIN, doc.y);
     } else {
-      data.visits.forEach((visit:any, i:any) => drawVisitEntry(doc, visit, i));
+      data.visits.forEach((visit: any, i: any) => drawVisitEntry(doc, visit, i));
     }
 
     drawConfidentialityNotice(doc);

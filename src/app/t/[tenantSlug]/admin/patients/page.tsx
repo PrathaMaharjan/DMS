@@ -29,6 +29,8 @@ import {
   User,
   Loader2,
   FileText,
+  Wallet,
+  CheckCircle2,
 } from "lucide-react";
 
 const STATUSES = ["Active", "Inactive"] as const;
@@ -58,6 +60,7 @@ type Patient = {
   allergies?: string[];
   medicalHistory?: string[];
   medications?: string[];
+  balanceDueCents: number | null; // null = no billing data available yet
 };
 
 function initialsOf(name: string) {
@@ -68,6 +71,13 @@ function initialsOf(name: string) {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+}
+
+function centsToDisplay(cents: number) {
+  return (cents / 100).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 const AVATAR_COLORS = [
@@ -143,6 +153,7 @@ function apiPatientToPatient(p: any): Patient {
     allergies: p.allergies || [],
     medicalHistory: p.medicalHistory || [],
     medications: p.medications || [],
+    balanceDueCents: typeof p.balanceDueCents === "number" ? p.balanceDueCents : null,
   };
 }
 
@@ -220,7 +231,18 @@ export default function PatientsPage() {
       setLoadError(null);
       const res = await axios.get("/api/patent");
       if (res.data?.success && res.data.data?.patients) {
-        const mapped: Patient[] = res.data.data.patients.map(apiPatientToPatient);
+        const rawPatients = res.data.data.patients;
+        const mapped: Patient[] = await Promise.all(
+          rawPatients.map(async (p: any) => {
+            const base = apiPatientToPatient(p);
+            const ledgerRes = await axios.get(`/api/patent/${p.id}/ledger`).catch(() => null);
+            const summary = ledgerRes?.data?.success ? ledgerRes.data.data.summary : null;
+            const balanceDueCents = summary
+              ? summary.balanceDueCents
+              : (typeof p.balanceDueCents === "number" ? p.balanceDueCents : 0);
+            return { ...base, balanceDueCents };
+          })
+        );
         setPatients(mapped);
       }
     } catch (err) {
@@ -351,10 +373,10 @@ export default function PatientsPage() {
       setForm(EMPTY_FORM);
       setEditingId(null);
       setModalOpen(false);
-      
+
     } catch (err: any) {
       console.error("Failed to save patient:", err);
-      
+
       alert(err.response?.data?.error || "Failed to save patient.");
     }
   }
@@ -536,7 +558,7 @@ export default function PatientsPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] border-collapse text-left">
+            <table className="w-full min-w-[1200px] border-collapse text-left">
               <thead>
                 <tr className="border-y border-slate-900/5 bg-slate-50/60">
                   <th className="px-6 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
@@ -566,6 +588,9 @@ export default function PatientsPage() {
                   <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
                     Status
                   </th>
+                  <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Payment
+                  </th>
                   <th className="px-6 py-3 text-right text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
                     Actions
                   </th>
@@ -574,7 +599,7 @@ export default function PatientsPage() {
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-16 text-center text-slate-500">
+                    <td colSpan={11} className="px-6 py-16 text-center text-slate-500">
                       <span className="inline-flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin text-[#7da3b3]" />
                         Loading patients...
@@ -585,7 +610,7 @@ export default function PatientsPage() {
 
                 {!loading && loadError && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-16 text-center text-rose-500">
+                    <td colSpan={11} className="px-6 py-16 text-center text-rose-500">
                       {loadError}
                     </td>
                   </tr>
@@ -651,6 +676,21 @@ export default function PatientsPage() {
                             {p.status}
                           </span>
                         </td>
+                        <td className="px-4 py-4 text-xs whitespace-nowrap">
+                          {p.balanceDueCents === null ? (
+                            <span className="text-slate-400 text-[0.72rem]">No data</span>
+                          ) : p.balanceDueCents > 0 ? (
+                            <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 font-semibold px-2 py-0.5 rounded border border-rose-200/60 text-[0.72rem]">
+                              <Wallet className="h-3 w-3 text-rose-500 shrink-0" />
+                              NPR {centsToDisplay(p.balanceDueCents)} due
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded border border-emerald-200/60 text-[0.72rem]">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                              Settled
+                            </span>
+                          )}
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-1">
                             <button
@@ -683,7 +723,7 @@ export default function PatientsPage() {
 
                 {!loading && !loadError && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-16 text-center text-slate-500">
+                    <td colSpan={11} className="px-6 py-16 text-center text-slate-500">
                       No patients match your filters.
                     </td>
                   </tr>
@@ -888,6 +928,20 @@ export default function PatientsPage() {
                     >
                       {selectedPatient.status}
                     </span>
+                    <span className="text-slate-300">|</span>
+                    {selectedPatient.balanceDueCents === null ? (
+                      <span className="text-slate-400">No billing data</span>
+                    ) : selectedPatient.balanceDueCents > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-rose-600">
+                        <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
+                        NPR {centsToDisplay(selectedPatient.balanceDueCents)} due
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-emerald-600">
+                        <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />
+                        Settled
+                      </span>
+                    )}
                   </div>
 
                   <div className="mt-3 space-y-1 text-[0.85rem] text-slate-600">
@@ -1040,16 +1094,16 @@ export default function PatientsPage() {
                       return (
 
                         <div className=" mt-3 list-disc space-y-1.5 pl-5 ">
-                          
+
                           {hasPres && (
                             <div className="rounded-xl text-xs space-y-1">
-                                <ul className="mt-3 list-disc space-y-1.5  text-[0.85rem] text-slate-600">
+                              <ul className="mt-3 list-disc space-y-1.5  text-[0.85rem] text-slate-600">
                                 <li>{latestPrescriptionAppt.prescription || latestPrescriptionAppt.prescriptionText}</li>
                               </ul>
                             </div>
                           )}
                           {hasMeds && (
-                           <ul className="list-disc list-inside space-y-1.5 text-[0.85rem] text-slate-600">
+                            <ul className="list-disc list-inside space-y-1.5 text-[0.85rem] text-slate-600">
                               {medsList.map((item, idx) => (
                                 <li key={idx}>{item}</li>
                               ))}

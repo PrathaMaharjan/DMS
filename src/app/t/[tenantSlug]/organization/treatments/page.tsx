@@ -162,7 +162,7 @@ export default function TreatmentsPage() {
         setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutlets]);
       }
 
-      const targetLoc = outletFilter !== "all" ? outletFilter : locId;
+      const targetLoc = outletFilter !== "all" ? outletFilter : undefined;
       const treatmentsRes = await axios.get("/api/treatment", {
         params: targetLoc ? { locationId: targetLoc } : undefined,
       });
@@ -359,13 +359,14 @@ export default function TreatmentsPage() {
           );
         }
       } else {
-        if (!locationId) {
+        const targetLocId = outletFilter !== "all" ? outletFilter : (locationId || outletsList.find(o => o.id !== "all")?.id);
+        if (!targetLocId) {
           alert("Could not determine location ID. Please configure services first.");
           return;
         }
 
         const payload = {
-          locationId,
+          locationId: targetLocId,
           name: form.name,
           category: form.category.toLowerCase(),
           durationMinutes: durationVal,

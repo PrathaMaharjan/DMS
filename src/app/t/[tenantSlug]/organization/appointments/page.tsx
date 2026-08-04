@@ -290,13 +290,34 @@ export default function AppointmentsPage() {
       }
 
 
-      const targetLocId = outletFilter !== "all" ? outletFilter : currentLocId;
-      const apptsRes = await axios.get("/api/appoments", {
-        params: { locationId: targetLocId },
-      });
+      let rawAppts: any[] = [];
+      const mappedOutlets = outletsRes?.data?.success && outletsRes.data.data?.locations
+        ? outletsRes.data.data.locations.map((l: any) => l.id).filter(Boolean)
+        : [];
 
-      if (apptsRes.data?.success && apptsRes.data.data.appointments) {
-        const mapped: Appointment[] = apptsRes.data.data.appointments.map((a: any) => {
+      if (outletFilter !== "all") {
+        const apptsRes = await axios.get("/api/appoments", {
+          params: { locationId: outletFilter },
+        });
+        if (apptsRes.data?.success && apptsRes.data.data.appointments) {
+          rawAppts = apptsRes.data.data.appointments;
+        }
+      } else {
+        const targetIds = mappedOutlets.length > 0 ? mappedOutlets : [currentLocId];
+        const responses = await Promise.all(
+          targetIds.map((id: string) =>
+            axios.get("/api/appoments", { params: { locationId: id } }).catch(() => null)
+          )
+        );
+        responses.forEach((res) => {
+          if (res?.data?.success && res.data.data?.appointments) {
+            rawAppts.push(...res.data.data.appointments);
+          }
+        });
+      }
+
+      if (rawAppts.length > 0) {
+        const mapped: Appointment[] = rawAppts.map((a: any) => {
           const { date, time } = splitIsoStartTime(a.startTime);
 
           const docObj = docs.find(
@@ -474,28 +495,28 @@ export default function AppointmentsPage() {
         <Activity className="absolute right-[32%] bottom-[6%] h-24 w-24 text-[#7da3b3]/[0.07]" strokeWidth={1} />
       </div>
 
-   <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
-  <div className="flex flex-wrap items-center justify-between gap-3">
-    <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
-      Appointments
-    </h1>
+      <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
+            Appointments
+          </h1>
 
-    <div className="relative">
-      <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
-      <select
-        value={outletFilter}
-        onChange={(e) => setOutletFilter(e.target.value)}
-        className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
-      >
-        {outletsList.map((o, idx) => (
-          <option key={`${o.id}-${idx}`} value={o.id}>
-            {o.name}
-          </option>
-        ))}
-      </select>
-    </div>
-  </div>
-</div>
+          <div className="relative">
+            <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+            <select
+              value={outletFilter}
+              onChange={(e) => setOutletFilter(e.target.value)}
+              className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
+            >
+              {outletsList.map((o, idx) => (
+                <option key={`${o.id}-${idx}`} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
 
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
         {errorMsg && (

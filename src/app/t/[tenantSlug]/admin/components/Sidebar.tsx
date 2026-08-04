@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   Wallet,
+  Package,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { label: "Patients", href: "/patients", icon: Users },
   { label: "Treatments", href: "/treatments", icon: CalendarDays },
   { label: "Billing", href: "/billing", icon: Wallet },
+  { label: "Inventory", href: "/inventory", icon: Package },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 

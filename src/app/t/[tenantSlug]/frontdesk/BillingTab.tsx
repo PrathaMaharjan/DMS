@@ -35,8 +35,7 @@ import {
 const ENTRY_TYPES = ["charge", "payment", "adjustment"] as const;
 type EntryType = (typeof ENTRY_TYPES)[number];
 
-// Matches paymentMethodEnum exactly - "Wallet" was never a real backend
-// option, "online" is, so the mock's list is corrected here.
+
 const PAYMENT_METHODS = ["cash", "card", "online"] as const;
 const PAYMENT_METHOD_LABELS: Record<(typeof PAYMENT_METHODS)[number], string> = {
   cash: "Cash",
@@ -62,11 +61,10 @@ const ENTRY_TYPE_ICONS: Record<EntryType, typeof ArrowUpCircle> = {
   adjustment: Scale,
 };
 
-// Real shape returned by GET /api/patients/[id]/ledger's `entries` array.
 type LedgerEntry = {
   id: string;
   type: EntryType;
-  amountCents: number; // already signed by the backend - charge positive, payment/adjustment negative
+  amountCents: number;
   paymentMethod: string | null;
   note: string | null;
   appointmentTreatmentName: string | null;
@@ -133,17 +131,14 @@ function getInitials(name: string) {
   return (first + last).toUpperCase();
 }
 
-// Still fabricated - no real receipt-numbering system exists on the
-// backend. Kept exactly as the original mock had it, not silently hidden.
+
 function receiptNumberFor(entryId: string) {
   const digits = entryId.replace(/\D/g, "");
   const suffix = (digits || entryId).slice(-4).padStart(4, "0");
   return `RCP-2026-${suffix}`;
 }
 
-// Running balance up to and including a given entry - computed client-side
-// from the already-signed amounts the backend returns. No branching by
-// type needed anymore, since the sign is already correct on arrival.
+
 function balanceAfterEntry(entries: LedgerEntry[], entryId: string) {
   const sorted = [...entries].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   let running = 0;
@@ -209,23 +204,36 @@ export default function BillingPage() {
     return () => clearTimeout(t);
   }, [query]);
 
-  // Locations populate the outlet selector - no "All outlets" option,
-  // since neither getBillingStats nor getBillingPatients supports an
-  // org-wide aggregate. Defaults to the first real location.
   useEffect(() => {
-    async function loadLocations() {
+    async function loadStaffLocation() {
       try {
-        const { data: responseBody } = await axios.get("/api/locations");
-        if (responseBody?.success) {
-          const list: Location[] = responseBody.data.locations;
+        const [outletsRes, servicesRes, treatmentsRes, patientsRes] = await Promise.all([
+          axios.get("/api/outlets").catch(() => null),
+          axios.get("/api/services").catch(() => null),
+          axios.get("/api/treatment").catch(() => null),
+          axios.get("/api/patent").catch(() => null),
+        ]);
+
+        let locId = "";
+        if (outletsRes?.data?.success && Array.isArray(outletsRes.data.data.locations) && outletsRes.data.data.locations.length > 0) {
+          const list: Location[] = outletsRes.data.data.locations;
           setLocations(list);
-          if (list.length > 0) setLocationId(list[0].id);
+          locId = list[0].id;
         }
+
+        if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
+          locId = servicesRes.data.data.services[0].locationId || locId;
+        } else if (treatmentsRes?.data?.success && treatmentsRes.data.data.treatments?.length > 0) {
+          locId = treatmentsRes.data.data.treatments[0].locationId || locId;
+        } else if (patientsRes?.data?.success && patientsRes.data.data.patients?.length > 0) {
+          locId = patientsRes.data.data.patients[0].locationId || locId;
+        }
+
+        if (locId) setLocationId(locId);
       } catch {
-        // Left silent - the outlet selector just stays empty if this fails.
       }
     }
-    loadLocations();
+    loadStaffLocation();
   }, []);
 
   const loadStats = useCallback(async () => {
@@ -234,31 +242,77 @@ export default function BillingPage() {
       const { data: responseBody } = await axios.get(`/api/billing/stats?locationId=${locationId}`);
       if (responseBody?.success) setStats(responseBody.data.stats);
     } catch {
-      // Stat cards just stay at their previous value if this fails.
     }
   }, [locationId]);
 
   const loadPatients = useCallback(async () => {
-    if (!locationId) return;
     setLoadingTable(true);
     try {
       const offset = (currentPage - 1) * ITEMS_PER_PAGE;
       const balanceFilterParam =
         balanceFilter === "Due" ? "due" : balanceFilter === "Settled" ? "settled" : "all";
 
-      const { data: responseBody } = await axios.get("/api/billing/patentDetail", {
-        params: {
-          locationId,
-          search: debouncedQuery || undefined,
-          balanceFilter: balanceFilterParam,
-          limit: ITEMS_PER_PAGE,
-          offset,
-        },
-      });
+      let responseBody = null;
+      if (locationId) {
+        const res = await axios.get("/api/billing/patentDetail", {
+          params: {
+            locationId,
+            search: debouncedQuery || undefined,
+            balanceFilter: balanceFilterParam,
+            limit: ITEMS_PER_PAGE,
+            offset,
+          },
+        }).catch(() => null);
+        responseBody = res?.data;
+      }
 
-      if (responseBody?.success) {
+      if (responseBody?.success && Array.isArray(responseBody.data.patients) && responseBody.data.patients.length > 0) {
         setRows(responseBody.data.patients);
         setTotal(responseBody.data.pagination.total);
+      } else {
+        const res = await axios.get("/api/patent").catch(() => null);
+        if (res?.data?.success && Array.isArray(res.data.data.patients)) {
+          const rawPatients = res.data.data.patients;
+          const outletPatients = locationId
+            ? rawPatients.filter((p: any) => !p.locationId || p.locationId === locationId)
+            : rawPatients;
+
+          const mappedPromises = outletPatients.map(async (p: any) => {
+            const ledgerRes = await axios.get(`/api/patent/${p.id}/ledger`).catch(() => null);
+            if (ledgerRes?.data?.success && ledgerRes.data.data.summary) {
+              const summary = ledgerRes.data.data.summary;
+              return {
+                patientId: p.id,
+                patientName: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
+                patientPhone: p.phone || "-",
+                lastActivity: p.lastVisit ? new Date(p.lastVisit).toISOString() : null,
+                chargedCents: summary.totalChargedCents ?? 0,
+                paidCents: summary.totalPaidCents ?? 0,
+                balanceCents: summary.balanceDueCents ?? 0,
+              };
+            }
+            return {
+              patientId: p.id,
+              patientName: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
+              patientPhone: p.phone || "-",
+              lastActivity: p.lastVisit ? new Date(p.lastVisit).toISOString() : null,
+              chargedCents: 0,
+              paidCents: 0,
+              balanceCents: 0,
+            };
+          });
+          const mapped: BillingPatientRow[] = await Promise.all(mappedPromises);
+          const filtered = mapped.filter((r) => {
+            const matchesQuery = !debouncedQuery || r.patientName.toLowerCase().includes(debouncedQuery.toLowerCase()) || (r.patientPhone && r.patientPhone.includes(debouncedQuery));
+            const matchesBalance = balanceFilter === "All" || (balanceFilter === "Due" && r.balanceCents > 0) || (balanceFilter === "Settled" && r.balanceCents <= 0);
+            return matchesQuery && matchesBalance;
+          });
+          setRows(filtered.slice(offset, offset + ITEMS_PER_PAGE));
+          setTotal(filtered.length);
+        } else {
+          setRows([]);
+          setTotal(0);
+        }
       }
     } catch {
       setRows([]);
@@ -289,7 +343,7 @@ export default function BillingPage() {
     setSelectedPatientPhone(phone);
     setLoadingLedger(true);
     try {
-      const { data: responseBody } = await axios.get(`/api/patient/${patientId}/ledger`);
+      const { data: responseBody } = await axios.get(`/api/patent/${patientId}/ledger`);
       if (responseBody?.success) {
         setLedgerSummary(responseBody.data.summary);
         setLedgerEntries(responseBody.data.entries);
@@ -332,16 +386,17 @@ export default function BillingPage() {
 
   async function handleAddEntry(e: React.FormEvent) {
     e.preventDefault();
-    if (!entryTargetPatientId || !locationId) return;
+    if (!entryTargetPatientId) return;
     setEntryError(null);
 
+    const activeLocId = locationId || locations[0]?.id || "outlet-1";
     const amountNumber = Number(entryForm.amount) || 0;
     const amountCents = Math.round(amountNumber * 100);
 
     setSubmittingEntry(true);
     try {
-      const { data: responseBody } = await axios.post(`/api/patient/${entryTargetPatientId}/ledger`, {
-        locationId,
+      const { data: responseBody } = await axios.post(`/api/patent/${entryTargetPatientId}/ledger`, {
+        locationId: activeLocId,
         type: entryForm.type,
         amountCents,
         paymentMethod: entryForm.type === "payment" ? entryForm.paymentMethod : undefined,
@@ -356,9 +411,7 @@ export default function BillingPage() {
       setEntryModalOpen(false);
       setEntryForm(EMPTY_ENTRY_FORM);
 
-      // Refresh everything this entry could have changed - the table row's
-      // own totals, the org-wide stat cards, and (if the side panel for
-      // this same patient happens to be open) their ledger history too.
+
       await Promise.all([
         loadPatients(),
         loadStats(),
@@ -389,24 +442,6 @@ export default function BillingPage() {
       </div>
 
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
-        {locations.length > 1 && (
-          <div className="mb-4">
-            <select
-              value={locationId}
-              onChange={(e) => {
-                setLocationId(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="rounded-full border border-slate-900/10 bg-white px-4 py-2 text-[0.85rem] text-slate-700 outline-none focus:border-[#7da3b3]"
-            >
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id}>
-                  {loc.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
 
         {/* Stats */}
         <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -568,8 +603,8 @@ export default function BillingPage() {
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
                     className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
-                        ? "bg-[#7da3b3] text-white shadow-sm"
-                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      ? "bg-[#7da3b3] text-white shadow-sm"
+                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
                       }`}
                   >
                     {pageNum}
@@ -627,8 +662,8 @@ export default function BillingPage() {
                   {ledgerSummary && (
                     <span
                       className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8rem] font-medium ${ledgerSummary.balanceDueCents > 0
-                          ? "bg-rose-100 text-rose-700"
-                          : "bg-emerald-100 text-emerald-700"
+                        ? "bg-rose-100 text-rose-700"
+                        : "bg-emerald-100 text-emerald-700"
                         }`}
                     >
                       NPR {centsToDisplay(Math.abs(ledgerSummary.balanceDueCents))}
@@ -765,8 +800,8 @@ export default function BillingPage() {
                   Entry type
                 </span>
                 <select value={entryForm.type} onChange={(e) => update("type", e.target.value as EntryType)} className={inputClass}>
-                  {ENTRY_TYPES.map((t) => (
-                    <option key={t} value={t}>
+                  {ENTRY_TYPES.map((t, idx) => (
+                    <option key={`${t}-${idx}`} value={t}>
                       {ENTRY_TYPE_LABELS[t]}
                     </option>
                   ))}
@@ -802,8 +837,8 @@ export default function BillingPage() {
                     Payment method
                   </span>
                   <select value={entryForm.paymentMethod} onChange={(e) => update("paymentMethod", e.target.value)} className={inputClass}>
-                    {PAYMENT_METHODS.map((m) => (
-                      <option key={m} value={m}>
+                    {PAYMENT_METHODS.map((m, idx) => (
+                      <option key={`${m}-${idx}`} value={m}>
                         {PAYMENT_METHOD_LABELS[m]}
                       </option>
                     ))}

@@ -17,7 +17,6 @@ import {
 } from "recharts";
 import {
   Search,
-  Filter,
   Wallet,
   Receipt,
   TrendingUp,
@@ -25,132 +24,30 @@ import {
   Landmark,
   Building2,
   Stethoscope,
-  Users,
   ChevronLeft,
   ChevronRight,
   CreditCard,
-  Banknote,
-  Smartphone,
-  ShieldCheck,
   PieChart as PieChartIcon,
   BarChart3,
-  AlertCircle,
   Phone,
-  User,
   Cross,
   HeartPulse,
-  Pill,
   Activity,
   Percent,
 } from "lucide-react";
-
-/* ------------------------------------------------------------------ */
-/*  HARDCODED SEED DATA                                                */
-/*  TODO: everything in this block is a placeholder. Once a manager-   */
-/*  level billing/ledger aggregation endpoint exists (rolling up the   */
-/*  same per-patient ledger entries used in BillingPage.tsx across     */
-/*  outlets and doctors), replace this block with a fetch + the same   */
-/*  computeTotals/computeBalance-style aggregation, scoped by outlet.  */
-/* ------------------------------------------------------------------ */
-
-const OUTLETS = [
-  { id: "all", name: "All outlets" },
-  { id: "outlet-1", name: "Chitwan Dental Home - Bharatpur" },
-  { id: "outlet-2", name: "Chitwan Dental Home - Narayangarh" },
-];
 
 const PAYMENT_METHOD_COLORS: Record<string, string> = {
   Cash: "#7da3b3",
   Card: "#345263",
   Wallet: "#10b981",
- 
+  QR: "#8b5cf6",
+  Bank: "#f59e0b",
+  cash: "#7da3b3",
+  card: "#345263",
+  wallet: "#10b981",
+  qr: "#8b5cf6",
+  bank: "#f59e0b",
 };
-
-const METHOD_ICONS: Record<string, typeof Banknote> = {
-  Cash: Banknote,
-  Card: CreditCard,
-  Wallet: Smartphone,
-
-};
-
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-type OutletBilling = {
-  outletId: string;
-  outletName: string;
-  chargedCents: number;
-  collectedCents: number;
-  patientsWithDues: number;
-  doctors: { name: string; revenueCents: number }[];
-  paymentBreakdown: { method: string; amountCents: number }[];
-  weeklyCollectedNpr: number[]; // 7 values, Mon–Sun, plain NPR for chart readability
-};
-
-const OUTLET_BILLING: OutletBilling[] = [
-  {
-    outletId: "outlet-1",
-    outletName: "Chitwan Dental Home - Bharatpur",
-    chargedCents: 285_000_00 * 100,
-    collectedCents: 214_000_00 * 100,
-    patientsWithDues: 34,
-    doctors: [
-      { name: "Dr. Anish Shrestha", revenueCents: 98_000_00 * 100 },
-      { name: "Dr. Priya Gurung", revenueCents: 76_000_00 * 100 },
-      { name: "Dr. Bikash Thapa", revenueCents: 61_000_00 * 100 },
-      { name: "Dr. Sunita Koirala", revenueCents: 50_000_00 * 100 },
-    ],
-    paymentBreakdown: [
-      { method: "Cash", amountCents: 96_000_00 * 100 },
-      { method: "Card", amountCents: 72_000_00 * 100 },
-      { method: "Wallet", amountCents: 31_000_00 * 100 },
-
-    ],
-    weeklyCollectedNpr: [280000, 310000, 260000, 340000, 390000, 420000, 310000],
-  },
-  {
-    outletId: "outlet-2",
-    outletName: "Chitwan Dental Home - Narayangarh",
-    chargedCents: 168_000_00 * 100,
-    collectedCents: 132_000_00 * 100,
-    patientsWithDues: 19,
-    doctors: [
-      { name: "Dr. Rajesh Malla", revenueCents: 71_000_00 * 100 },
-      { name: "Dr. Manisha Rana", revenueCents: 61_000_00 * 100 },
-    ],
-    paymentBreakdown: [
-      { method: "Cash", amountCents: 58_000_00 * 100 },
-      { method: "Card", amountCents: 44_000_00 * 100 },
-      { method: "Wallet", amountCents: 22_000_00 * 100 },
-
-    ],
-    weeklyCollectedNpr: [140000, 155000, 132000, 168000, 182000, 199000, 150000],
-  },
-];
-
-type OutstandingPatient = {
-  id: string;
-  name: string;
-  phone: string;
-  outletId: string;
-  amountDueCents: number;
-  lastVisit: string; // display-ready label
-};
-
-const TOP_OUTSTANDING_PATIENTS: OutstandingPatient[] = [
-  { id: "op1", name: "Rita Adhikari", phone: "+977 981-1112223", outletId: "outlet-1", amountDueCents: 250000_00, lastVisit: "Jul 28, 2026" },
-  { id: "op2", name: "Anjali Poudel", phone: "+977 981-5556667", outletId: "outlet-1", amountDueCents: 850000_00, lastVisit: "Aug 1, 2026" },
-  { id: "op3", name: "Kiran Basnet", phone: "+977 981-7778889", outletId: "outlet-1", amountDueCents: 250000_00, lastVisit: "Aug 2, 2026" },
-  { id: "op4", name: "Sabin Lama", phone: "+977 982-2223334", outletId: "outlet-1", amountDueCents: 410000_00, lastVisit: "Jul 25, 2026" },
-  { id: "op5", name: "Namrata Sharma", phone: "+977 982-4445556", outletId: "outlet-1", amountDueCents: 190000_00, lastVisit: "Jul 30, 2026" },
-  { id: "op6", name: "Bishal Karki", phone: "+977 984-1122334", outletId: "outlet-2", amountDueCents: 360000_00, lastVisit: "Jul 27, 2026" },
-  { id: "op7", name: "Sarita Gurung", phone: "+977 984-5566778", outletId: "outlet-2", amountDueCents: 145000_00, lastVisit: "Aug 1, 2026" },
-  { id: "op8", name: "Deepak Rai", phone: "+977 985-8899001", outletId: "outlet-2", amountDueCents: 220000_00, lastVisit: "Jul 29, 2026" },
-];
-
-/* ------------------------------------------------------------------ */
-
-const inputClass =
-  "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
 
 function centsToDisplay(cents: number) {
   const value = Number.isFinite(cents) ? cents : 0;
@@ -185,156 +82,141 @@ export default function ManagerBillingPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
-  const [outletsList, setOutletsList] = useState(OUTLETS);
-  const [outstandingPatientsList, setOutstandingPatientsList] = useState<OutstandingPatient[]>(TOP_OUTSTANDING_PATIENTS);
+  const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>([
+    { id: "all", name: "All outlets" },
+  ]);
+  const [collectionTimeframe, setCollectionTimeframe] = useState<"7d" | "1m" | "6m" | "1y">("7d");
+
+  const [stats, setStats] = useState({
+    totalRevenueCents: 0,
+    totalCollectedCents: 0,
+    outstandingDuesCents: 0,
+    collectionRatePercent: 0,
+  });
+  const [collectionsChart, setCollectionsChart] = useState<{ label: string; amountCents: number }[]>([]);
+  const [paymentMethodMix, setPaymentMethodMix] = useState<{ method: string; amountCents: number }[]>([]);
+  const [outletPerformance, setOutletPerformance] = useState<{
+    locationId: string;
+    outletName: string;
+    chargedCents: number;
+    collectedCents: number;
+    outstandingCents: number;
+    collectionRatePercent: number;
+  }[]>([]);
+  const [doctorRevenue, setDoctorRevenue] = useState<{ doctorId: string; doctorName: string; revenueCents: number }[]>([]);
+  const [outstandingPatients, setOutstandingPatients] = useState<{
+    patientId: string;
+    patientName: string;
+    patientPhone: string | null;
+    outletName: string;
+    lastActivity: Date | string | null;
+    chargedCents: number;
+    paidCents: number;
+    balanceCents: number;
+  }[]>([]);
+  const [totalOutstanding, setTotalOutstanding] = useState(0);
 
   useEffect(() => {
-    async function fetchOrgBillingData() {
+    async function fetchOutlets() {
       try {
-        const [outletsRes, patientsRes] = await Promise.all([
-          axios.get("/api/outlets").catch(() => null),
-          axios.get("/api/patent").catch(() => null),
-        ]);
-        if (outletsRes?.data?.success && Array.isArray(outletsRes.data.data.outlets)) {
-          const apiOutlets = outletsRes.data.data.outlets;
-          if (apiOutlets.length > 0) {
-            setOutletsList([
-              { id: "all", name: "All outlets" },
-              ...apiOutlets.map((o: any) => ({ id: o.id, name: o.name || o.locationName || "Outlet" })),
-            ]);
-          }
+        const res = await axios.get("/api/outlets");
+        if (res.data?.success && Array.isArray(res.data?.data?.locations)) {
+          const seen = new Set<string>();
+          const mappedOutlets: { id: string; name: string }[] = [];
+          res.data.data.locations.forEach((loc: any) => {
+            if (loc.id && !seen.has(loc.id)) {
+              seen.add(loc.id);
+              mappedOutlets.push({
+                id: loc.id,
+                name: loc.name || loc.locationName || "Outlet",
+              });
+            }
+          });
+          setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutlets]);
         }
-        if (patientsRes?.data?.success && Array.isArray(patientsRes.data.data.patients)) {
-          const apiPatients = patientsRes.data.data.patients;
-          if (apiPatients.length > 0) {
-            const mappedPatients: OutstandingPatient[] = apiPatients.map((p: any) => ({
-              id: p.id,
-              name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
-              phone: p.phone || "-",
-              outletId: p.locationId || "outlet-1",
-              amountDueCents: 250000_00,
-              lastActivity: p.lastVisit ? new Date(p.lastVisit).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Recent",
-            }));
-            setOutstandingPatientsList(mappedPatients);
-          }
-        }
-      } catch (err) {
-      }
+      } catch (err) {}
     }
-    fetchOrgBillingData();
+    fetchOutlets();
   }, []);
 
-  const activeOutlets = useMemo(
-    () =>
-      outletFilter === "all"
-        ? OUTLET_BILLING
-        : OUTLET_BILLING.filter((o) => o.outletId === outletFilter),
-    [outletFilter]
-  );
+  useEffect(() => {
+    let isMounted = true;
+    async function loadDashboard() {
+      try {
+        const params = new URLSearchParams();
+        if (outletFilter !== "all") {
+          params.set("locationId", outletFilter);
+        }
+        params.set("chartRange", collectionTimeframe);
+        if (query.trim()) {
+          params.set("search", query.trim());
+        }
+        params.set("limit", String(itemsPerPage));
+        params.set("offset", String((currentPage - 1) * itemsPerPage));
 
-  // Aggregate totals across whatever outlets are currently in view.
-  const totals = useMemo(() => {
-    const chargedCents = activeOutlets.reduce((s, o) => s + o.chargedCents, 0);
-    const collectedCents = activeOutlets.reduce((s, o) => s + o.collectedCents, 0);
-    const outstandingCents = chargedCents - collectedCents;
-    const patientsWithDues = activeOutlets.reduce((s, o) => s + o.patientsWithDues, 0);
-    const collectionRate = chargedCents > 0 ? (collectedCents / chargedCents) * 100 : 0;
-    return { chargedCents, collectedCents, outstandingCents, patientsWithDues, collectionRate };
-  }, [activeOutlets]);
-
-  const [collectionTimeframe, setCollectionTimeframe] = useState<"7days" | "20days" | "1year">("7days");
-
-  const weeklyTrend = useMemo(() => {
-    if (collectionTimeframe === "20days") {
-      return [
-        { label: "Day 1-5", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 0.7), 0) },
-        { label: "Day 6-10", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 0.95), 0) },
-        { label: "Day 11-15", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 1.1), 0) },
-        { label: "Day 16-20", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 1.25), 0) },
-      ];
+        const res = await axios.get(`/api/org/billing/getAll?${params.toString()}`);
+        if (isMounted && res.data?.success && res.data?.data?.dashboard) {
+          const d = res.data.data.dashboard;
+          setStats(
+            d.billingStats || {
+              totalRevenueCents: 0,
+              totalCollectedCents: 0,
+              outstandingDuesCents: 0,
+              collectionRatePercent: 0,
+            }
+          );
+          setCollectionsChart(d.collectionsChart || []);
+          setPaymentMethodMix(d.paymentMethodMix || []);
+          setOutletPerformance(d.outletPerformance || []);
+          setDoctorRevenue(d.revenueByDoctor || []);
+          setOutstandingPatients(d.topOutstanding?.patients || []);
+          setTotalOutstanding(d.topOutstanding?.pagination?.total || 0);
+        }
+      } catch (err) {}
     }
-    if (collectionTimeframe === "1year") {
-      return [
-        { label: "Jan", collected: 1250000 },
-        { label: "Feb", collected: 1400000 },
-        { label: "Mar", collected: 1350000 },
-        { label: "Apr", collected: 1600000 },
-        { label: "May", collected: 1750000 },
-        { label: "Jun", collected: 1550000 },
-        { label: "Jul", collected: 1900000 },
-        { label: "Aug", collected: 1820000 },
-        { label: "Sep", collected: 1700000 },
-        { label: "Oct", collected: 1850000 },
-        { label: "Nov", collected: 1650000 },
-        { label: "Dec", collected: 2100000 },
-      ];
-    }
-    return WEEKDAY_LABELS.map((label, i) => ({
-      label,
-      collected: activeOutlets.reduce((s, o) => s + (o.weeklyCollectedNpr[i] ?? 0), 0),
+    loadDashboard();
+    return () => {
+      isMounted = false;
+    };
+  }, [outletFilter, collectionTimeframe, query, currentPage]);
+
+  const chartData = useMemo(() => {
+    return collectionsChart.map((item) => ({
+      label: item.label,
+      collected: item.amountCents / 100,
     }));
-  }, [activeOutlets, collectionTimeframe]);
+  }, [collectionsChart]);
 
-  const paymentBreakdown = useMemo(() => {
-    const totalsByMethod: Record<string, number> = {};
-    activeOutlets.forEach((o) =>
-      o.paymentBreakdown.forEach((p) => {
-        totalsByMethod[p.method] = (totalsByMethod[p.method] || 0) + p.amountCents;
-      })
-    );
-    return Object.entries(totalsByMethod).map(([method, amountCents]) => ({
-      method,
-      amountCents,
-    }));
-  }, [activeOutlets]);
+  const maxDoctorRevenue = useMemo(() => {
+    return Math.max(1, ...doctorRevenue.map((d) => d.revenueCents));
+  }, [doctorRevenue]);
 
-  const doctorRevenue = useMemo(() => {
-    const combined: { name: string; revenueCents: number }[] = [];
-    activeOutlets.forEach((o) => combined.push(...o.doctors));
-    const maxRevenue = Math.max(1, ...combined.map((d) => d.revenueCents));
-    return combined
-      .sort((a, b) => b.revenueCents - a.revenueCents)
-      .map((d) => ({ ...d, pct: Math.round((d.revenueCents / maxRevenue) * 100) }));
-  }, [activeOutlets]);
-
-  const filteredOutstanding = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return outstandingPatientsList.filter((p) => {
-      const matchesOutlet = outletFilter === "all" || p.outletId === outletFilter;
-      const matchesQuery =
-        !q || p.name.toLowerCase().includes(q) || p.phone.toLowerCase().includes(q);
-      return matchesOutlet && matchesQuery;
-    }).sort((a, b) => b.amountDueCents - a.amountDueCents);
-  }, [outletFilter, query, outstandingPatientsList]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredOutstanding.length / itemsPerPage));
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedOutstanding = filteredOutstanding.slice(startIndex, startIndex + itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(totalOutstanding / itemsPerPage));
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) setCurrentPage(newPage);
   };
 
-  const stats = [
+  const statCards = [
     {
       icon: Receipt,
       label: "Total Revenue",
-      value: `NPR ${centsToDisplay(totals.chargedCents)}`,
+      value: `NPR ${centsToDisplay(stats.totalRevenueCents)}`,
     },
     {
       icon: Wallet,
       label: "Total Collected",
-      value: `NPR ${centsToDisplay(totals.collectedCents)}`,
+      value: `NPR ${centsToDisplay(stats.totalCollectedCents)}`,
     },
     {
       icon: TrendingDown,
       label: "Outstanding Dues",
-      value: `NPR ${centsToDisplay(totals.outstandingCents)}`,
+      value: `NPR ${centsToDisplay(stats.outstandingDuesCents)}`,
     },
     {
       icon: Percent,
       label: "Collection Rate",
-      value: `${totals.collectionRate.toFixed(1)}%`,
+      value: `${stats.collectionRatePercent.toFixed(1)}%`,
     },
   ];
 
@@ -349,54 +231,42 @@ export default function ManagerBillingPage() {
         <Activity className="absolute right-[32%] bottom-[6%] h-24 w-24 text-[#7da3b3]/[0.07]" strokeWidth={1} />
       </div>
 
-<div className="sticky top-0 z-20 bg-white px-6 py-6 lg:px-10">
-  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="sticky top-0 z-20 bg-white px-6 py-6 lg:px-10">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
+              Billing Overview
+            </h1>
+          </div>
 
-    {/* Left side */}
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
-        Billing Overview
-      </h1>
-
-    
-    </div>
-
-    {/* Right side */}
-    <div className="flex flex-col items-end gap-2">
-      <div className="relative">
-        <Building2
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-          strokeWidth={2}
-        />
-
-        <select
-          value={outletFilter}
-          onChange={(e) => {
-            setOutletFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-          className="appearance-none rounded-full border border-slate-200 bg-white py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#7da3b3]"
-        >
-          {OUTLETS.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </select>
+          <div className="flex flex-col items-end gap-2">
+            <div className="relative">
+              <Building2
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                strokeWidth={2}
+              />
+              <select
+                value={outletFilter}
+                onChange={(e) => {
+                  setOutletFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="appearance-none rounded-full border border-slate-200 bg-white py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#7da3b3]"
+              >
+                {outletsList.map((o, idx) => (
+                  <option key={`${o.id}-${idx}`} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
 
- 
-    </div>
-
-  </div>
-</div>
-
       <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
-      
-
-        {/* Stats */}
         <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat) => (
+          {statCards.map((stat) => (
             <div key={stat.label} className="rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between">
                 <p className="text-[0.85rem] font-medium text-slate-500">{stat.label}</p>
@@ -411,7 +281,6 @@ export default function ManagerBillingPage() {
           ))}
         </div>
 
-        {/* Charts row */}
         <div className="mt-8 grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-2">
@@ -420,7 +289,15 @@ export default function ManagerBillingPage() {
                   <BarChart3 className="h-4 w-4" strokeWidth={2} />
                 </span>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Collections — {collectionTimeframe === "7days" ? "Last 7 Days" : collectionTimeframe === "20days" ? "Last 20 Days" : "Last 1 Year"}
+                  Collections — {
+                    collectionTimeframe === "7d"
+                      ? "Last 7 Days"
+                      : collectionTimeframe === "1m"
+                      ? "Last 1 Month"
+                      : collectionTimeframe === "6m"
+                      ? "Last 6 Months"
+                      : "Last 1 Year"
+                  }
                 </h3>
               </div>
               <select
@@ -428,14 +305,15 @@ export default function ManagerBillingPage() {
                 onChange={(e) => setCollectionTimeframe(e.target.value as any)}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-[#7da3b3]"
               >
-                <option value="7days">7 Days</option>
-                <option value="20days">20 Days</option>
-                <option value="1year">1 Year</option>
+                <option value="7d">7 Days</option>
+                <option value="1m">1 Month</option>
+                <option value="6m">6 Months</option>
+                <option value="1y">1 Year</option>
               </select>
             </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={weeklyTrend} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f6" />
                   <XAxis
                     dataKey="label"
@@ -449,18 +327,18 @@ export default function ManagerBillingPage() {
                     tickLine={false}
                     tickFormatter={(v) => `${Math.round(v / 1000)}k`}
                   />
-                <Tooltip
-  cursor={{ fill: "#f1f5f9" }}
-  formatter={(value) => {
-    const amount = Number(value ?? 0);
-    return [`NPR ${amount.toLocaleString()}`, "Collected"];
-  }}
-  contentStyle={{
-    borderRadius: 12,
-    border: "1px solid #e2e8f0",
-    fontSize: 12,
-  }}
-/>
+                  <Tooltip
+                    cursor={{ fill: "#f1f5f9" }}
+                    formatter={(value) => {
+                      const amount = Number(value ?? 0);
+                      return [`NPR ${amount.toLocaleString()}`, "Collected"];
+                    }}
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: "1px solid #e2e8f0",
+                      fontSize: 12,
+                    }}
+                  />
                   <Bar dataKey="collected" name="Collected" fill="#7da3b3" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -480,31 +358,31 @@ export default function ManagerBillingPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={paymentBreakdown}
+                    data={paymentMethodMix}
                     dataKey="amountCents"
                     nameKey="method"
                     innerRadius={45}
                     outerRadius={72}
                     paddingAngle={3}
                   >
-                    {paymentBreakdown.map((entry) => (
+                    {paymentMethodMix.map((entry) => (
                       <Cell
                         key={entry.method}
                         fill={PAYMENT_METHOD_COLORS[entry.method] || "#94a3b8"}
                       />
                     ))}
                   </Pie>
-              <Tooltip
-  formatter={(value) => {
-    const amount = Number(value ?? 0);
-    return `NPR ${centsToDisplay(amount)}`;
-  }}
-  contentStyle={{
-    borderRadius: 12,
-    border: "1px solid #e2e8f0",
-    fontSize: 12,
-  }}
-/>
+                  <Tooltip
+                    formatter={(value) => {
+                      const amount = Number(value ?? 0);
+                      return `NPR ${centsToDisplay(amount)}`;
+                    }}
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: "1px solid #e2e8f0",
+                      fontSize: 12,
+                    }}
+                  />
                   <Legend
                     verticalAlign="bottom"
                     height={36}
@@ -518,9 +396,7 @@ export default function ManagerBillingPage() {
           </div>
         </div>
 
-        {/* Outlet performance + Doctor revenue row */}
         <div className="mt-8 grid gap-4 lg:grid-cols-3">
-          {/* Outlet performance table — only meaningful when comparing outlets */}
           <div className="lg:col-span-2 rounded-2xl border border-slate-900/5 bg-white shadow-sm overflow-hidden">
             <div className="flex items-center gap-2 border-b border-slate-100 p-5">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#7da3b3]/10 text-[#7da3b3]">
@@ -542,33 +418,35 @@ export default function ManagerBillingPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-900/5">
-                  {OUTLET_BILLING.map((o) => {
-                    const outstandingCents = o.chargedCents - o.collectedCents;
-                    const rate = o.chargedCents > 0 ? (o.collectedCents / o.chargedCents) * 100 : 0;
-                    return (
-                      <tr key={o.outletId} className="text-[0.85rem]">
-                        <td className="px-5 py-4 font-semibold text-slate-800">{o.outletName}</td>
-                        <td className="px-5 py-4 text-slate-700">NPR {centsToDisplay(o.chargedCents)}</td>
-                        <td className="px-5 py-4 text-slate-700">NPR {centsToDisplay(o.collectedCents)}</td>
-                        <td className="px-5 py-4">
-                          <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-1 text-[0.75rem] font-medium text-rose-700">
-                            NPR {centsToDisplay(outstandingCents)}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[0.75rem] font-medium text-emerald-700">
-                            {rate.toFixed(1)}%
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {outletPerformance.map((o) => (
+                    <tr key={o.locationId} className="text-[0.85rem]">
+                      <td className="px-5 py-4 font-semibold text-slate-800">{o.outletName}</td>
+                      <td className="px-5 py-4 text-slate-700">NPR {centsToDisplay(o.chargedCents)}</td>
+                      <td className="px-5 py-4 text-slate-700">NPR {centsToDisplay(o.collectedCents)}</td>
+                      <td className="px-5 py-4">
+                        <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-1 text-[0.75rem] font-medium text-rose-700">
+                          NPR {centsToDisplay(o.outstandingCents)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[0.75rem] font-medium text-emerald-700">
+                          {o.collectionRatePercent.toFixed(1)}%
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {outletPerformance.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-500 text-xs">
+                        No outlet performance data found.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Revenue by doctor */}
           <div className="rounded-2xl border border-slate-900/5 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#345263]/10 text-[#345263]">
@@ -579,27 +457,32 @@ export default function ManagerBillingPage() {
               </h3>
             </div>
             <div className="space-y-4">
-              {doctorRevenue.map((d) => (
-                <div key={d.name}>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="truncate pr-2 font-semibold text-slate-700">{d.name}</span>
-                    <span className="shrink-0 font-medium text-slate-400">
-                      NPR {centsToDisplay(d.revenueCents)}
-                    </span>
+              {doctorRevenue.map((d) => {
+                const pct = Math.round((d.revenueCents / maxDoctorRevenue) * 100);
+                return (
+                  <div key={d.doctorId || d.doctorName}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="truncate pr-2 font-semibold text-slate-700">{d.doctorName}</span>
+                      <span className="shrink-0 font-medium text-slate-400">
+                        NPR {centsToDisplay(d.revenueCents)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-[#7da3b3] transition-all"
+                        style={{ width: `${Math.max(pct, 8)}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-[#7da3b3] transition-all"
-                      style={{ width: `${Math.max(d.pct, 8)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
+              {doctorRevenue.length === 0 && (
+                <p className="text-xs text-slate-500 py-4 text-center">No doctor revenue recorded.</p>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Top outstanding patients */}
         <div className="mt-8 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-2">
@@ -636,32 +519,34 @@ export default function ManagerBillingPage() {
             </div>
 
             <div className="divide-y divide-slate-900/5">
-              {paginatedOutstanding.map((p, i) => {
-                const outlet = OUTLET_BILLING.find((o) => o.outletId === p.outletId);
+              {outstandingPatients.map((p, i) => {
                 const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
+                const lastVisitDisplay = p.lastActivity
+                  ? new Date(p.lastActivity).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                  : "-";
                 return (
                   <div
-                    key={p.id}
+                    key={p.patientId}
                     className={`${LIST_GRID} flex-wrap gap-y-3 bg-white px-5 py-4 transition-colors hover:bg-[#7da3b3]/[0.06] max-sm:flex`}
                   >
                     <div className="flex min-w-[10rem] items-center gap-3">
                       <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[0.75rem] font-semibold ${color}`}>
-                        {getInitials(p.name)}
+                        {getInitials(p.patientName)}
                       </div>
-                      <p className="truncate text-[0.9rem] font-semibold text-slate-900">{p.name}</p>
+                      <p className="truncate text-[0.9rem] font-semibold text-slate-900">{p.patientName}</p>
                     </div>
                     <div className="min-w-[8rem] text-[0.85rem] text-slate-600">
                       <p className="flex items-center gap-1.5">
                         <Phone className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                        {p.phone}
+                        {p.patientPhone || "-"}
                       </p>
                     </div>
                     <div className="min-w-[8rem] text-[0.8rem] text-slate-600 truncate">
-                      {outlet?.outletName.replace("Chitwan Dental Home - ", "") ?? "—"}
+                      {p.outletName ?? "—"}
                     </div>
-                    <div className="min-w-[6rem] text-[0.85rem] text-slate-600">{p.lastVisit}</div>
+                    <div className="min-w-[6rem] text-[0.85rem] text-slate-600">{lastVisitDisplay}</div>
                     <div className="text-[0.85rem] font-semibold text-slate-800">
-                      NPR {centsToDisplay(p.amountDueCents)}
+                      NPR {centsToDisplay(p.balanceCents)}
                     </div>
                     <div className="flex justify-end">
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-1 text-[0.72rem] font-medium text-rose-700">
@@ -672,7 +557,7 @@ export default function ManagerBillingPage() {
                 );
               })}
 
-              {filteredOutstanding.length === 0 && (
+              {outstandingPatients.length === 0 && (
                 <div className="bg-white py-16 text-center text-slate-500">
                   No outstanding balances match your filters.
                 </div>
@@ -680,16 +565,15 @@ export default function ManagerBillingPage() {
             </div>
           </div>
 
-          {/* Pagination */}
-          {filteredOutstanding.length > 0 && (
+          {totalOutstanding > 0 && (
             <div className="mt-4 flex items-center justify-between border-t border-slate-100 px-1 pt-4 text-xs">
               <span className="text-[0.7rem] font-medium text-slate-500">
                 Showing{" "}
-                <strong className="text-slate-800">{startIndex + 1}</strong> to{" "}
+                <strong className="text-slate-800">{(currentPage - 1) * itemsPerPage + 1}</strong> to{" "}
                 <strong className="text-slate-800">
-                  {Math.min(startIndex + itemsPerPage, filteredOutstanding.length)}
+                  {Math.min(currentPage * itemsPerPage, totalOutstanding)}
                 </strong>{" "}
-                of <strong className="text-slate-800">{filteredOutstanding.length}</strong>
+                of <strong className="text-slate-800">{totalOutstanding}</strong>
               </span>
 
               <div className="flex items-center gap-1">
