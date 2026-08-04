@@ -3,12 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
-  const locationId = sp.get("locationId");
-  if (!locationId) {
-    return NextResponse.json({ success: false, error: "locationId is required" }, { status: 400 });
-  }
+  const locationId = sp.get("locationId") ?? undefined;
   const range = (sp.get("range") ?? "14d") as TrendRange;
-  const result = await getNewPatientTrend(locationId, range);
+
+  const result = await getNewPatientTrend(range, locationId); // CHANGED: swapped argument order to match the controller's new (range, locationId) signature
+
   if (!result.success) {
     const status = result.code === "UNAUTHORIZED" ? 401 : result.code === "VALIDATION" ? 400 : 500;
     return NextResponse.json({ success: false, error: result.error }, { status });

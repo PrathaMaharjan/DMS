@@ -3,10 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
-  const locationId = sp.get("locationId");
-  if (!locationId) {
-    return NextResponse.json({ success: false, error: "locationId is required" }, { status: 400 });
-  }
+  const locationId = sp.get("locationId") ?? undefined;
+
   const limit = sp.has("limit") ? Number(sp.get("limit")) : undefined;
   const result = await getRecentActivityFeed(locationId, limit);
   if (!result.success) {
