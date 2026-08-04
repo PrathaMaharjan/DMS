@@ -845,8 +845,11 @@ export async function getPaymentMethodMix(
 
 
     const breakdown = rows
-      .filter((r) => r.method !== null)
-      .map((r) => ({ method: r.method as string, amountCents: r.amountCents }));
+      .filter(
+        (r: any): r is { method: string; amountCents: number } =>
+          r.method !== null,
+      )
+      .map((r: any) => ({ method: r.method, amountCents: r.amountCents }));
 
     return { success: true, breakdown };
   } catch (err) {
@@ -1048,10 +1051,15 @@ export async function getCollectionsChart(
 // ------------------ doctor stats ---------------------------------------
 
 export type RevenueByDoctorResult =
-  | { success: true; doctors: { doctorId: string; doctorName: string; revenueCents: number }[] }
+  | {
+      success: true;
+      doctors: { doctorId: string; doctorName: string; revenueCents: number }[];
+    }
   | { success: false; error: string; code: AdminBillingErrorCode };
 
-export async function getRevenueByDoctor(locationId?: string): Promise<RevenueByDoctorResult> {
+export async function getRevenueByDoctor(
+  locationId?: string,
+): Promise<RevenueByDoctorResult> {
   try {
     const session = await requireSession();
 
@@ -1087,7 +1095,11 @@ export async function getRevenueByDoctor(locationId?: string): Promise<RevenueBy
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong loading revenue by doctor.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong loading revenue by doctor.",
+      code: "SERVER_ERROR",
+    };
   }
 }
 const DEFAULT_LIMIT = 5;
@@ -1109,13 +1121,19 @@ export type TopOutstandingResult =
   }
   | { success: false; error: string; code: AdminBillingErrorCode };
 // top out;et patent
-export async function getTopOutstandingPatients(
-  options?: { locationId?: string; search?: string; limit?: number; offset?: number }
-): Promise<TopOutstandingResult> {
+export async function getTopOutstandingPatients(options?: {
+  locationId?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<TopOutstandingResult> {
   try {
     const session = await requireSession();
 
-    const limit = Math.min(Math.max(options?.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+    const limit = Math.min(
+      Math.max(options?.limit ?? DEFAULT_LIMIT, 1),
+      MAX_LIMIT,
+    );
     const offset = Math.max(options?.offset ?? 0, 0);
 
     const conditions = [eq(patients.orgId, session.orgId)];
@@ -1124,7 +1142,7 @@ export async function getTopOutstandingPatients(
     }
     if (options?.search) {
       conditions.push(
-        sql`(${patients.firstName} || ' ' || ${patients.lastName} ilike ${"%" + options.search + "%"} or ${patients.phone} ilike ${"%" + options.search + "%"})`
+        sql`(${patients.firstName} || ' ' || ${patients.lastName} ilike ${"%" + options.search + "%"} or ${patients.phone} ilike ${"%" + options.search + "%"})`,
       );
     }
 
@@ -1143,18 +1161,34 @@ export async function getTopOutstandingPatients(
       .innerJoin(locations, eq(patients.locationId, locations.id))
       .leftJoin(ledgerEntries, eq(ledgerEntries.patientId, patients.id))
       .where(and(...conditions))
-      .groupBy(patients.id, patients.firstName, patients.lastName, patients.phone, locations.name);
+      .groupBy(
+        patients.id,
+        patients.firstName,
+        patients.lastName,
+        patients.phone,
+        locations.name,
+      );
 
-    const withDues = allRows.filter((p) => p.balanceCents > 0).sort((a, b) => b.balanceCents - a.balanceCents);
+    const withDues = allRows
+      .filter((p) => p.balanceCents > 0)
+      .sort((a, b) => b.balanceCents - a.balanceCents);
     const total = withDues.length;
     const paged = withDues.slice(offset, offset + limit);
 
-    return { success: true, patients: paged, pagination: { total, limit, offset } };
+    return {
+      success: true,
+      patients: paged,
+      pagination: { total, limit, offset },
+    };
   } catch (err) {
     if (err instanceof SessionError) {
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong loading outstanding patients.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong loading outstanding patients.",
+      code: "SERVER_ERROR",
+    };
   }
 }
