@@ -46,7 +46,7 @@ function generateReportId(appointmentId: string, date: Date): string {
   return `RPT-${datePart}-${shortId}`;
 }
 
-// ✅ Professional clinic header (logo placeholder + clinic details)
+// Professional clinic header (logo placeholder + clinic details)
 function drawHeader(
   doc: PDFKit.PDFDocument,
   clinic: {
@@ -96,7 +96,7 @@ function drawTitle(doc: PDFKit.PDFDocument) {
   doc.moveDown(0.6);
 }
 
-// ✅ Report metadata (Report ID, Appointment ID, Generated Date)
+// Report metadata (Report ID, Appointment ID, Generated Date)
 function drawMetadata(
   doc: PDFKit.PDFDocument,
   reportId: string,
@@ -118,7 +118,7 @@ function drawMetadata(
   doc.moveDown(1.2);
 }
 
-// ✅ Reusable helper: drawKeyValue
+// Reusable helper: drawKeyValue
 function drawKeyValue(
   doc: PDFKit.PDFDocument,
   label: string,
@@ -140,7 +140,7 @@ function drawKeyValue(
     .text(value || "—", x + labelWidth, y, { width: valueWidth });
 }
 
-// ✅ Reusable helper: drawCard - used for Patient Information + Visit Information
+// Reusable helper: drawCard - used for Patient Information + Visit Information
 function drawCard(
   doc: PDFKit.PDFDocument,
   title: string,
@@ -171,7 +171,7 @@ function drawCard(
   doc.y = startY + cardHeight + 16;
 }
 
-// ✅ Reusable helper: drawSection - used for Clinical Notes + Follow-up Instructions
+// Reusable helper: drawSection - used for Clinical Notes + Follow-up Instructions
 function drawSection(doc: PDFKit.PDFDocument, title: string, body: string) {
   checkPageBreak(doc, 60);
   doc
@@ -188,7 +188,7 @@ function drawSection(doc: PDFKit.PDFDocument, title: string, body: string) {
   doc.moveDown(1);
 }
 
-// ✅ Prescription section with bullet formatting
+// Prescription section with bullet formatting
 function drawPrescription(
   doc: PDFKit.PDFDocument,
   prescription: string | null,
@@ -232,7 +232,7 @@ function drawPrescription(
   doc.moveDown(0.85);
 }
 
-// ✅ Doctor signature block
+// Doctor signature block
 function drawSignatureBlock(
   doc: PDFKit.PDFDocument,
   doctorName: string,
@@ -269,7 +269,7 @@ function drawSignatureBlock(
   doc.moveDown(1);
 }
 
-// ✅ Confidentiality notice
+// Confidentiality notice
 function drawConfidentialityNotice(doc: PDFKit.PDFDocument) {
   checkPageBreak(doc, 45);
   doc.moveDown(0.5);
@@ -285,7 +285,7 @@ function drawConfidentialityNotice(doc: PDFKit.PDFDocument) {
     );
 }
 
-// ✅ Professional footer with page numbers - drawn on every buffered page,
+// Professional footer with page numbers - drawn on every buffered page,
 // requires { bufferPages: true } so pages aren't flushed before this runs.
 function addFooters(doc: PDFKit.PDFDocument) {
   const range = doc.bufferedPageRange();

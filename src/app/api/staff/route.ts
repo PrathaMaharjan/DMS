@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   );
 }
 
-// src/app/api/staff/route.ts - GET handler
+
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const locationId = sp.get("locationId") ?? undefined;
