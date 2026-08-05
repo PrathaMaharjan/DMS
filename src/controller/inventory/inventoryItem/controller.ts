@@ -6,6 +6,7 @@ import {
   inventoryItems,
   inventoryMovements,
   locations,
+  organizations,
   users,
 } from "@/db/schema";
 import {
@@ -14,6 +15,14 @@ import {
   updateItemSchema,
 } from "@/lib/validators/inventory";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
+
+export async function checkInventoryEnabled(orgId: string): Promise<boolean> {
+  const org = await db.query.organizations.findFirst({
+    where: eq(organizations.id, orgId),
+  });
+  return org?.inventoryEnabled ?? false;
+}
+
 // ---------------------- create treatment item --------------------
 export type CreateInventoryItemResult =
   | { success: true; item: { id: string; name: string } }
@@ -46,6 +55,13 @@ export async function createInventoryItem(
         success: false,
         error: "Location not found.",
         code: "NOT_FOUND",
+      };
+    }
+    if (!(await checkInventoryEnabled(session.orgId))) {
+      return {
+        success: false,
+        error: "Inventory tracking is turned off for your organization.",
+        code: "VALIDATION",
       };
     }
 
@@ -405,6 +421,13 @@ export async function addInventoryMovement(
     if (!item) {
       return { success: false, error: "Item not found.", code: "NOT_FOUND" };
     }
+    if (!(await checkInventoryEnabled(session.orgId))) {
+      return {
+        success: false,
+        error: "Inventory tracking is turned off for your organization.",
+        code: "VALIDATION",
+      };
+    }
     // "received" and positive "adjusted" entries add stock; "used",
     // "wasted", and negative "adjusted" reduce it - the sign comes
     // straight from what the caller sends, matching quantity's own
@@ -496,10 +519,21 @@ export async function getMovementHistory(
 }
 
 export type LowStockCountResult =
-  | { success: true; count: number; items: { id: string; name: string; currentStock: number; reorderThreshold: number }[] }
+  | {
+      success: true;
+      count: number;
+      items: {
+        id: string;
+        name: string;
+        currentStock: number;
+        reorderThreshold: number;
+      }[];
+    }
   | { success: false; error: string; code: InventoryErrorCode };
 
-export async function getLowStockCount(locationId: string): Promise<LowStockCountResult> {
+export async function getLowStockCount(
+  locationId: string,
+): Promise<LowStockCountResult> {
   try {
     const session = await requireSession();
 
@@ -515,17 +549,22 @@ export async function getLowStockCount(locationId: string): Promise<LowStockCoun
       })
       .from(inventoryItems)
       .innerJoin(locations, eq(inventoryItems.locationId, locations.id))
-      .leftJoin(inventoryMovements, eq(inventoryMovements.itemId, inventoryItems.id))
+      .leftJoin(
+        inventoryMovements,
+        eq(inventoryMovements.itemId, inventoryItems.id),
+      )
       .where(
         and(
           eq(inventoryItems.locationId, locationId),
           eq(locations.orgId, session.orgId),
-          isNull(inventoryItems.deletedAt)
-        )
+          isNull(inventoryItems.deletedAt),
+        ),
       )
       .groupBy(inventoryItems.id);
 
-    const lowStockItems = rows.filter((r) => r.currentStock <= r.reorderThreshold);
+    const lowStockItems = rows.filter(
+      (r) => r.currentStock <= r.reorderThreshold,
+    );
 
     return { success: true, count: lowStockItems.length, items: lowStockItems };
   } catch (err) {
@@ -533,6 +572,10 @@ export async function getLowStockCount(locationId: string): Promise<LowStockCoun
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong loading the low stock count.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong loading the low stock count.",
+      code: "SERVER_ERROR",
+    };
   }
 }

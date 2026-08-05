@@ -3,6 +3,7 @@ import { inventoryItems, locations, treatments, treatmentSupplies } from "@/db/s
 import { requireSession, SessionError } from "@/lib/auth/get-session";
 import { createTreatmentSchema, updateTreatmentSchema } from "@/lib/validators/treatments";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { checkInventoryEnabled } from "../inventory/inventoryItem/controller";
 
 export type TreatmentErrorCode =
   | "UNAUTHORIZED"
@@ -33,7 +34,6 @@ export type CreateTreatmentResult =
 export async function createTreatment(input: unknown): Promise<CreateTreatmentResult> {
   try {
     const session = await requireSession();
-    console.log(input)
 
     const parsed = createTreatmentSchema.safeParse(input);
     if (!parsed.success) {
@@ -48,8 +48,12 @@ export async function createTreatment(input: unknown): Promise<CreateTreatmentRe
       return { success: false, error: "Location not found.", code: "NOT_FOUND" };
     }
 
-    // Treatment and its supply list created together, in one transaction -
-    // a treatment can never exist without its supply decision settled.
+    // ADDED - checked once, decides whether the supply rows below
+    // actually get written. Keeps writes consistent with getTreatments'
+    // display logic: if inventory is off, nothing about supplies is
+    // ever shown OR stored, not just hidden after the fact.
+    const inventoryOn = await checkInventoryEnabled(session.orgId);
+
     const treatment = await db.transaction(async (tx) => {
       const [newTreatment] = await tx
         .insert(treatments)
@@ -68,11 +72,12 @@ export async function createTreatment(input: unknown): Promise<CreateTreatmentRe
         })
         .returning();
 
-      // hasNoSupplies means "insert nothing" - zero rows in
-      // treatment_supplies IS the "no supplies" state, no extra column needed.
-      if (!data.hasNoSupplies && data.supplies) {
+      // CHANGED - only writes supply rows if inventory is actually on.
+      // While off, every treatment is created as if hasNoSupplies were
+      // true, regardless of what was actually sent in the request.
+      if (inventoryOn && !data.hasNoSupplies && data.supplies) {
         await tx.insert(treatmentSupplies).values(
-          data.supplies.map((s:any) => ({
+          data.supplies.map((s) => ({
             treatmentId: newTreatment.id,
             itemId: s.itemId,
             quantityRequired: s.quantityRequired,
@@ -119,6 +124,10 @@ export async function getTreatments(
     const limit = Math.min(Math.max(options?.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
     const offset = Math.max(options?.offset ?? 0, 0);
 
+    // ADDED - checked once, up front, since it decides whether the
+    // supply-fetching work below even needs to happen at all.
+    const inventoryOn = await checkInventoryEnabled(session.orgId);
+
     const whereClause = locationId
       ? and(eq(treatments.locationId, locationId), eq(locations.orgId, session.orgId))
       : eq(locations.orgId, session.orgId);
@@ -154,36 +163,41 @@ export async function getTreatments(
         .where(whereClause),
     ]);
 
-    // A separate, single query for EVERY supply row belonging to any of
-    // this page's treatments - not one query per treatment. Grouped in
-    // application code afterward, same "avoid N+1" discipline used
-    // throughout this project (getAllDoctorsScheduleTimeline's bookings).
-    const treatmentIds = results.map((t) => t.id);
-    const supplyRows = treatmentIds.length
-      ? await db
-          .select({
-            treatmentId: treatmentSupplies.treatmentId,
-            itemId: treatmentSupplies.itemId,
-            itemName: inventoryItems.name,
-            unit: inventoryItems.unit,
-            quantityRequired: treatmentSupplies.quantityRequired,
-          })
-          .from(treatmentSupplies)
-          .innerJoin(inventoryItems, eq(treatmentSupplies.itemId, inventoryItems.id))
-          .where(inArray(treatmentSupplies.treatmentId, treatmentIds))
-      : [];
+    // CHANGED - the whole supply-fetching block now only runs if
+    // inventory is actually on. If it's off, every treatment just gets
+    // an empty supplies array - the real data in treatment_supplies is
+    // untouched in the database, this only affects what THIS response
+    // exposes.
+    let treatmentsWithSupplies = results.map((t) => ({ ...t, supplies: [] as TreatmentSupplyRow[] }));
 
-    const suppliesByTreatment = new Map<string, TreatmentSupplyRow[]>();
-    for (const row of supplyRows) {
-      const list = suppliesByTreatment.get(row.treatmentId) ?? [];
-      list.push({ itemId: row.itemId, itemName: row.itemName, unit: row.unit, quantityRequired: row.quantityRequired });
-      suppliesByTreatment.set(row.treatmentId, list);
+    if (inventoryOn) {
+      const treatmentIds = results.map((t) => t.id);
+      const supplyRows = treatmentIds.length
+        ? await db
+            .select({
+              treatmentId: treatmentSupplies.treatmentId,
+              itemId: treatmentSupplies.itemId,
+              itemName: inventoryItems.name,
+              unit: inventoryItems.unit,
+              quantityRequired: treatmentSupplies.quantityRequired,
+            })
+            .from(treatmentSupplies)
+            .innerJoin(inventoryItems, eq(treatmentSupplies.itemId, inventoryItems.id))
+            .where(inArray(treatmentSupplies.treatmentId, treatmentIds))
+        : [];
+
+      const suppliesByTreatment = new Map<string, TreatmentSupplyRow[]>();
+      for (const row of supplyRows) {
+        const list = suppliesByTreatment.get(row.treatmentId) ?? [];
+        list.push({ itemId: row.itemId, itemName: row.itemName, unit: row.unit, quantityRequired: row.quantityRequired });
+        suppliesByTreatment.set(row.treatmentId, list);
+      }
+
+      treatmentsWithSupplies = results.map((t) => ({
+        ...t,
+        supplies: suppliesByTreatment.get(t.id) ?? [],
+      }));
     }
-
-    const treatmentsWithSupplies = results.map((t) => ({
-      ...t,
-      supplies: suppliesByTreatment.get(t.id) ?? [],
-    }));
 
     const total = countResult[0]?.count ?? 0;
     return { success: true, treatments: treatmentsWithSupplies, pagination: { total, limit, offset } };
@@ -199,8 +213,7 @@ export async function getTreatments(
 export type UpdateTreatmentResult =
   | { success: true; treatment: typeof treatments.$inferSelect }
   | { success: false; error: string; code: TreatmentErrorCode };
-
-  export async function updateTreatment(treatmentId: string, input: unknown): Promise<UpdateTreatmentResult> {
+export async function updateTreatment(treatmentId: string, input: unknown): Promise<UpdateTreatmentResult> {
   try {
     const session = await requireSession();
 
@@ -208,29 +221,49 @@ export type UpdateTreatmentResult =
     if (!parsed.success) {
       return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input.", code: "VALIDATION" };
     }
+    const data = parsed.data;
 
     const owned = await findOwnedTreatment(treatmentId, session.orgId);
     if (!owned) {
       return { success: false, error: "Treatment not found.", code: "NOT_FOUND" };
     }
 
-    const [updated] = await db
-      .update(treatments)
-      .set({ ...parsed.data, updatedAt: new Date() })
-      .where(eq(treatments.id, treatmentId))
-      .returning();
-      return { success: true, treatment: updated };
-       }
-    catch (err) {
-    if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return { success: false, error: "You must be logged in.", code: "UNAUTHORIZED" };
+    const { supplies, hasNoSupplies, ...treatmentFields } = data;
+
+    const updated = await db.transaction(async (tx) => {
+      const [updatedTreatment] = await tx
+        .update(treatments)
+        .set({ ...treatmentFields, updatedAt: new Date() })
+        .where(eq(treatments.id, treatmentId))
+        .returning();
+
+      // Supplies only touched if the request actually included a
+      // decision about them - omitting both fields entirely means "leave
+      // the existing supply list alone," not "wipe it."
+      if (supplies !== undefined || hasNoSupplies !== undefined) {
+        await tx.delete(treatmentSupplies).where(eq(treatmentSupplies.treatmentId, treatmentId));
+
+        if (!hasNoSupplies && supplies && supplies.length > 0) {
+          await tx.insert(treatmentSupplies).values(
+            supplies.map((s:any) => ({
+              treatmentId,
+              itemId: s.itemId,
+              quantityRequired: s.quantityRequired,
+            }))
+          );
+        }
+      }
+
+      return updatedTreatment;
+    });
+
+    return { success: true, treatment: updated };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     if (getPgErrorCode(err) === "23505") {
-      return {
-        success: false,
-        error: "A treatment with this name already exists at this location.",
-        code: "DUPLICATE",
-      };
+      return { success: false, error: "A treatment with this name already exists at this location.", code: "DUPLICATE" };
     }
     console.error(err);
     return { success: false, error: "Something went wrong updating the treatment.", code: "SERVER_ERROR" };

@@ -35,6 +35,7 @@ import {
   sendAppointmentCancelledEmail,
   sendAppointmentConfirmedEmail,
 } from "@/lib/email/sendAppomentStatus";
+import { checkInventoryEnabled } from "../inventory/inventoryItem/controller";
 // import { bookAppointmentSchema } from "@/lib/validators/appointments";
 
 export type BookAppointmentErrorCode =
@@ -491,10 +492,6 @@ async function checkOwnerOrManager(userId: string): Promise<boolean> {
 
 export const updateStatusSchema = z.object({
   status: z.enum(["requested", "confirmed", "checked_in", "completed", "cancelled", "no_show"]),
-  // Only ever has any effect when status is "completed" AND stock is
-  // genuinely insufficient AND the caller holds isOwner/manager -
-  // silently ignored in every other case, checked inside
-  // updateAppointmentStatus itself via checkOwnerOrManager.
   forceComplete: z.boolean().optional(),
 });
 
@@ -517,9 +514,6 @@ export async function updateAppointmentStatus(
       return { success: false, error: "Invalid status value.", code: "VALIDATION" };
     }
 
-    // Now also fetches currentStatus and treatmentId - needed for the
-    // redundant-completion guard and the supply lookup below, on top of
-    // everything the email logic already needed.
     const [existingAppointment] = await db
       .select({
         id: appointments.id,
@@ -542,74 +536,77 @@ export async function updateAppointmentStatus(
       return { success: false, error: "Appointment not found.", code: "NOT_FOUND" };
     }
 
-    // Only a genuine transition INTO completed triggers deduction -
-    // re-saving an already-completed appointment never deducts twice.
     const isNewCompletion = status === "completed" && existingAppointment.currentStatus !== "completed";
 
     if (isNewCompletion) {
-      const supplies = await db
-        .select({
-          itemId: treatmentSupplies.itemId,
-          itemName: inventoryItems.name,
-          quantityRequired: treatmentSupplies.quantityRequired,
-        })
-        .from(treatmentSupplies)
-        .innerJoin(inventoryItems, eq(treatmentSupplies.itemId, inventoryItems.id))
-        .where(eq(treatmentSupplies.treatmentId, existingAppointment.treatmentId));
+      // ADDED - the org-level toggle check. If inventory is off, this
+      // completion behaves exactly as if the treatment had no supply
+      // list at all, regardless of what treatment_supplies actually
+      // contains - "off" genuinely means off everywhere, per what we
+      // agreed a few messages back.
+      const inventoryOn = await checkInventoryEnabled(session.orgId);
 
-      if (supplies.length > 0) {
-        const itemIds = supplies.map((s) => s.itemId);
-        const stockRows = await db
-          .select({
-            itemId: inventoryMovements.itemId,
-            currentStock: sql<number>`coalesce(sum(${inventoryMovements.quantity}), 0)::int`,
-          })
-          .from(inventoryMovements)
-          .where(inArray(inventoryMovements.itemId, itemIds))
-          .groupBy(inventoryMovements.itemId);
-
-        const stockByItem = new Map(stockRows.map((r) => [r.itemId, r.currentStock]));
-        const shortages = supplies.filter((s) => (stockByItem.get(s.itemId) ?? 0) < s.quantityRequired);
-
-        if (shortages.length > 0) {
-          const canOverride = forceComplete && (await checkOwnerOrManager(session.userId));
-          if (!canOverride) {
-            const shortageList = shortages.map((s) => s.itemName).join(", ");
-            return {
-              success: false,
-              error: `Not enough stock to complete: ${shortageList}. An owner or manager can override this.`,
-              code: "VALIDATION",
-            };
-          }
-        }
-
-        // Status change and every deduction happen together - either
-        // all succeed, or none do.
-        await db.transaction(async (tx) => {
-          await tx.update(appointments).set({ status: "completed" }).where(eq(appointments.id, appointmentId));
-          await tx.insert(inventoryMovements).values(
-            supplies.map((s) => ({
-              itemId: s.itemId,
-              locationId: existingAppointment.locationId,
-              quantity: -s.quantityRequired,
-              type: "used" as const,
-              note: "Auto-deducted from appointment completion",
-              appointmentId: existingAppointment.id,
-              recordedByUserId: session.userId,
-            }))
-          );
-        });
-      } else {
-        // No supply list defined for this treatment - completes normally.
+      if (!inventoryOn) {
         await db.update(appointments).set({ status: "completed" }).where(eq(appointments.id, appointmentId));
+      } else {
+        const supplies = await db
+          .select({
+            itemId: treatmentSupplies.itemId,
+            itemName: inventoryItems.name,
+            quantityRequired: treatmentSupplies.quantityRequired,
+          })
+          .from(treatmentSupplies)
+          .innerJoin(inventoryItems, eq(treatmentSupplies.itemId, inventoryItems.id))
+          .where(eq(treatmentSupplies.treatmentId, existingAppointment.treatmentId));
+
+        if (supplies.length > 0) {
+          const itemIds = supplies.map((s) => s.itemId);
+          const stockRows = await db
+            .select({
+              itemId: inventoryMovements.itemId,
+              currentStock: sql<number>`coalesce(sum(${inventoryMovements.quantity}), 0)::int`,
+            })
+            .from(inventoryMovements)
+            .where(inArray(inventoryMovements.itemId, itemIds))
+            .groupBy(inventoryMovements.itemId);
+
+          const stockByItem = new Map(stockRows.map((r) => [r.itemId, r.currentStock]));
+          const shortages = supplies.filter((s) => (stockByItem.get(s.itemId) ?? 0) < s.quantityRequired);
+
+          if (shortages.length > 0) {
+            const canOverride = forceComplete && (await checkOwnerOrManager(session.userId));
+            if (!canOverride) {
+              const shortageList = shortages.map((s) => s.itemName).join(", ");
+              return {
+                success: false,
+                error: `Not enough stock to complete: ${shortageList}. An owner or manager can override this.`,
+                code: "VALIDATION",
+              };
+            }
+          }
+
+          await db.transaction(async (tx) => {
+            await tx.update(appointments).set({ status: "completed" }).where(eq(appointments.id, appointmentId));
+            await tx.insert(inventoryMovements).values(
+              supplies.map((s) => ({
+                itemId: s.itemId,
+                locationId: existingAppointment.locationId,
+                quantity: -s.quantityRequired,
+                type: "used" as const,
+                note: "Auto-deducted from appointment completion",
+                appointmentId: existingAppointment.id,
+                recordedByUserId: session.userId,
+              }))
+            );
+          });
+        } else {
+          await db.update(appointments).set({ status: "completed" }).where(eq(appointments.id, appointmentId));
+        }
       }
     } else {
-      // Every other status change - unchanged from before, no inventory
-      // logic involved at all.
       await db.update(appointments).set({ status: status as any }).where(eq(appointments.id, appointmentId));
     }
 
-    // Email logic - completely unchanged from your original file.
     if (existingAppointment.patientEmail) {
       try {
         if (status === "confirmed") {

@@ -39,7 +39,9 @@ export const organizations = pgTable(
     slug: text("slug").notNull().unique(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    inventoryEnabled: boolean("inventory_enabled").notNull().default(true),
   },
+  
   (table) => ({
     statusIdx: index("organizations_status_idx").on(table.status),
   }),
