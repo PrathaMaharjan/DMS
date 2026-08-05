@@ -227,7 +227,7 @@ export default function PatientsPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
   const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>([]);
-  const [outletFilter, setOutletFilter] = useState("all");
+  const [outletFilter, setOutletFilter] = useState("");
 
   const loadPatients = async () => {
     try {
@@ -277,6 +277,9 @@ export default function PatientsPage() {
           }
         });
         setOutletsList(mappedOutlets);
+        if (mappedOutlets.length > 0) {
+          setOutletFilter((prev) => (prev === "all" || !prev ? mappedOutlets[0].id : prev));
+        }
       }
     } catch (err) {
       console.error("Failed to load patients:", err);
@@ -537,7 +540,6 @@ export default function PatientsPage() {
               onChange={(e) => setOutletFilter(e.target.value)}
               className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] font-medium text-[#345263] outline-none focus:border-[#7da3b3]"
             >
-              <option value="all">All outlets</option>
               {outletsList.map((o, idx) => (
                 <option key={`${o.id}-${idx}`} value={o.id}>
                   {o.name}
@@ -596,7 +598,6 @@ export default function PatientsPage() {
                   }}
                   className="appearance-none rounded-full border border-slate-900/10 bg-white pl-9 pr-8 py-2.5 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
                 >
-                  <option value="all">All Outlets</option>
                   {outletsList.map((o, idx) => (
                     <option key={`${o.id}-${idx}`} value={o.id}>
                       {o.name}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import {
   Search,
   Plus,
@@ -70,93 +71,32 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Restorative Materials": "bg-violet-100 text-violet-700",
 };
 
-const SEED_CATEGORIES: StockCategory[] = [
-  { id: "cat-1", name: "Consumables" },
-  { id: "cat-2", name: "PPE & Safety" },
-  { id: "cat-3", name: "Anesthetics" },
-  { id: "cat-4", name: "Restorative Materials" },
-];
+const isValidUuid = (str?: string | null) =>
+  Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
 
-const SEED_MATERIALS: Material[] = [
-  {
-    id: "m1",
-    itemId: "INV-1001",
-    name: "Disposable Gloves (M)",
-    currentStock: 12,
-    unit: "boxes",
-    minStockLevel: 5,
-    createdAt: "2026-06-10",
-    categoryId: "cat-2",
-    categoryName: "PPE & Safety",
-    movements: [
-      { id: "mv1", type: "purchase", quantity: 10, note: "Invoice #4021", createdAt: "2026-07-15T10:00:00", createdByName: "Sujata Karki" },
-      { id: "mv2", type: "wastage", quantity: 2, note: "Torn during use", createdAt: "2026-07-20T14:30:00", createdByName: "Bimala Thapa" },
-    ],
-  },
-  {
-    id: "m2",
-    itemId: "INV-1002",
-    name: "Lidocaine 2% Cartridges",
-    currentStock: 3,
-    unit: "boxes",
-    minStockLevel: 5,
-    createdAt: "2026-05-22",
-    categoryId: "cat-3",
-    categoryName: "Anesthetics",
-    movements: [
-      { id: "mv3", type: "purchase", quantity: 5, note: "Monthly restock", createdAt: "2026-05-22T09:00:00", createdByName: "Sujata Karki" },
-      { id: "mv4", type: "adjustment", quantity: 3, note: "Stock recount correction", createdAt: "2026-07-28T11:00:00", createdByName: "Dr. Anish Shrestha" },
-    ],
-  },
-  {
-    id: "m3",
-    itemId: "INV-1003",
-    name: "Composite Resin (A2 Shade)",
-    currentStock: 0,
-    unit: "pieces",
-    minStockLevel: 3,
-    createdAt: "2026-04-14",
-    categoryId: "cat-4",
-    categoryName: "Restorative Materials",
-    movements: [],
-  },
-  {
-    id: "m4",
-    itemId: "INV-1004",
-    name: "Cotton Rolls",
-    currentStock: 40,
-    unit: "boxes",
-    minStockLevel: 10,
-    createdAt: "2026-07-01",
-    categoryId: "cat-1",
-    categoryName: "Consumables",
-    movements: [],
-  },
-  {
-    id: "m5",
-    itemId: "INV-1005",
-    name: "Surgical Masks",
-    currentStock: 8,
-    unit: "boxes",
-    minStockLevel: 10,
-    createdAt: "2026-06-28",
-    categoryId: "cat-2",
-    categoryName: "PPE & Safety",
-    movements: [],
-  },
-  {
-    id: "m6",
-    itemId: "INV-1006",
-    name: "Sodium Hypochlorite",
-    currentStock: 15,
-    unit: "ml",
-    minStockLevel: 5,
-    createdAt: "2026-03-02",
-    categoryId: null,
-    categoryName: null,
-    movements: [],
-  },
-];
+const SOFT_DELETED_INVENTORY_KEY = "dms_soft_deleted_inventory_item_ids_v1";
+
+function getSoftDeletedInventoryIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(SOFT_DELETED_INVENTORY_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function addSoftDeletedInventoryId(id: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getSoftDeletedInventoryIds();
+    current.add(id);
+    localStorage.setItem(SOFT_DELETED_INVENTORY_KEY, JSON.stringify(Array.from(current)));
+  } catch {}
+}
+
+const SEED_CATEGORIES: StockCategory[] = [];
+const SEED_MATERIALS: Material[] = [];
 
 const EMPTY_FORM = {
   name: "",
@@ -213,6 +153,65 @@ export default function InventoryPage() {
   const [materials, setMaterials] = useState<Material[]>(SEED_MATERIALS);
   const [categories, setCategories] = useState<StockCategory[]>(SEED_CATEGORIES);
 
+  const [activeLocationId, setActiveLocationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchOutlets() {
+      try {
+        const res = await axios.get("/api/outlets");
+        if (res.data?.success && res.data.data?.locations && res.data.data.locations.length > 0) {
+          setActiveLocationId(res.data.data.locations[0].id);
+        }
+      } catch (err) { }
+    }
+    fetchOutlets();
+  }, []);
+
+  useEffect(() => {
+    async function fetchInventory() {
+      if (!activeLocationId) return;
+      try {
+        const [catRes, itemRes] = await Promise.all([
+          axios.get(`/api/inventory/category?locationId=${activeLocationId}`).catch(() => null),
+          axios.get(`/api/inventory/item?locationId=${activeLocationId}`).catch(() => null),
+        ]);
+
+        if (catRes?.data?.success && Array.isArray(catRes.data.data?.categories)) {
+          const fetchedCats: StockCategory[] = catRes.data.data.categories.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+          }));
+          if (fetchedCats.length > 0) {
+            setCategories(fetchedCats);
+          }
+        }
+
+        if (itemRes?.data?.success && Array.isArray(itemRes.data.data?.items)) {
+          const deletedIds = getSoftDeletedInventoryIds();
+          const fetchedMaterials: Material[] = itemRes.data.data.items
+            .filter((it: any) => !deletedIds.has(it.id))
+            .map((it: any) => ({
+              id: it.id,
+              itemId: `INV-${it.id.slice(0, 4).toUpperCase()}`,
+              name: it.name,
+              currentStock: it.currentStock ?? 0,
+              unit: it.unit || "boxes",
+              minStockLevel: it.reorderThreshold ?? 0,
+              createdAt: new Date().toISOString().slice(0, 10),
+              categoryId: it.categoryId ?? null,
+              categoryName: it.categoryName ?? null,
+              movements: [],
+              locationId: activeLocationId,
+            }));
+          setMaterials(fetchedMaterials);
+        }
+      } catch (err) {
+        console.error("Failed to load inventory data:", err);
+      }
+    }
+    fetchInventory();
+  }, [activeLocationId]);
+
   const [query, setQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<"All" | StockLevel>("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
@@ -258,25 +257,28 @@ export default function InventoryPage() {
     return m.categoryName ?? UNCATEGORIZED;
   }
 
-  function addNewCategory() {
+  async function addNewCategory() {
     const trimmed = newCategoryInput.trim();
     if (!trimmed) return;
-    const newCat: StockCategory = { id: `cat-${Date.now()}`, name: trimmed };
+
+    let newCat: StockCategory = { id: `cat-${Date.now()}`, name: trimmed };
+    if (activeLocationId) {
+      try {
+        const res = await axios.post("/api/inventory/category", {
+          locationId: activeLocationId,
+          name: trimmed,
+        });
+        if (res.data?.success && res.data.data?.category) {
+          newCat = { id: res.data.data.category.id, name: res.data.data.category.name };
+        }
+      } catch (err) {
+        console.error("Failed to create category on server:", err);
+      }
+    }
     setCategories((prev) => [...prev, newCat]);
     setForm((p) => ({ ...p, categoryId: newCat.id }));
     setNewCategoryInput("");
     setIsAddingCategory(false);
-  }
-
-  function addNewUnit() {
-    const trimmed = newUnitInput.trim();
-    if (!trimmed) return;
-    if (!unitsList.includes(trimmed)) {
-      setUnitsList((prev) => [...prev, trimmed]);
-    }
-    setForm((p) => ({ ...p, unit: trimmed }));
-    setNewUnitInput("");
-    setIsAddingUnit(false);
   }
 
   function openAddModal() {
@@ -285,8 +287,6 @@ export default function InventoryPage() {
     setForm({ ...EMPTY_FORM, categoryId: categories[0]?.id ?? "" });
     setIsAddingCategory(false);
     setNewCategoryInput("");
-    setIsAddingUnit(false);
-    setNewUnitInput("");
     setModalOpen(true);
   }
 
@@ -296,25 +296,55 @@ export default function InventoryPage() {
     setForm(materialToForm(m));
     setIsAddingCategory(false);
     setNewCategoryInput("");
-    setIsAddingUnit(false);
-    setNewUnitInput("");
-    if (m.unit && !unitsList.includes(m.unit)) {
-      setUnitsList((prev) => [...prev, m.unit]);
-    }
     setModalOpen(true);
   }
 
-  function openProfile(m: Material) {
+  async function openProfile(m: Material) {
     setSelectedMaterial(m);
     setProfileTab("detail");
+
+    if (m.id && !m.id.startsWith("m")) {
+      try {
+        const res = await axios.get(`/api/inventory/item/${m.id}/movement`);
+        if (res.data?.success && Array.isArray(res.data.data?.movements)) {
+          const fetchedMovements: Movement[] = res.data.data.movements.map((mv: any) => ({
+            id: mv.id,
+            type: mv.type === "received" ? "purchase" : mv.type === "adjusted" ? "adjustment" : "wastage",
+            quantity: Math.abs(mv.quantity),
+            note: mv.note ?? "",
+            createdAt: mv.createdAt,
+            createdByName: mv.recordedByUserName ?? "System",
+          }));
+          setSelectedMaterial((prev) => (prev?.id === m.id ? { ...prev, movements: fetchedMovements } : prev));
+          setMaterials((prev) => prev.map((item) => (item.id === m.id ? { ...item, movements: fetchedMovements } : item)));
+        }
+      } catch (err) {
+        console.error("Failed to fetch movements history:", err);
+      }
+    }
   }
 
   function requestDelete(m: Material) {
     setDeleteTarget(m);
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!deleteTarget) return;
+
+    addSoftDeletedInventoryId(deleteTarget.id);
+
+    const locId = activeLocationId || (deleteTarget as any).locationId;
+    if (locId && deleteTarget.id && !deleteTarget.id.startsWith("m")) {
+      try {
+        await axios.delete(`/api/inventory/item?locationId=${locId}`, {
+          params: { id: deleteTarget.id },
+        }).catch(() =>
+          axios.delete(`/api/inventory/item/${deleteTarget.id}?locationId=${locId}`)
+        );
+      } catch (err) {
+        console.warn("Server delete item attempt:", err);
+      }
+    }
     setMaterials((prev) => prev.filter((m) => m.id !== deleteTarget.id));
     setSelectedMaterial((prev) => (prev?.id === deleteTarget.id ? null : prev));
     setDeleteTarget(null);
@@ -324,7 +354,7 @@ export default function InventoryPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return;
 
@@ -339,37 +369,79 @@ export default function InventoryPage() {
     }
 
     const category = categories.find((c) => c.id === form.categoryId);
+    const locId = activeLocationId;
+
+    if (!locId) {
+      alert("Please select or create an outlet location before managing inventory.");
+      return;
+    }
+
+    const payload: any = {
+      locationId: locId,
+      name: form.name.trim(),
+      unit: form.unit,
+      reorderThreshold: Number(form.minStockLevel) || 0,
+    };
+    if (isValidUuid(form.categoryId)) {
+      payload.categoryId = form.categoryId;
+    }
 
     if (modalMode === "edit" && editingId) {
+      if (isValidUuid(editingId)) {
+        try {
+          const res = await axios.patch(`/api/inventory/item/${editingId}`, payload);
+          if (res.data?.error) {
+            alert(res.data.error);
+            return;
+          }
+        } catch (err: any) {
+          alert(err.response?.data?.error || "Failed to update item on server.");
+          return;
+        }
+      }
       setMaterials((prev) =>
         prev.map((m) =>
           m.id === editingId
             ? {
-                ...m,
-                name: form.name.trim(),
-                unit: form.unit,
-                minStockLevel: Number(form.minStockLevel) || 0,
-                categoryId: form.categoryId || null,
-                categoryName: category?.name ?? null,
-              }
-            : m
-        )
-      );
-      setSelectedMaterial((prev) =>
-        prev && prev.id === editingId
-          ? {
-              ...prev,
+              ...m,
               name: form.name.trim(),
               unit: form.unit,
               minStockLevel: Number(form.minStockLevel) || 0,
               categoryId: form.categoryId || null,
               categoryName: category?.name ?? null,
             }
+            : m
+        )
+      );
+      setSelectedMaterial((prev) =>
+        prev && prev.id === editingId
+          ? {
+            ...prev,
+            name: form.name.trim(),
+            unit: form.unit,
+            minStockLevel: Number(form.minStockLevel) || 0,
+            categoryId: form.categoryId || null,
+            categoryName: category?.name ?? null,
+          }
           : prev
       );
     } else {
+      let createdId = String(Date.now());
+      try {
+        const res = await axios.post("/api/inventory/item", payload);
+        if (res.data?.success && res.data.data?.item) {
+          createdId = res.data.data.item.id;
+        } else if (res.data?.error) {
+          alert(res.data.error);
+          return;
+        }
+      } catch (err: any) {
+        alert(err.response?.data?.error || "Failed to create item on server.");
+        return;
+      }
+
       const newMaterial: Material = {
-        id: String(Date.now()),
+        id: createdId,
         itemId: `INV-${1000 + materials.length + 1}`,
         name: form.name.trim(),
         unit: form.unit,
@@ -395,7 +467,7 @@ export default function InventoryPage() {
     setAdjustModalOpen(true);
   }
 
-  function handleSaveAdjust(e: React.FormEvent) {
+  async function handleSaveAdjust(e: React.FormEvent) {
     e.preventDefault();
     if (!adjustingMaterial) return;
 
@@ -405,6 +477,23 @@ export default function InventoryPage() {
 
     const numericAmount = Number(amount);
     const newStock = isPurchase ? adjustingMaterial.currentStock + numericAmount : numericAmount;
+
+    const locId = activeLocationId || (adjustingMaterial as any).locationId;
+    const movementType = isPurchase ? "received" : "adjusted";
+    const quantityToSend = isPurchase ? numericAmount : (newStock - adjustingMaterial.currentStock);
+
+    if (locId && quantityToSend !== 0 && !adjustingMaterial.id.startsWith("m")) {
+      try {
+        await axios.post(`/api/inventory/item/${adjustingMaterial.id}/movement`, {
+          locationId: locId,
+          type: movementType,
+          quantity: quantityToSend,
+          note: adjustForm.note.trim() || undefined,
+        });
+      } catch (err) {
+        console.error("Failed to save movement on server:", err);
+      }
+    }
 
     const newMovement: Movement = {
       id: `mv-${Date.now()}`,
@@ -418,13 +507,13 @@ export default function InventoryPage() {
     setMaterials((prev) =>
       prev.map((m) =>
         m.id === adjustingMaterial.id
-          ? { ...m, currentStock: newStock, movements: [newMovement, ...m.movements] }
+          ? { ...m, currentStock: newStock, movements: [newMovement, ...(m.movements || [])] }
           : m
       )
     );
     setSelectedMaterial((prev) =>
       prev && prev.id === adjustingMaterial.id
-        ? { ...prev, currentStock: newStock, movements: [newMovement, ...prev.movements] }
+        ? { ...prev, currentStock: newStock, movements: [newMovement, ...(prev.movements || [])] }
         : prev
     );
 
@@ -698,11 +787,10 @@ export default function InventoryPage() {
                   <button
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
-                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${
-                      currentPage === pageNum
+                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
                         ? "bg-[#7da3b3] text-white shadow-sm"
                         : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                    }`}
+                      }`}
                   >
                     {pageNum}
                   </button>
@@ -755,7 +843,7 @@ export default function InventoryPage() {
                     type="text"
                     value={form.name}
                     onChange={(e) => update("name", e.target.value)}
-                    placeholder="Disposable Gloves (M)"
+
                     className={inputClass}
                   />
                 </label>
@@ -832,64 +920,14 @@ export default function InventoryPage() {
                       <Boxes className="h-3.5 w-3.5" strokeWidth={2} />
                       Unit
                     </span>
-                    {!isAddingUnit ? (
-                      <select
-                        value={form.unit}
-                        onChange={(e) => {
-                          if (e.target.value === ADD_NEW_VALUE) {
-                            setIsAddingUnit(true);
-                          } else {
-                            update("unit", e.target.value);
-                          }
-                        }}
-                        className={inputClass}
-                      >
-                        {unitsList.map((u) => (
-                          <option key={u} value={u}>
-                            {u}
-                          </option>
-                        ))}
-                        <option value={ADD_NEW_VALUE}>+ Add New Unit</option>
-                      </select>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <input
-                          autoFocus
-                          type="text"
-                          placeholder="New unit (e.g. bottles)"
-                          value={newUnitInput}
-                          onChange={(e) => setNewUnitInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              addNewUnit();
-                            }
-                            if (e.key === "Escape") {
-                              setIsAddingUnit(false);
-                              setNewUnitInput("");
-                            }
-                          }}
-                          className={inputClass}
-                        />
-                        <button
-                          type="button"
-                          onClick={addNewUnit}
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#7da3b3] text-white transition-colors hover:bg-[#345263]"
-                        >
-                          <Check className="h-4 w-4" strokeWidth={2} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsAddingUnit(false);
-                            setNewUnitInput("");
-                          }}
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-900/10 text-slate-500 transition-colors hover:bg-slate-50"
-                        >
-                          <X className="h-4 w-4" strokeWidth={2} />
-                        </button>
-                      </div>
-                    )}
+                    <input
+                      type="text"
+                      value={form.unit}
+                      onChange={(e) => update("unit", e.target.value)}
+                      placeholder="e.g. boxes, pieces, kg, ml"
+                      className={inputClass}
+                      required
+                    />
                   </label>
                 </div>
 
@@ -996,11 +1034,10 @@ export default function InventoryPage() {
                   <button
                     key={tab.key}
                     onClick={() => setProfileTab(tab.key)}
-                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${
-                      profileTab === tab.key
+                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${profileTab === tab.key
                         ? "border-[#3f6274] text-[#3f6274]"
                         : "border-transparent text-slate-500 hover:text-slate-700"
-                    }`}
+                      }`}
                   >
                     {tab.label}
                   </button>
@@ -1125,22 +1162,20 @@ export default function InventoryPage() {
                 <button
                   type="button"
                   onClick={() => setAdjustForm((p) => ({ ...p, adjustType: "purchase" }))}
-                  className={`flex-1 rounded-full py-2 text-[0.78rem] font-semibold transition-all ${
-                    adjustForm.adjustType === "purchase"
+                  className={`flex-1 rounded-full py-2 text-[0.78rem] font-semibold transition-all ${adjustForm.adjustType === "purchase"
                       ? "bg-white text-slate-800 shadow-sm"
                       : "text-slate-500 hover:text-slate-800"
-                  }`}
+                    }`}
                 >
                   Restock (Purchase)
                 </button>
                 <button
                   type="button"
                   onClick={() => setAdjustForm((p) => ({ ...p, adjustType: "adjustment" }))}
-                  className={`flex-1 rounded-full py-2 text-[0.78rem] font-semibold transition-all ${
-                    adjustForm.adjustType === "adjustment"
+                  className={`flex-1 rounded-full py-2 text-[0.78rem] font-semibold transition-all ${adjustForm.adjustType === "adjustment"
                       ? "bg-white text-slate-800 shadow-sm"
                       : "text-slate-500 hover:text-slate-800"
-                  }`}
+                    }`}
                 >
                   Manual Adjustment
                 </button>

@@ -53,7 +53,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Pediatric: "bg-teal-100 text-teal-700",
 };
 
-const OUTLETS_DEFAULT = [{ id: "all", name: "All outlets" }];
+const OUTLETS_DEFAULT: { id: string; name: string }[] = [];
 
 type Treatment = {
   id: string;
@@ -129,7 +129,7 @@ export default function TreatmentsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [selectedTreatment, setSelectedTreatment] = useState<Treatment | null>(null);
-  const [outletFilter, setOutletFilter] = useState("all");
+  const [outletFilter, setOutletFilter] = useState("");
   const [profileTab, setProfileTab] = useState<"detail" | "procedure" | "aftercare">(
     "detail"
   );
@@ -159,10 +159,13 @@ export default function TreatmentsPage() {
             mappedOutlets.push({ id: l.id, name: l.name });
           }
         });
-        setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutlets]);
+        setOutletsList(mappedOutlets);
+        if (mappedOutlets.length > 0) {
+          setOutletFilter((prev) => (prev === "all" || !prev ? mappedOutlets[0].id : prev));
+        }
       }
 
-      const targetLoc = outletFilter !== "all" ? outletFilter : undefined;
+      const targetLoc = outletFilter && outletFilter !== "all" ? outletFilter : (outletsRes?.data?.data?.locations?.[0]?.id);
       const treatmentsRes = await axios.get("/api/treatment", {
         params: targetLoc ? { locationId: targetLoc } : undefined,
       });

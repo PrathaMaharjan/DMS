@@ -68,7 +68,7 @@ const SPECIALIZATION_MAP_FRONTEND: Record<string, string> = {
   "prosthodontics": "Prosthodontics",
 };
 
-const OUTLETS_DEFAULT = [{ id: "all", name: "All outlets" }];
+const OUTLETS_DEFAULT: { id: string; name: string }[] = [];
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["Female", "Male", "Other"];
@@ -201,7 +201,7 @@ export default function DoctorsPage() {
   const [patientsLoading, setPatientsLoading] = useState(false);
 
   const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>(OUTLETS_DEFAULT);
-  const [outletFilter, setOutletFilter] = useState("all");
+  const [outletFilter, setOutletFilter] = useState("");
 
   async function loadData() {
     try {
@@ -227,10 +227,13 @@ export default function DoctorsPage() {
             mappedOutlets.push({ id: l.id, name: l.name });
           }
         });
-        setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutlets]);
+        setOutletsList(mappedOutlets);
+        if (mappedOutlets.length > 0) {
+          setOutletFilter((prev) => (prev === "all" || !prev ? mappedOutlets[0].id : prev));
+        }
       }
 
-      const activeLoc = outletFilter !== "all" ? outletFilter : undefined;
+      const activeLoc = outletFilter && outletFilter !== "all" ? outletFilter : (outletsRes?.data?.data?.locations?.[0]?.id);
       const res = await axios.get("/api/doctor", {
         params: activeLoc ? { locationId: activeLoc } : undefined,
       });

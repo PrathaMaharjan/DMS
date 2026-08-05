@@ -57,7 +57,7 @@ const STATUS_COLORS: Record<StaffStatus, string> = {
 import axios from "axios";
 import { useEffect } from "react";
 
-const OUTLETS_DEFAULT = [{ id: "all", name: "All outlets" }];
+const OUTLETS_DEFAULT: { id: string; name: string }[] = [];
 
 type Staff = {
   id: string;
@@ -163,7 +163,7 @@ function formatDateLabel(dateStr?: string) {
 export default function StaffPage() {
   const [staff, setStaff] = useState<Staff[]>(SEED_STAFF);
   const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>(OUTLETS_DEFAULT);
-  const [outletFilter, setOutletFilter] = useState("all");
+  const [outletFilter, setOutletFilter] = useState("");
 
   const fetchStaff = async () => {
     try {
@@ -226,7 +226,10 @@ export default function StaffPage() {
             mapped.push({ id: l.id, name: l.name });
           }
         });
-        setOutletsList([{ id: "all", name: "All outlets" }, ...mapped]);
+        setOutletsList(mapped);
+        if (mapped.length > 0) {
+          setOutletFilter((prev) => (prev === "all" || !prev ? mapped[0].id : prev));
+        }
       }
     }).catch(() => null);
   }, []);

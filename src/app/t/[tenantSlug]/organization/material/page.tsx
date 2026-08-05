@@ -56,62 +56,49 @@ interface RecipeItemDraft {
     quantity: string;
 }
 
-// ── Seed data (frontend only, replace with API calls later) ─────────────
 
-const SEED_SERVICES: Service[] = [
-    { id: "s1", name: "Consultation & Checkup", price: 500, categoryName: "General" },
-    { id: "s2", name: "Scaling & Polishing", price: 1500, categoryName: "Hygiene" },
-    { id: "s3", name: "Composite Filling", price: 2500, categoryName: "Restorative" },
-    { id: "s4", name: "Root Canal Treatment", price: 8000, categoryName: "Endodontics" },
-    { id: "s5", name: "Tooth Extraction", price: 1800, categoryName: "Oral Surgery" },
-    { id: "s6", name: "Crown Fitting", price: 12000, categoryName: "Restorative" },
-    { id: "s7", name: "Teeth Whitening", price: 6000, categoryName: "Cosmetic" },
-    { id: "s8", name: "Dental Implant", price: 45000, categoryName: "Oral Surgery" },
-];
+const RECIPES_STORAGE_KEY = "dms_service_recipes_v1";
+const SOFT_DELETED_INVENTORY_KEY = "dms_soft_deleted_inventory_item_ids_v1";
 
-const SEED_MATERIALS: Material[] = [
-    { id: "m1", name: "Disposable Gloves (M)", unit: "boxes" },
-    { id: "m2", name: "Lidocaine 2% Cartridges", unit: "boxes" },
-    { id: "m3", name: "Composite Resin (A2 Shade)", unit: "pieces" },
-    { id: "m4", name: "Cotton Rolls", unit: "boxes" },
-    { id: "m5", name: "Surgical Masks", unit: "boxes" },
-    { id: "m6", name: "Sodium Hypochlorite", unit: "ml" },
-    { id: "m7", name: "Suture Kit", unit: "pieces" },
-    { id: "m8", name: "Impression Material", unit: "g" },
-    { id: "m9", name: "Whitening Gel Syringe", unit: "pieces" },
-    { id: "m10", name: "Anesthetic Gel", unit: "g" },
-];
+function getSoftDeletedInventoryIds(): Set<string> {
+    if (typeof window === "undefined") return new Set();
+    try {
+        const raw = localStorage.getItem(SOFT_DELETED_INVENTORY_KEY);
+        return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+        return new Set();
+    }
+}
 
-const SEED_RECIPES: Record<string, Recipe> = {
-    s3: {
-        serviceId: "s3",
-        items: [
-            { materialId: "m3", quantity: 1 },
-            { materialId: "m4", quantity: 2 },
-            { materialId: "m1", quantity: 1 },
-        ],
-    },
-    s4: {
-        serviceId: "s4",
-        items: [
-            { materialId: "m2", quantity: 2 },
-            { materialId: "m4", quantity: 3 },
-            { materialId: "m1", quantity: 1 },
-        ],
-    },
-};
+function getStoredRecipes(): Record<string, Recipe | null> {
+    if (typeof window === "undefined") return {};
+    try {
+        const item = localStorage.getItem(RECIPES_STORAGE_KEY);
+        return item ? JSON.parse(item) : {};
+    } catch {
+        return {};
+    }
+}
 
-// ── Component ─────────────────────────────────────────────────────────
+function setStoredRecipes(recipes: Record<string, Recipe | null>) {
+    if (typeof window === "undefined") return;
+    try {
+        localStorage.setItem(RECIPES_STORAGE_KEY, JSON.stringify(recipes));
+    } catch { }
+}
 
 export default function ServiceRecipePage() {
-    const [services] = useState<Service[]>(SEED_SERVICES);
-    const [materials] = useState<Material[]>(SEED_MATERIALS);
-    const [recipesMap, setRecipesMap] = useState<Record<string, Recipe | null>>(SEED_RECIPES);
+    const [services, setServices] = useState<Service[]>([]);
+    const [materials, setMaterials] = useState<Material[]>([]);
+    const [recipesMap, setRecipesMap] = useState<Record<string, Recipe | null>>({});
 
-    const [outletFilter, setOutletFilter] = useState("all");
-    const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>([
-        { id: "all", name: "All outlets" },
-    ]);
+    const [outletFilter, setOutletFilter] = useState("");
+    const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>([]);
+
+    const activeLocationId = useMemo(() => {
+        if (outletFilter && outletFilter !== "all") return outletFilter;
+        return outletsList[0]?.id ?? undefined;
+    }, [outletFilter, outletsList]);
 
     useEffect(() => {
         async function fetchOutlets() {
@@ -126,12 +113,72 @@ export default function ServiceRecipePage() {
                             mapped.push({ id: l.id, name: l.name });
                         }
                     });
-                    setOutletsList([{ id: "all", name: "All outlets" }, ...mapped]);
+                    setOutletsList(mapped);
+                    if (mapped.length > 0) {
+                        setOutletFilter((prev) => (prev === "all" || !prev ? mapped[0].id : prev));
+                    }
                 }
-            } catch (err) {}
+            } catch (err) { }
         }
         fetchOutlets();
     }, []);
+
+    useEffect(() => {
+        async function fetchRecipesData() {
+            try {
+                const locParam = activeLocationId ? `?locationId=${activeLocationId}` : "";
+                const [treatRes, itemRes] = await Promise.all([
+                    axios.get(`/api/treatment${locParam}`).catch(() => null),
+                    activeLocationId ? axios.get(`/api/inventory/item?locationId=${activeLocationId}`).catch(() => null) : null,
+                ]);
+
+                const localSaved = getStoredRecipes();
+                const mergedRecipes: Record<string, Recipe | null> = { ...localSaved };
+
+                if (treatRes?.data?.success && Array.isArray(treatRes.data.data?.treatments)) {
+                    const fetchedServices: Service[] = treatRes.data.data.treatments.map((t: any) => ({
+                        id: t.id,
+                        name: t.name,
+                        price: Math.round((t.priceCents ?? 0) / 100),
+                        categoryName: t.category,
+                    }));
+                    setServices(fetchedServices);
+
+                    treatRes.data.data.treatments.forEach((t: any) => {
+                        if (!(t.id in localSaved)) {
+                            if (t.supplies && Array.isArray(t.supplies) && t.supplies.length > 0) {
+                                mergedRecipes[t.id] = {
+                                    serviceId: t.id,
+                                    items: t.supplies.map((s: any) => ({
+                                        materialId: s.itemId,
+                                        quantity: s.quantityRequired,
+                                    })),
+                                };
+                            } else {
+                                mergedRecipes[t.id] = null;
+                            }
+                        }
+                    });
+                }
+                setRecipesMap(mergedRecipes);
+
+                if (itemRes?.data?.success && Array.isArray(itemRes.data.data?.items)) {
+                    const deletedIds = getSoftDeletedInventoryIds();
+                    const fetchedMaterials: Material[] = itemRes.data.data.items
+                        .filter((it: any) => !deletedIds.has(it.id))
+                        .map((it: any) => ({
+                            id: it.id,
+                            name: it.name,
+                            unit: it.unit || "pieces",
+                        }));
+                    setMaterials(fetchedMaterials);
+                }
+            } catch (err) {
+                console.error("Failed to load service recipes data:", err);
+            }
+        }
+        fetchRecipesData();
+    }, [activeLocationId]);
 
     const [query, setQuery] = useState("");
     const [filterType, setFilterType] = useState<"all" | "configured" | "not_configured">("all");
@@ -147,7 +194,8 @@ export default function ServiceRecipePage() {
 
     const hasExistingRecipe = useMemo(() => {
         if (!selectedServiceId) return false;
-        return recipesMap[selectedServiceId] !== undefined && recipesMap[selectedServiceId] !== null;
+        const rec = recipesMap[selectedServiceId];
+        return Boolean(rec && rec.items && rec.items.length > 0);
     }, [recipesMap, selectedServiceId]);
 
     const selectedService = services.find((s) => s.id === selectedServiceId) ?? null;
@@ -166,7 +214,7 @@ export default function ServiceRecipePage() {
     function openPanel(service: Service) {
         setSelectedServiceId(service.id);
         const existing = recipesMap[service.id];
-        if (existing) {
+        if (existing && existing.items && existing.items.length > 0) {
             setFormItems(existing.items.map((i) => ({ materialId: i.materialId, quantity: String(i.quantity) })));
         } else {
             setFormItems([{ materialId: "", quantity: "" }]);
@@ -199,11 +247,11 @@ export default function ServiceRecipePage() {
         setSaveError(null);
     }
 
-    function handleSave(e: React.FormEvent) {
+    async function handleSave(e: React.FormEvent) {
         e.preventDefault();
         if (!selectedServiceId) return;
 
-        const cleaned = formItems.filter((i) => i.materialId || i.quantity);
+        const cleaned = formItems.filter((i) => i.materialId && i.quantity);
         if (cleaned.length === 0) {
             setSaveError("Recipe must have at least one material configured.");
             return;
@@ -221,7 +269,25 @@ export default function ServiceRecipePage() {
             items: cleaned.map((i) => ({ materialId: i.materialId, quantity: Number(i.quantity) })),
         };
 
-        setRecipesMap((prev) => ({ ...prev, [selectedServiceId]: recipe }));
+        setRecipesMap((prev) => {
+            const updated = { ...prev, [selectedServiceId]: recipe };
+            setStoredRecipes(updated);
+            return updated;
+        });
+
+        try {
+            const suppliesPayload = cleaned.map((i) => ({
+                itemId: i.materialId,
+                quantityRequired: Math.max(1, Math.round(Number(i.quantity))),
+            }));
+            await axios.patch(`/api/treatment/${selectedServiceId}`, {
+                supplies: suppliesPayload,
+                hasNoSupplies: false,
+            });
+        } catch (err) {
+            console.warn("Backend treatment patch warning:", err);
+        }
+
         closePanel();
     }
 
@@ -232,13 +298,25 @@ export default function ServiceRecipePage() {
         setDeleteTarget(svc);
     }
 
-    function confirmDelete() {
+    async function confirmDelete() {
         if (!deleteTarget) return;
+
         setRecipesMap((prev) => {
             const copy = { ...prev };
-            delete copy[deleteTarget.id];
+            copy[deleteTarget.id] = null;
+            setStoredRecipes(copy);
             return copy;
         });
+
+        try {
+            await axios.patch(`/api/treatment/${deleteTarget.id}`, {
+                supplies: [],
+                hasNoSupplies: true,
+            });
+        } catch (err) {
+            console.warn("Backend treatment patch wipe warning:", err);
+        }
+
         setDeleteTarget(null);
     }
 
@@ -246,7 +324,8 @@ export default function ServiceRecipePage() {
         const q = query.trim().toLowerCase();
         return services.filter((s: any) => {
             const matchesQuery = !q || s.name.toLowerCase().includes(q);
-            const hasRecipe = recipesMap[s.id] !== undefined && recipesMap[s.id] !== null;
+            const rec = recipesMap[s.id];
+            const hasRecipe = Boolean(rec && rec.items && rec.items.length > 0);
             if (filterType === "configured" && !hasRecipe) return false;
             if (filterType === "not_configured" && hasRecipe) return false;
             const matchesOutlet =
@@ -260,7 +339,10 @@ export default function ServiceRecipePage() {
     const paginated = filtered.slice(startIndex, startIndex + itemsPerPage);
 
     const stats = useMemo(() => {
-        const configured = services.filter((s) => recipesMap[s.id]).length;
+        const configured = services.filter((s) => {
+            const rec = recipesMap[s.id];
+            return Boolean(rec && rec.items && rec.items.length > 0);
+        }).length;
         return [
             { icon: BookOpen, label: "Total Services", value: String(services.length) },
             { icon: Check, label: "Configured", value: String(configured) },
@@ -548,9 +630,6 @@ export default function ServiceRecipePage() {
                                                         <option value="" disabled>
                                                             Select material...
                                                         </option>
-                                                        {selectedMaterial && (
-                                                            <option value={selectedMaterial.id}>{selectedMaterial.name}</option>
-                                                        )}
                                                         {available.map((m) => (
                                                             <option key={m.id} value={m.id}>
                                                                 {m.name} ({m.unit})

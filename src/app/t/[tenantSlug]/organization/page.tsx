@@ -85,14 +85,17 @@ type LowStockItem = {
   outletName: string;
 };
 
-// Static placeholder data until an inventory endpoint is wired up.
-// Shape mirrors what a real org-wide low-stock response would look like.
-const STATIC_LOW_STOCK_ITEMS: LowStockItem[] = [
-  { id: "inv-1", name: "Dental Anesthetic Cartridges", unit: "cartridges", currentQty: 8, reorderLevel: 25, outletName: "Chitwan Dental Home" },
-  { id: "inv-2", name: "Disposable Gloves (M)", unit: "boxes", currentQty: 3, reorderLevel: 10, outletName: "Chitwan Dental Home" },
-  { id: "inv-3", name: "Composite Resin", unit: "syringes", currentQty: 5, reorderLevel: 15, outletName: "Bharatpur Branch" },
-  { id: "inv-4", name: "Sterilization Pouches", unit: "packs", currentQty: 2, reorderLevel: 8, outletName: "Bharatpur Branch" },
-];
+const SOFT_DELETED_INVENTORY_KEY = "dms_soft_deleted_inventory_item_ids_v1";
+
+function getSoftDeletedInventoryIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(SOFT_DELETED_INVENTORY_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
 
 function getStatusBadge(status: string) {
   const s = (status || "").toLowerCase();
@@ -163,9 +166,7 @@ export default function OrganizationDashboardPage() {
   const [activityPage, setActivityPage] = useState(1);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>([
-    { id: "all", name: "All outlets" },
-  ]);
+  const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>([]);
 
   const [stats, setStats] = useState({
     totalPatients: 0,
@@ -180,8 +181,7 @@ export default function OrganizationDashboardPage() {
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
   const [outletPerformance, setOutletPerformance] = useState<OutletStats[]>([]);
 
-  // Static for now — swap for a fetched org-wide list once an inventory endpoint exists.
-  const [lowStockItems] = useState<LowStockItem[]>(STATIC_LOW_STOCK_ITEMS);
+  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [lowStockBannerDismissed, setLowStockBannerDismissed] = useState(false);
   const [lowStockExpanded, setLowStockExpanded] = useState(false);
 
@@ -201,7 +201,10 @@ export default function OrganizationDashboardPage() {
               });
             }
           });
-          setOutletsList([{ id: "all", name: "All outlets" }, ...mapped]);
+          setOutletsList(mapped);
+          if (mapped.length > 0) {
+            setOutletFilter((prev) => (prev === "all" || !prev ? mapped[0].id : prev));
+          }
         }
       } catch (err) { }
     }
@@ -211,10 +214,9 @@ export default function OrganizationDashboardPage() {
   const loadDashboardData = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const activeOutlets =
-        outletFilter === "all"
-          ? outletsList.filter((o) => o.id !== "all")
-          : outletsList.filter((o) => o.id === outletFilter);
+      const activeOutlets = outletFilter
+        ? outletsList.filter((o) => o.id === outletFilter)
+        : outletsList.slice(0, 1);
 
       if (activeOutlets.length === 0) {
         setIsRefreshing(false);
@@ -233,18 +235,58 @@ export default function OrganizationDashboardPage() {
       const combinedAppts: AppointmentItem[] = [];
       const combinedActivities: ActivityItem[] = [];
       const perfList: OutletStats[] = [];
+      const combinedLowStock: LowStockItem[] = [];
+      const deletedIds = getSoftDeletedInventoryIds();
 
       await Promise.all(
         activeOutlets.map(async (loc) => {
           try {
-            const [statsRes, trendRes, treatRes, apptsRes, actRes, billingRes] = await Promise.all([
+            const [statsRes, trendRes, treatRes, apptsRes, actRes, billingRes, lowRes, invItemRes] = await Promise.all([
               axios.get(`/api/admin-dashboard/stats?locationId=${loc.id}`).catch(() => null),
               axios.get(`/api/admin-dashboard/patent-trend?locationId=${loc.id}&range=${timeframe}`).catch(() => null),
               axios.get(`/api/admin-dashboard/treatmentPop?locationId=${loc.id}`).catch(() => null),
               axios.get(`/api/admin-dashboard/todays-appointments?locationId=${loc.id}`).catch(() => null),
               axios.get(`/api/admin-dashboard/activity-feed?locationId=${loc.id}&limit=10`).catch(() => null),
               axios.get(`/api/admin-dashboard/billing?locationId=${loc.id}`).catch(() => null),
+              axios.get(`/api/inventory/low-stock?locationId=${loc.id}`).catch(() => null),
+              axios.get(`/api/inventory/item?locationId=${loc.id}`).catch(() => null),
             ]);
+
+            const seenLowIds = new Set<string>();
+
+            if (lowRes?.data?.success && Array.isArray(lowRes.data.data?.items)) {
+              lowRes.data.data.items.forEach((it: any) => {
+                if (!deletedIds.has(it.id) && !seenLowIds.has(it.id)) {
+                  seenLowIds.add(it.id);
+                  combinedLowStock.push({
+                    id: it.id,
+                    name: it.name,
+                    unit: it.unit || "boxes",
+                    currentQty: it.currentStock ?? 0,
+                    reorderLevel: it.reorderThreshold ?? 0,
+                    outletName: loc.name,
+                  });
+                }
+              });
+            }
+
+            if (invItemRes?.data?.success && Array.isArray(invItemRes.data.data?.items)) {
+              invItemRes.data.data.items.forEach((it: any) => {
+                const stock = it.currentStock ?? 0;
+                const threshold = it.reorderThreshold ?? 0;
+                if (stock <= threshold && !deletedIds.has(it.id) && !seenLowIds.has(it.id)) {
+                  seenLowIds.add(it.id);
+                  combinedLowStock.push({
+                    id: it.id,
+                    name: it.name,
+                    unit: it.unit || "boxes",
+                    currentQty: stock,
+                    reorderLevel: threshold,
+                    outletName: loc.name,
+                  });
+                }
+              });
+            }
 
             if (statsRes?.data?.success && statsRes.data.data.stats) {
               const s = statsRes.data.data.stats;
@@ -363,6 +405,7 @@ export default function OrganizationDashboardPage() {
       setActivityFeed(combinedActivities);
 
       setOutletPerformance(perfList);
+      setLowStockItems(combinedLowStock);
     } catch (err) {
     } finally {
       setIsRefreshing(false);
@@ -470,14 +513,7 @@ export default function OrganizationDashboardPage() {
                     </button>
                   </div>
                 </div>
-                <p className="mt-0.5 text-xs text-amber-700">
-                  {lowStockItems
-                    .slice(0, 3)
-                    .map((i) => i.name)
-                    .join(", ")}
-                  {lowStockItems.length > 3 ? `, and ${lowStockItems.length - 3} more` : ""} —
-                  reorder soon to avoid disruption.
-                </p>
+
               </div>
             </div>
 
@@ -493,7 +529,7 @@ export default function OrganizationDashboardPage() {
                       <div className="min-w-0">
                         <p className="truncate text-xs font-semibold text-slate-800">{item.name}</p>
                         <p className="text-[0.7rem] text-slate-500">
-                          {item.currentQty} / {item.reorderLevel} {item.unit}
+                          {item.currentQty} {item.unit}
                         </p>
                         <p className="truncate text-[0.65rem] text-slate-400">{item.outletName}</p>
                       </div>

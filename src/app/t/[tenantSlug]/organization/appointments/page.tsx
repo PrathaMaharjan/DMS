@@ -49,7 +49,7 @@ const STATUS_COLORS: Record<Status, string> = {
   Cancelled: "bg-rose-100 text-rose-700",
 };
 
-const OUTLETS_DEFAULT = [{ id: "all", name: "All outlets" }];
+const OUTLETS_DEFAULT: { id: string; name: string }[] = [];
 
 interface DoctorOption {
   id: string;
@@ -179,6 +179,101 @@ function getInitials(name: string) {
 
 const LIST_GRID = "grid grid-cols-[2fr_1.2fr_1fr_0.9fr_1fr_5rem] items-center gap-4";
 
+async function deductInventoryForCompletedAppointment(params: {
+  treatmentId?: string;
+  treatmentName?: string;
+  locationId?: string;
+}) {
+  let locId = params.locationId;
+  if (!locId || locId === "all") {
+    try {
+      const outletsRes = await axios.get("/api/outlets").catch(() => null);
+      if (outletsRes?.data?.success && Array.isArray(outletsRes.data.data?.locations) && outletsRes.data.data.locations.length > 0) {
+        locId = outletsRes.data.data.locations[0]?.id;
+      }
+    } catch (e) {}
+  }
+
+  if (!locId) return;
+
+  try {
+    let recipeItems: { materialId: string; quantity: number }[] = [];
+
+    const [treatRes, itemRes] = await Promise.all([
+      axios.get(`/api/treatment?locationId=${locId}&limit=100`).catch(() => null),
+      axios.get(`/api/inventory/item?locationId=${locId}`).catch(() => null),
+    ]);
+
+    const treatmentsList: any[] = treatRes?.data?.success && Array.isArray(treatRes.data.data?.treatments)
+      ? treatRes.data.data.treatments
+      : [];
+
+    const inventoryItemsList: any[] = itemRes?.data?.success && Array.isArray(itemRes.data.data?.items)
+      ? itemRes.data.data.items
+      : [];
+
+    const normName = (params.treatmentName || "").trim().toLowerCase();
+    const matchingTreatment = treatmentsList.find(
+      (t: any) =>
+        (params.treatmentId && t.id === params.treatmentId) ||
+        (normName && t.name?.trim().toLowerCase() === normName)
+    );
+
+    const targetTreatmentId = matchingTreatment?.id || params.treatmentId;
+
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("dms_service_recipes_v1");
+        const stored = raw ? JSON.parse(raw) : {};
+
+        if (targetTreatmentId && stored[targetTreatmentId]?.items?.length > 0) {
+          recipeItems = stored[targetTreatmentId].items;
+        } else {
+          for (const key of Object.keys(stored)) {
+            const recipe = stored[key];
+            if (!recipe || !Array.isArray(recipe.items) || recipe.items.length === 0) continue;
+            const foundT = treatmentsList.find((t: any) => t.id === key);
+            if (
+              key === targetTreatmentId ||
+              (foundT && normName && foundT.name?.trim().toLowerCase() === normName)
+            ) {
+              recipeItems = recipe.items;
+              break;
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (recipeItems.length === 0 && matchingTreatment && Array.isArray(matchingTreatment.supplies)) {
+      recipeItems = matchingTreatment.supplies.map((s: any) => ({
+        materialId: s.itemId || s.materialId,
+        quantity: s.quantityRequired || s.quantity || 1,
+      }));
+    }
+
+    for (const item of recipeItems) {
+      const targetInvItem = inventoryItemsList.find(
+        (inv: any) => inv.id === item.materialId
+      );
+
+      const targetItemId = targetInvItem?.id || item.materialId;
+      const targetLocId = targetInvItem?.locationId || locId;
+
+      if (targetItemId && Number(item.quantity) > 0) {
+        await axios
+          .post(`/api/inventory/item/${targetItemId}/movement`, {
+            locationId: targetLocId,
+            quantity: -Math.abs(Math.round(Number(item.quantity))),
+            type: "used",
+            note: `Automated deduction for completed appointment (${params.treatmentName || "Service"})`,
+          })
+          .catch(() => null);
+      }
+    }
+  } catch (err) {}
+}
+
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctorsList, setDoctorsList] = useState<DoctorOption[]>([]);
@@ -195,7 +290,7 @@ export default function AppointmentsPage() {
   const [statusFilter, setStatusFilter] = useState<"All" | Status>("All");
   const [dateFilter, setDateFilter] = useState<"All" | "Today" | "Upcoming">("All");
   const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>(OUTLETS_DEFAULT);
-  const [outletFilter, setOutletFilter] = useState("all");
+  const [outletFilter, setOutletFilter] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     patientName: "",
@@ -228,7 +323,10 @@ export default function AppointmentsPage() {
             mappedOutletsList.push({ id: l.id, name: l.name });
           }
         });
-        setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutletsList]);
+        setOutletsList(mappedOutletsList);
+        if (mappedOutletsList.length > 0) {
+          setOutletFilter((prev) => (prev === "all" || !prev ? mappedOutletsList[0].id : prev));
+        }
       }
 
       let currentLocId = locationId;
@@ -473,6 +571,15 @@ export default function AppointmentsPage() {
       if (res.data?.success === false) {
         alert(res.data?.error || "Failed to save appointment.");
         return;
+      }
+
+      if (editForm.status === "Completed") {
+        const currentAppt = appointments.find((a) => a.id === editingId);
+        await deductInventoryForCompletedAppointment({
+          treatmentId: editForm.treatmentId || currentAppt?.treatmentId,
+          treatmentName: currentAppt?.treatment,
+          locationId: currentAppt?.locationId || outletFilter,
+        });
       }
 
       await loadData();

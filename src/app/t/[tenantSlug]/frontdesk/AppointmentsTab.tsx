@@ -83,6 +83,101 @@ interface TreatmentOption {
   durationMinutes?: number;
 }
 
+async function deductInventoryForCompletedAppointment(params: {
+  treatmentId?: string;
+  treatmentName?: string;
+  locationId?: string;
+}) {
+  let locId = params.locationId;
+  if (!locId || locId === "all") {
+    try {
+      const outletsRes = await axios.get("/api/outlets").catch(() => null);
+      if (outletsRes?.data?.success && Array.isArray(outletsRes.data.data?.locations) && outletsRes.data.data.locations.length > 0) {
+        locId = outletsRes.data.data.locations[0]?.id;
+      }
+    } catch (e) {}
+  }
+
+  if (!locId) return;
+
+  try {
+    let recipeItems: { materialId: string; quantity: number }[] = [];
+
+    const [treatRes, itemRes] = await Promise.all([
+      axios.get(`/api/treatment?locationId=${locId}&limit=100`).catch(() => null),
+      axios.get(`/api/inventory/item?locationId=${locId}`).catch(() => null),
+    ]);
+
+    const treatmentsList: any[] = treatRes?.data?.success && Array.isArray(treatRes.data.data?.treatments)
+      ? treatRes.data.data.treatments
+      : [];
+
+    const inventoryItemsList: any[] = itemRes?.data?.success && Array.isArray(itemRes.data.data?.items)
+      ? itemRes.data.data.items
+      : [];
+
+    const normName = (params.treatmentName || "").trim().toLowerCase();
+    const matchingTreatment = treatmentsList.find(
+      (t: any) =>
+        (params.treatmentId && t.id === params.treatmentId) ||
+        (normName && t.name?.trim().toLowerCase() === normName)
+    );
+
+    const targetTreatmentId = matchingTreatment?.id || params.treatmentId;
+
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("dms_service_recipes_v1");
+        const stored = raw ? JSON.parse(raw) : {};
+
+        if (targetTreatmentId && stored[targetTreatmentId]?.items?.length > 0) {
+          recipeItems = stored[targetTreatmentId].items;
+        } else {
+          for (const key of Object.keys(stored)) {
+            const recipe = stored[key];
+            if (!recipe || !Array.isArray(recipe.items) || recipe.items.length === 0) continue;
+            const foundT = treatmentsList.find((t: any) => t.id === key);
+            if (
+              key === targetTreatmentId ||
+              (foundT && normName && foundT.name?.trim().toLowerCase() === normName)
+            ) {
+              recipeItems = recipe.items;
+              break;
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (recipeItems.length === 0 && matchingTreatment && Array.isArray(matchingTreatment.supplies)) {
+      recipeItems = matchingTreatment.supplies.map((s: any) => ({
+        materialId: s.itemId || s.materialId,
+        quantity: s.quantityRequired || s.quantity || 1,
+      }));
+    }
+
+    for (const item of recipeItems) {
+      const targetInvItem = inventoryItemsList.find(
+        (inv: any) => inv.id === item.materialId
+      );
+
+      const targetItemId = targetInvItem?.id || item.materialId;
+      const targetLocId = targetInvItem?.locationId || locId;
+
+      if (targetItemId && Number(item.quantity) > 0) {
+        await axios
+          .post(`/api/inventory/item/${targetItemId}/movement`, {
+            locationId: targetLocId,
+            quantity: -Math.abs(Math.round(Number(item.quantity))),
+            type: "used",
+            note: `Automated deduction for completed appointment (${params.treatmentName || "Service"})`,
+          })
+          .catch(() => null);
+      }
+    }
+  } catch (err) {}
+}
+
 function formatDateTime(isoString: string | Date | null | undefined) {
   if (!isoString) return { date: "-", time: "-" };
   const d = new Date(isoString);
@@ -608,8 +703,16 @@ export default function AppointmentsTab() {
 
   async function handleAttendance(id: string, newStatus: string) {
     try {
+      const targetAppt = appointments.find((a) => a.id === id);
       const res = await axios.patch(`/api/appoments/${id}/status`, { status: newStatus });
       if (res.data?.success) {
+        if (newStatus.toLowerCase() === "completed") {
+          await deductInventoryForCompletedAppointment({
+            treatmentId: targetAppt?.treatmentId,
+            treatmentName: targetAppt?.service || (targetAppt as any)?.treatment,
+            locationId: (targetAppt as any)?.locationId || locationId || undefined,
+          });
+        }
         await loadData();
       } else {
         alert(res.data?.error || "Failed to update status.");

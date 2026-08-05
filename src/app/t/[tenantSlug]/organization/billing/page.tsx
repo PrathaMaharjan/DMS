@@ -77,14 +77,12 @@ const AVATAR_COLORS = [
 const LIST_GRID = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1.1fr] items-center gap-4";
 
 export default function ManagerBillingPage() {
-  const [outletFilter, setOutletFilter] = useState("all");
+  const [outletFilter, setOutletFilter] = useState("");
   const [query, setQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
-  const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>([
-    { id: "all", name: "All outlets" },
-  ]);
+  const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>([]);
   const [collectionTimeframe, setCollectionTimeframe] = useState<"7d" | "1m" | "6m" | "1y">("7d");
 
   const [stats, setStats] = useState({
@@ -132,7 +130,10 @@ export default function ManagerBillingPage() {
               });
             }
           });
-          setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutlets]);
+          setOutletsList(mappedOutlets);
+          if (mappedOutlets.length > 0) {
+            setOutletFilter((prev) => (prev === "all" || !prev ? mappedOutlets[0].id : prev));
+          }
         }
       } catch (err) {}
     }

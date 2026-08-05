@@ -8,6 +8,7 @@ import {
   Building2,
   Settings,
   LogOut,
+  Lock,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -21,6 +22,11 @@ const NAV_ITEMS = [
     label: "Organizations",
     href: "/organizations",
     icon: Building2,
+  },
+  {
+    label: "Permissions",
+    href: "/permissions",
+    icon: Lock,
   },
   {
     label: "Settings",
