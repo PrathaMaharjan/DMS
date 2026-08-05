@@ -287,3 +287,52 @@ export async function getLocationById(locationId: string): Promise<GetLocationRe
     return { success: false, error: "Something went wrong loading the outlet.", code: "SERVER_ERROR" };
   }
 }
+
+export type BranchManagerRow = {
+  userId: string;
+  managerName: string;
+  managerEmail: string;
+  managerPhone: string | null;
+  locationId: string;
+  locationName: string;
+};
+
+export type GetBranchManagersResult =
+  | { success: true; managers: BranchManagerRow[] }
+  | { success: false; error: string; code:LocationErrorCode };
+
+
+export async function getBranchManagers(): Promise<GetBranchManagersResult> {
+  try {
+    const session = await requireSession();
+
+    const rows = await db
+      .select({
+        userId: users.id,
+        managerName: users.name,
+        managerEmail: users.email,
+        managerPhone: users.phone,
+        locationId: locations.id,
+        locationName: locations.name,
+      })
+      .from(userLocationRoles)
+      .innerJoin(users, eq(userLocationRoles.userId, users.id))
+      .innerJoin(locations, eq(userLocationRoles.locationId, locations.id))
+      .where(
+        and(
+          eq(userLocationRoles.role, "manager"),
+          eq(users.orgId, session.orgId),
+          eq(users.isActive, true)
+        )
+      )
+      .orderBy(locations.name);
+
+    return { success: true, managers: rows };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return { success: false, error: "Something went wrong loading branch managers.", code: "SERVER_ERROR" };
+  }
+}
