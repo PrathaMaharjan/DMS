@@ -3,10 +3,8 @@ import { getAdminDashboardStats } from "@/controller/admin-dashboard/controller"
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
-  const locationId = request.nextUrl.searchParams.get("locationId");
-  if (!locationId) {
-    return NextResponse.json({ success: false, error: "locationId is required" }, { status: 400 });
-  }
+  const locationId = request.nextUrl.searchParams.get("locationId") ?? undefined;
+
   const result = await getAdminDashboardStats(locationId);
   if (!result.success) {
     return NextResponse.json({ success: false, error: result.error }, { status: result.code === "UNAUTHORIZED" ? 401 : 500 });

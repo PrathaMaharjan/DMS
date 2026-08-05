@@ -1,8 +1,8 @@
 import { db } from "@/db";
-import { locations, treatments } from "@/db/schema";
+import { inventoryItems, locations, treatments, treatmentSupplies } from "@/db/schema";
 import { requireSession, SessionError } from "@/lib/auth/get-session";
-import { treatmentSchema, updateTreatmentSchema } from "@/lib/validators/treatments";
-import { and, eq, sql } from "drizzle-orm";
+import { createTreatmentSchema, updateTreatmentSchema } from "@/lib/validators/treatments";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 export type TreatmentErrorCode =
   | "UNAUTHORIZED"
@@ -30,110 +30,99 @@ export type CreateTreatmentResult =
   | { success: true; treatment: typeof treatments.$inferSelect }
   | { success: false; error: string; code: TreatmentErrorCode };
 
-export async function createTreatment(
-  input: unknown,
-): Promise<CreateTreatmentResult> {
+export async function createTreatment(input: unknown): Promise<CreateTreatmentResult> {
   try {
     const session = await requireSession();
-    if (!session) {
-      Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    console.log(input)
 
-    const parsed = treatmentSchema.safeParse(input);
+    const parsed = createTreatmentSchema.safeParse(input);
     if (!parsed.success) {
-      return {
-        success: false,
-        error: parsed.error.issues[0]?.message ?? "Invalid input.",
-        code: "VALIDATION",
-      };
+      return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input.", code: "VALIDATION" };
     }
     const data = parsed.data;
 
     const location = await db.query.locations.findFirst({
-      where: and(
-        eq(locations.id, data.locationId),
-        eq(locations.orgId, session.orgId),
-      ),
+      where: and(eq(locations.id, data.locationId), eq(locations.orgId, session.orgId)),
     });
     if (!location) {
-      return {
-        success: false,
-        error: "Location not found.",
-        code: "NOT_FOUND",
-      };
+      return { success: false, error: "Location not found.", code: "NOT_FOUND" };
     }
 
-    const [treatment] = await db
-      .insert(treatments)
-      .values({
-        locationId: data.locationId,
-        name: data.name,
-        category: data.category,
-        durationMinutes: data.durationMinutes,
-        priceCents: data.priceCents,
-        sessions: data.sessions,
-        anesthesia: data.anesthesia,
-        recoveryTime: data.recoveryTime,
-        description: data.description,
-        procedureSteps: data.procedureSteps,
-        aftercareInstructions: data.aftercareInstructions,
-      })
-      .returning();
+    // Treatment and its supply list created together, in one transaction -
+    // a treatment can never exist without its supply decision settled.
+    const treatment = await db.transaction(async (tx) => {
+      const [newTreatment] = await tx
+        .insert(treatments)
+        .values({
+          locationId: data.locationId,
+          name: data.name,
+          category: data.category,
+          durationMinutes: data.durationMinutes,
+          priceCents: data.priceCents,
+          sessions: data.sessions,
+          anesthesia: data.anesthesia,
+          recoveryTime: data.recoveryTime,
+          description: data.description,
+          procedureSteps: data.procedureSteps,
+          aftercareInstructions: data.aftercareInstructions,
+        })
+        .returning();
+
+      // hasNoSupplies means "insert nothing" - zero rows in
+      // treatment_supplies IS the "no supplies" state, no extra column needed.
+      if (!data.hasNoSupplies && data.supplies) {
+        await tx.insert(treatmentSupplies).values(
+          data.supplies.map((s:any) => ({
+            treatmentId: newTreatment.id,
+            itemId: s.itemId,
+            quantityRequired: s.quantityRequired,
+          }))
+        );
+      }
+
+      return newTreatment;
+    });
 
     return { success: true, treatment };
   } catch (err) {
-    if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return {
-        success: false,
-        error: "You must be logged in.",
-        code: "UNAUTHORIZED",
-      };
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     if (getPgErrorCode(err) === "23505") {
-      return {
-        success: false,
-        error: "A treatment with this name already exists at this location.",
-        code: "DUPLICATE",
-      };
+      return { success: false, error: "A treatment with this name already exists at this location.", code: "DUPLICATE" };
     }
     console.error(err);
-    return {
-      success: false,
-      error: "Something went wrong creating the treatment.",
-      code: "SERVER_ERROR",
-    };
+    return { success: false, error: "Something went wrong creating the treatment.", code: "SERVER_ERROR" };
   }
 }
+
+export type TreatmentSupplyRow = { itemId: string; itemName: string; quantityRequired: number; unit: string };
 
 export type GetTreatmentsResult =
   | {
       success: true;
-      treatments: (typeof treatments.$inferSelect)[];
+      treatments: ((typeof treatments.$inferSelect) & { supplies: TreatmentSupplyRow[] })[];
       pagination: { total: number; limit: number; offset: number };
     }
   | { success: false; error: string; code: TreatmentErrorCode };
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+
 export async function getTreatments(
   locationId?: string,
-  options?: { limit?: number; offset?: number },
+  options?: { limit?: number; offset?: number }
 ): Promise<GetTreatmentsResult> {
   try {
     const session = await requireSession();
 
-    const limit = Math.min(
-      Math.max(options?.limit ?? DEFAULT_LIMIT, 1),
-      MAX_LIMIT,
-    );
+    const limit = Math.min(Math.max(options?.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
     const offset = Math.max(options?.offset ?? 0, 0);
 
     const whereClause = locationId
-      ? and(
-          eq(treatments.locationId, locationId),
-          eq(locations.orgId, session.orgId),
-        )
+      ? and(eq(treatments.locationId, locationId), eq(locations.orgId, session.orgId))
       : eq(locations.orgId, session.orgId);
+
     const [results, countResult] = await Promise.all([
       db
         .select({
@@ -165,26 +154,45 @@ export async function getTreatments(
         .where(whereClause),
     ]);
 
+    // A separate, single query for EVERY supply row belonging to any of
+    // this page's treatments - not one query per treatment. Grouped in
+    // application code afterward, same "avoid N+1" discipline used
+    // throughout this project (getAllDoctorsScheduleTimeline's bookings).
+    const treatmentIds = results.map((t) => t.id);
+    const supplyRows = treatmentIds.length
+      ? await db
+          .select({
+            treatmentId: treatmentSupplies.treatmentId,
+            itemId: treatmentSupplies.itemId,
+            itemName: inventoryItems.name,
+            unit: inventoryItems.unit,
+            quantityRequired: treatmentSupplies.quantityRequired,
+          })
+          .from(treatmentSupplies)
+          .innerJoin(inventoryItems, eq(treatmentSupplies.itemId, inventoryItems.id))
+          .where(inArray(treatmentSupplies.treatmentId, treatmentIds))
+      : [];
+
+    const suppliesByTreatment = new Map<string, TreatmentSupplyRow[]>();
+    for (const row of supplyRows) {
+      const list = suppliesByTreatment.get(row.treatmentId) ?? [];
+      list.push({ itemId: row.itemId, itemName: row.itemName, unit: row.unit, quantityRequired: row.quantityRequired });
+      suppliesByTreatment.set(row.treatmentId, list);
+    }
+
+    const treatmentsWithSupplies = results.map((t) => ({
+      ...t,
+      supplies: suppliesByTreatment.get(t.id) ?? [],
+    }));
+
     const total = countResult[0]?.count ?? 0;
-    return {
-      success: true,
-      treatments: results,
-      pagination: { total, limit, offset },
-    };
+    return { success: true, treatments: treatmentsWithSupplies, pagination: { total, limit, offset } };
   } catch (err) {
-    if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return {
-        success: false,
-        error: "You must be logged in.",
-        code: "UNAUTHORIZED",
-      };
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return {
-      success: false,
-      error: "Something went wrong loading treatments.",
-      code: "SERVER_ERROR",
-    };
+    return { success: false, error: "Something went wrong loading treatments.", code: "SERVER_ERROR" };
   }
 }
 // ------------------------------------update --------------------------------

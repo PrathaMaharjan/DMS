@@ -89,7 +89,7 @@ export const users = pgTable(
     joinDate: date("join_date"),
     gender: text("gender"),
     address: text("address"),
-    notes: text("notes"),
+    // notes: text("notes"),
     isOwner: boolean("is_owner").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     deletedAt: timestamp("deleted_at"),

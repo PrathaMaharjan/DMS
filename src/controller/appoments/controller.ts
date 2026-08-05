@@ -28,7 +28,10 @@ import {
   assignAppointmentSchema,
   bookAppointmentSchema,
 } from "@/lib/validators/appoments";
-import { sendAppointmentCancelledEmail, sendAppointmentConfirmedEmail } from "@/lib/email/sendAppomentStatus";
+import {
+  sendAppointmentCancelledEmail,
+  sendAppointmentConfirmedEmail,
+} from "@/lib/email/sendAppomentStatus";
 // import { bookAppointmentSchema } from "@/lib/validators/appointments";
 
 export type BookAppointmentErrorCode =
@@ -40,11 +43,11 @@ export type BookAppointmentErrorCode =
 
 export type BookAppointmentResult =
   | {
-    success: true;
-    appointmentId: string;
-    patientId: string;
-    wasNewPatient: boolean;
-  }
+      success: true;
+      appointmentId: string;
+      patientId: string;
+      wasNewPatient: boolean;
+    }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 // Schedule-time check disabled for now, on purpose - every active clinical
@@ -304,18 +307,18 @@ export async function bookAppointment(
 // ---------------get gending appoment --------------------------------
 export type PendingReviewResult =
   | {
-    success: true;
-    appointments: {
-      id: string;
-      patientName: string;
-      patientPhone: string | null;
-      patientEmail: string | null;
-      treatmentName: string;
-      startTime: Date;
-      source: string;
-      notes: string | null;
-    }[];
-  }
+      success: true;
+      appointments: {
+        id: string;
+        patientName: string;
+        patientPhone: string | null;
+        patientEmail: string | null;
+        treatmentName: string;
+        startTime: Date;
+        source: string;
+        notes: string | null;
+      }[];
+    }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 export async function getPendingAppointments(
@@ -377,12 +380,19 @@ const VALID_STATUSES = [
   "cancelled",
   "no_show",
 ];
-export async function updateAppointmentStatus(appointmentId: string, status: string): Promise<UpdateStatusResult> {
+export async function updateAppointmentStatus(
+  appointmentId: string,
+  status: string,
+): Promise<UpdateStatusResult> {
   try {
     const session = await requireSession();
 
     if (!VALID_STATUSES.includes(status)) {
-      return { success: false, error: "Invalid status value.", code: "VALIDATION" };
+      return {
+        success: false,
+        error: "Invalid status value.",
+        code: "VALIDATION",
+      };
     }
 
     // Fetches everything an email would need (patient name/email, treatment
@@ -400,14 +410,26 @@ export async function updateAppointmentStatus(appointmentId: string, status: str
       .innerJoin(locations, eq(appointments.locationId, locations.id))
       .innerJoin(patients, eq(appointments.patientId, patients.id))
       .innerJoin(treatments, eq(appointments.treatmentId, treatments.id))
-      .where(and(eq(appointments.id, appointmentId), eq(locations.orgId, session.orgId)))
+      .where(
+        and(
+          eq(appointments.id, appointmentId),
+          eq(locations.orgId, session.orgId),
+        ),
+      )
       .limit(1);
 
     if (!existingAppointment) {
-      return { success: false, error: "Appointment not found.", code: "NOT_FOUND" };
+      return {
+        success: false,
+        error: "Appointment not found.",
+        code: "NOT_FOUND",
+      };
     }
 
-    await db.update(appointments).set({ status: status as any }).where(eq(appointments.id, appointmentId));
+    await db
+      .update(appointments)
+      .set({ status: status as any })
+      .where(eq(appointments.id, appointmentId));
 
     // Email is deliberately best-effort, AFTER the status change already
     // succeeded - a flaky email must never roll back or fail an otherwise
@@ -419,18 +441,21 @@ export async function updateAppointmentStatus(appointmentId: string, status: str
             existingAppointment.patientEmail,
             existingAppointment.patientName,
             existingAppointment.treatmentName,
-            existingAppointment.startTime
+            existingAppointment.startTime,
           );
         } else if (status === "cancelled") {
           await sendAppointmentCancelledEmail(
             existingAppointment.patientEmail,
             existingAppointment.patientName,
             existingAppointment.treatmentName,
-            existingAppointment.startTime
+            existingAppointment.startTime,
           );
         }
       } catch (emailErr) {
-        console.error("Appointment status updated, but email failed to send:", emailErr);
+        console.error(
+          "Appointment status updated, but email failed to send:",
+          emailErr,
+        );
       }
     }
 
@@ -440,7 +465,11 @@ export async function updateAppointmentStatus(appointmentId: string, status: str
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong updating the appointment.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong updating the appointment.",
+      code: "SERVER_ERROR",
+    };
   }
 }
 
@@ -523,22 +552,22 @@ export async function reassignAppointmentDoctor(
 
 export type GetAppointmentsResult =
   | {
-    success: true;
-    appointments: {
-      id: string;
-      patientName: string;
-      patientPhone: string | null;
-      patientEmail: string | null;
-      providerName: string;
-      treatmentName: string;
-      startTime: Date;
-      endTime: Date;
-      status: string;
-      source: string;
-      notes: string | null;
-    }[];
-    pagination: { total: number; limit: number; offset: number };
-  }
+      success: true;
+      appointments: {
+        id: string;
+        patientName: string;
+        patientPhone: string | null;
+        patientEmail: string | null;
+        providerName: string;
+        treatmentName: string;
+        startTime: Date;
+        endTime: Date;
+        status: string;
+        source: string;
+        notes: string | null;
+      }[];
+      pagination: { total: number; limit: number; offset: number };
+    }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 const DEFAULT_LIMIT = 20;
@@ -550,13 +579,16 @@ export async function getAppointments(
 ): Promise<GetAppointmentsResult> {
   try {
     const session = await requireSession();
+    console.log(
+      "getAppointments called with locationId:",
+      JSON.stringify(locationId),
+    );
 
     const limit = Math.min(
       Math.max(options?.limit ?? DEFAULT_LIMIT, 1),
       MAX_LIMIT,
     );
     const offset = Math.max(options?.offset ?? 0, 0);
-
 
     const conditions = [
       eq(appointments.locationId, locationId),
@@ -630,24 +662,24 @@ export async function getAppointments(
 // -----------------------get dingle appoment ----------------------------
 export type GetAppointmentResult =
   | {
-    success: true;
-    appointment: {
-      id: string;
-      patientId: string;
-      patientName: string;
-      patientPhone: string | null;
-      patientEmail: string | null;
-      providerId: string;
-      providerName: string;
-      treatmentId: string;
-      treatmentName: string;
-      startTime: Date;
-      endTime: Date;
-      status: string;
-      source: string;
-      notes: string | null;
-    };
-  }
+      success: true;
+      appointment: {
+        id: string;
+        patientId: string;
+        patientName: string;
+        patientPhone: string | null;
+        patientEmail: string | null;
+        providerId: string;
+        providerName: string;
+        treatmentId: string;
+        treatmentName: string;
+        startTime: Date;
+        endTime: Date;
+        status: string;
+        source: string;
+        notes: string | null;
+      };
+    }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 export async function getAppointment(
@@ -711,7 +743,7 @@ export async function getAppointment(
 export type AssignAppointmentResult =
   | { success: true; appointmentId: string }
   | { success: false; error: string; code: BookAppointmentErrorCode };
-  
+
 export async function assignAppointmentToPatient(
   input: unknown,
 ): Promise<AssignAppointmentResult> {
@@ -816,9 +848,6 @@ export async function assignAppointmentToPatient(
   }
 }
 
-
-
-
 // ------------------------- update appointment -----------------------------
 
 const updateAppointmentSchema = z.object({
@@ -826,22 +855,28 @@ const updateAppointmentSchema = z.object({
   patientPhone: z.string().min(1).optional(),
   treatmentId: z.string().uuid().optional(),
   providerId: z.string().uuid().optional(),
-  status: z.enum(["requested", "confirmed", "checked_in", "completed", "cancelled", "no_show"]).optional(),
+  status: z
+    .enum([
+      "requested",
+      "confirmed",
+      "checked_in",
+      "completed",
+      "cancelled",
+      "no_show",
+    ])
+    .optional(),
   date: z.string().optional(), // YYYY-MM-DD
   time: z.string().optional(), // HH:MM
   notes: z.string().optional(),
 });
 
-
 export type UpdateAppointmentResult =
   | { success: true }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
-
-
 export async function updateAppointment(
   appointmentId: string,
-  input: unknown
+  input: unknown,
 ): Promise<UpdateAppointmentResult> {
   try {
     const session = await requireSession();
@@ -867,12 +902,21 @@ export async function updateAppointment(
       })
       .from(appointments)
       .innerJoin(locations, eq(appointments.locationId, locations.id))
-      .where(and(eq(appointments.id, appointmentId), eq(locations.orgId, session.orgId)))
+      .where(
+        and(
+          eq(appointments.id, appointmentId),
+          eq(locations.orgId, session.orgId),
+        ),
+      )
       .limit(1);
 
     const current = existing[0];
     if (!current) {
-      return { success: false, error: "Appointment not found.", code: "NOT_FOUND" };
+      return {
+        success: false,
+        error: "Appointment not found.",
+        code: "NOT_FOUND",
+      };
     }
 
     // Resolve which treatment's duration to use - the newly chosen one,
@@ -882,7 +926,11 @@ export async function updateAppointment(
       where: eq(treatments.id, treatmentId),
     });
     if (!treatment) {
-      return { success: false, error: "Selected treatment could not be found.", code: "NOT_FOUND" };
+      return {
+        success: false,
+        error: "Selected treatment could not be found.",
+        code: "NOT_FOUND",
+      };
     }
 
     // Which doctor this appointment will actually belong to after saving.
@@ -895,7 +943,8 @@ export async function updateAppointment(
     let startTime = current.startTime;
     let endTime = current.endTime;
 
-    const dateOrTimeChanged = data.date !== undefined || data.time !== undefined;
+    const dateOrTimeChanged =
+      data.date !== undefined || data.time !== undefined;
     const treatmentChanged = data.treatmentId !== undefined;
     const providerChanged = data.providerId !== undefined;
 
@@ -906,7 +955,9 @@ export async function updateAppointment(
       const nextTime = data.time ?? existingTime;
 
       startTime = new Date(`${nextDate}T${nextTime}:00`);
-      endTime = new Date(startTime.getTime() + treatment.durationMinutes * 60_000);
+      endTime = new Date(
+        startTime.getTime() + treatment.durationMinutes * 60_000,
+      );
 
       // Same double-booking guard as reassignAppointmentDoctor - exclude
       // this appointment, since it's already booked against itself.
@@ -916,7 +967,7 @@ export async function updateAppointment(
           ne(appointments.id, appointmentId),
           ne(appointments.status, "cancelled"),
           lt(appointments.startTime, endTime),
-          gt(appointments.endTime, startTime)
+          gt(appointments.endTime, startTime),
         ),
       });
       if (conflict) {
@@ -940,7 +991,10 @@ export async function updateAppointment(
         if (data.patientPhone) {
           patientUpdates.phone = data.patientPhone;
         }
-        await tx.update(patients).set(patientUpdates).where(eq(patients.id, current.patientId));
+        await tx
+          .update(patients)
+          .set(patientUpdates)
+          .where(eq(patients.id, current.patientId));
       }
 
       await tx
@@ -972,13 +1026,13 @@ export async function updateAppointment(
 
 // ------------------------- delete appointment ------------------------------
 
-
-
 export type DeleteAppointmentResult =
   | { success: true }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
-export async function deleteAppointment(appointmentId: string): Promise<DeleteAppointmentResult> {
+export async function deleteAppointment(
+  appointmentId: string,
+): Promise<DeleteAppointmentResult> {
   try {
     const session = await requireSession();
 
@@ -986,11 +1040,20 @@ export async function deleteAppointment(appointmentId: string): Promise<DeleteAp
       .select({ id: appointments.id })
       .from(appointments)
       .innerJoin(locations, eq(appointments.locationId, locations.id))
-      .where(and(eq(appointments.id, appointmentId), eq(locations.orgId, session.orgId)))
+      .where(
+        and(
+          eq(appointments.id, appointmentId),
+          eq(locations.orgId, session.orgId),
+        ),
+      )
       .limit(1);
 
     if (existing.length === 0) {
-      return { success: false, error: "Appointment not found.", code: "NOT_FOUND" };
+      return {
+        success: false,
+        error: "Appointment not found.",
+        code: "NOT_FOUND",
+      };
     }
 
     // Genuine hard delete - will fail with a foreign key error if this
@@ -1005,6 +1068,10 @@ export async function deleteAppointment(appointmentId: string): Promise<DeleteAp
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong deleting the appointment.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong deleting the appointment.",
+      code: "SERVER_ERROR",
+    };
   }
 }

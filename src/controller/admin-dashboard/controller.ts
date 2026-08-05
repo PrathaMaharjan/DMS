@@ -42,42 +42,125 @@ export type AdminStatsResult =
   }
   | { success: false; error: string; code: AdminDashboardErrorCode };
 
-export async function getAdminDashboardStats(
-  locationId: string,
-): Promise<AdminStatsResult> {
+// export async function getAdminDashboardStats(
+//   locationId: string,
+// ): Promise<AdminStatsResult> {
+//   try {
+//     const session = await requireSession();
+//     const now = new Date();
+//     // Scoped to ONE specific outlet, not the whole org - same locationId
+//     // pattern as the front-desk and doctor dashboards, not a third style.
+//     const [
+//       totalPatientsResult,
+//       appointmentsTodayResult,
+//       activeDoctorsResult,
+//       pendingResult,
+//     ] = await Promise.all([
+//       db
+//         .select({ count: sql<number>`count(*)::int` })
+
+//         .from(patients)
+//         .where(
+//           and(
+//             eq(patients.orgId, session.orgId),
+//             eq(patients.locationId, locationId),
+//             sql`${patients.deletedAt} is null`,
+//           ),
+//         ),
+//       db
+//         .select({ count: sql<number>`count(*)::int` })
+//         .from(appointments)
+//         .where(
+//           and(
+//             eq(appointments.locationId, locationId),
+//             gte(appointments.startTime, startOfDay(now)),
+//             lte(appointments.startTime, endOfDay(now)),
+//             sql`${appointments.status} != 'cancelled'`,
+//           ),
+//         ),
+//       db
+//         .select({ count: sql<number>`count(distinct ${users.id})::int` })
+//         .from(users)
+//         .innerJoin(userLocationRoles, eq(userLocationRoles.userId, users.id))
+//         .where(
+//           and(
+//             eq(users.orgId, session.orgId),
+//             eq(userLocationRoles.locationId, locationId),
+//             eq(userLocationRoles.role, "clinical"),
+//             eq(users.isActive, true),
+//           ),
+//         ),
+//       db
+//         .select({ count: sql<number>`count(*)::int` })
+//         .from(appointments)
+
+//         .where(
+//           and(
+//             eq(appointments.locationId, locationId),
+//             eq(appointments.status, "requested"),
+//           ),
+//         ),
+//     ]);
+//     return {
+//       success: true,
+//       stats: {
+//         totalPatients: totalPatientsResult[0]?.count ?? 0,
+//         appointmentsToday: appointmentsTodayResult[0]?.count ?? 0,
+//         activeDoctors: activeDoctorsResult[0]?.count ?? 0,
+//         pendingRequests: pendingResult[0]?.count ?? 0,
+//       },
+//     };
+//   } catch (err) {
+//     if (err instanceof SessionError) {
+//       return { success: false, error: err.message, code: "UNAUTHORIZED" };
+//     }
+//     console.error(err);
+//     return {
+//       success: false,
+//       error: "Something went wrong loading dashboard stats.",
+//       code: "SERVER_ERROR",
+//     };
+//   }
+// }
+
+// treatment popularity
+
+
+export async function getAdminDashboardStats(locationId?: string): Promise<AdminStatsResult> {
   try {
     const session = await requireSession();
     const now = new Date();
-    // Scoped to ONE specific outlet, not the whole org - same locationId
-    // pattern as the front-desk and doctor dashboards, not a third style.
-    const [
-      totalPatientsResult,
-      appointmentsTodayResult,
-      activeDoctorsResult,
-      pendingResult,
-    ] = await Promise.all([
+
+    // Same optional-scope pattern already used for getRevenueByDoctor /
+    // getTopOutstandingPatients - org-wide by default, narrows to one
+    // outlet only when locationId is explicitly provided.
+    const [totalPatientsResult, appointmentsTodayResult, activeDoctorsResult, pendingResult] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)::int` })
-
         .from(patients)
         .where(
           and(
             eq(patients.orgId, session.orgId),
-            eq(patients.locationId, locationId),
-            sql`${patients.deletedAt} is null`,
-          ),
+            locationId ? eq(patients.locationId, locationId) : undefined,
+            sql`${patients.deletedAt} is null`
+          )
         ),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(appointments)
+        .innerJoin(locations, eq(appointments.locationId, locations.id))
         .where(
           and(
-            eq(appointments.locationId, locationId),
+            eq(locations.orgId, session.orgId),
+            locationId ? eq(appointments.locationId, locationId) : undefined,
             gte(appointments.startTime, startOfDay(now)),
             lte(appointments.startTime, endOfDay(now)),
-            sql`${appointments.status} != 'cancelled'`,
-          ),
+            sql`${appointments.status} != 'cancelled'`
+          )
         ),
+      // count(distinct users.id) already deduplicates a doctor holding
+      // clinical roles at multiple locations - omitting the location
+      // filter here doesn't risk counting anyone twice.
       db
         .select({ count: sql<number>`count(distinct ${users.id})::int` })
         .from(users)
@@ -85,22 +168,24 @@ export async function getAdminDashboardStats(
         .where(
           and(
             eq(users.orgId, session.orgId),
-            eq(userLocationRoles.locationId, locationId),
+            locationId ? eq(userLocationRoles.locationId, locationId) : undefined,
             eq(userLocationRoles.role, "clinical"),
-            eq(users.isActive, true),
-          ),
+            eq(users.isActive, true)
+          )
         ),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(appointments)
-
+        .innerJoin(locations, eq(appointments.locationId, locations.id))
         .where(
           and(
-            eq(appointments.locationId, locationId),
-            eq(appointments.status, "requested"),
-          ),
+            eq(locations.orgId, session.orgId),
+            locationId ? eq(appointments.locationId, locationId) : undefined,
+            eq(appointments.status, "requested")
+          )
         ),
     ]);
+
     return {
       success: true,
       stats: {
@@ -115,26 +200,28 @@ export async function getAdminDashboardStats(
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return {
-      success: false,
-      error: "Something went wrong loading dashboard stats.",
-      code: "SERVER_ERROR",
-    };
+    return { success: false, error: "Something went wrong loading dashboard stats.", code: "SERVER_ERROR" };
   }
 }
 
-// treatment popularity
+
+
+
+
+
 
 export type TreatmentPopularityResult =
   | { success: true; breakdown: { treatmentName: string; count: number }[] }
   | { success: false; error: string; code: AdminDashboardErrorCode };
 
-export async function getTreatmentPopularity(
-  locationId: string,
-): Promise<TreatmentPopularityResult> {
+export async function getTreatmentPopularity(locationId?: string): Promise<TreatmentPopularityResult> {
   try {
-    await requireSession();
+    const session = await requireSession();
 
+    // appointments has no direct orgId column - org-wide scoping (or
+    // even confirming a SPECIFIC locationId genuinely belongs to this
+    // caller's org) has to go through a join to locations, same reasoning
+    // used everywhere else in this project.
     const rows = await db
       .select({
         treatmentName: treatments.name,
@@ -142,11 +229,13 @@ export async function getTreatmentPopularity(
       })
       .from(appointments)
       .innerJoin(treatments, eq(appointments.treatmentId, treatments.id))
+      .innerJoin(locations, eq(appointments.locationId, locations.id))
       .where(
         and(
-          eq(appointments.locationId, locationId),
-          sql`${appointments.status} != 'cancelled'`,
-        ),
+          eq(locations.orgId, session.orgId),
+          locationId ? eq(appointments.locationId, locationId) : undefined,
+          sql`${appointments.status} != 'cancelled'`
+        )
       )
       .groupBy(treatments.name)
       .orderBy(sql`count(*) desc`)
@@ -158,17 +247,12 @@ export async function getTreatmentPopularity(
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return {
-      success: false,
-      error: "Something went wrong loading treatment popularity.",
-      code: "SERVER_ERROR",
-    };
+    return { success: false, error: "Something went wrong loading treatment popularity.", code: "SERVER_ERROR" };
   }
 }
 
 // ---------- New Patient Registrations Trend ----------
 
-// src/lib/controllers/admin-dashboard.controller.ts
 export type TrendRange = "7d" | "14d" | "1m" | "1y";
 
 export type PatientTrendResult =
@@ -176,23 +260,15 @@ export type PatientTrendResult =
   | { success: false; error: string; code: AdminDashboardErrorCode };
 
 export async function getNewPatientTrend(
-  locationId: string,
   range: TrendRange,
+  locationId?: string,  // CHANGED: was required, now optional
 ): Promise<PatientTrendResult> {
   try {
     const session = await requireSession();
     const now = new Date();
 
-    // Each range needs a genuinely different bucket shape, not just a
-    // different day-count with the same daily granularity: 7d/14d stay
-    // daily, 1m buckets into 4 weeks, 1y buckets into 12 calendar months.
     if (range === "7d" || range === "14d") {
-      return await getDailyTrend(
-        session.orgId,
-        locationId,
-        range === "7d" ? 7 : 14,
-        now,
-      );
+      return await getDailyTrend(session.orgId, locationId, range === "7d" ? 7 : 14, now);
     } else if (range === "1m") {
       return await getWeeklyTrend(session.orgId, locationId, now);
     } else {
@@ -203,11 +279,7 @@ export async function getNewPatientTrend(
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return {
-      success: false,
-      error: "Something went wrong loading the patient trend.",
-      code: "SERVER_ERROR",
-    };
+    return { success: false, error: "Something went wrong loading the patient trend.", code: "SERVER_ERROR" };
   }
 }
 
@@ -215,7 +287,7 @@ export async function getNewPatientTrend(
 
 async function getDailyTrend(
   orgId: string,
-  locationId: string,
+  locationId: string | undefined,  // CHANGED: was required
   days: number,
   now: Date,
 ): Promise<PatientTrendResult> {
@@ -223,14 +295,7 @@ async function getDailyTrend(
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    scaffold.push({
-      // Day 1, Day 2, ... Day N - counting position within the range,
-      // not the actual weekday name. Day 1 is always the oldest day in
-      // the window, Day N (7 or 14) is always today.
-      label: `Day ${days - i}`,
-      date: d.toISOString().slice(0, 10),
-      count: 0,
-    });
+    scaffold.push({ label: `Day ${days - i}`, date: d.toISOString().slice(0, 10), count: 0 });
   }
 
   const rangeStart = startOfDay(new Date(scaffold[0].date));
@@ -243,7 +308,7 @@ async function getDailyTrend(
     .where(
       and(
         eq(patients.orgId, orgId),
-        eq(patients.locationId, locationId),
+        locationId ? eq(patients.locationId, locationId) : undefined,  // CHANGED: now conditional
         gte(patients.createdAt, rangeStart),
         lte(patients.createdAt, endOfDay(now)),
       ),
@@ -251,10 +316,7 @@ async function getDailyTrend(
     .groupBy(sql`to_char(${patients.createdAt}, 'YYYY-MM-DD')`);
 
   const countsByDate = new Map(rows.map((r) => [r.date, r.count]));
-  const trend = scaffold.map((d) => ({
-    label: d.label,
-    count: countsByDate.get(d.date) ?? 0,
-  }));
+  const trend = scaffold.map((d) => ({ label: d.label, count: countsByDate.get(d.date) ?? 0 }));
 
   return { success: true, trend };
 }
@@ -263,11 +325,9 @@ async function getDailyTrend(
 
 async function getWeeklyTrend(
   orgId: string,
-  locationId: string,
+  locationId: string | undefined,  // CHANGED: was required
   now: Date,
 ): Promise<PatientTrendResult> {
-  // 4 real week-long buckets, most recent 28 days, oldest first (W1)
-  // through newest (W4) - matching the screenshot's left-to-right order.
   const weekStarts: Date[] = [];
   for (let i = 3; i >= 0; i--) {
     const d = startOfDay(new Date(now));
@@ -282,15 +342,12 @@ async function getWeeklyTrend(
     .where(
       and(
         eq(patients.orgId, orgId),
-        eq(patients.locationId, locationId),
+        locationId ? eq(patients.locationId, locationId) : undefined,  // CHANGED: now conditional
         gte(patients.createdAt, rangeStart),
         lte(patients.createdAt, endOfDay(now)),
       ),
     );
 
-  // Bucketing happens in application code here, not SQL - simpler to get
-  // right than a 4-way date-range CASE statement, and this table is small
-  // enough per-location that it's not a real performance concern.
   const counts = [0, 0, 0, 0];
   for (const row of rows) {
     const created = row.createdAt;
@@ -313,7 +370,7 @@ async function getWeeklyTrend(
 
 async function getMonthlyTrend(
   orgId: string,
-  locationId: string,
+  locationId: string | undefined,  // CHANGED: was required
   now: Date,
 ): Promise<PatientTrendResult> {
   const yearStart = new Date(now.getFullYear(), 0, 1);
@@ -328,23 +385,16 @@ async function getMonthlyTrend(
     .where(
       and(
         eq(patients.orgId, orgId),
-        eq(patients.locationId, locationId),
+        locationId ? eq(patients.locationId, locationId) : undefined,  // CHANGED: now conditional
         gte(patients.createdAt, yearStart),
         lte(patients.createdAt, endOfDay(now)),
       ),
     )
-    .groupBy(
-      sql`to_char(${patients.createdAt}, 'Mon')`,
-      sql`extract(month from ${patients.createdAt})`,
-    );
+    .groupBy(sql`to_char(${patients.createdAt}, 'Mon')`, sql`extract(month from ${patients.createdAt})`);
 
-  // Full 12-month scaffold, Jan through Dec, so a month with zero real
-  // registrations still shows a real 0 rather than a gap in the chart.
   const countsByMonth = new Map(rows.map((r) => [r.monthNum, r.count]));
   const trend = Array.from({ length: 12 }, (_, i) => {
-    const label = new Date(2000, i, 1).toLocaleDateString("en-US", {
-      month: "short",
-    });
+    const label = new Date(2000, i, 1).toLocaleDateString("en-US", { month: "short" });
     return { label, count: countsByMonth.get(i + 1) ?? 0 };
   });
 
@@ -487,10 +537,10 @@ export type TodaysAppointmentsResult =
   | { success: false; error: string; code: AdminDashboardErrorCode };
 
 export async function getTodaysAppointmentsAcrossDoctors(
-  locationId: string,
+  locationId?: string,
 ): Promise<TodaysAppointmentsResult> {
   try {
-    await requireSession();
+  const session =  await requireSession();
     const now = new Date();
 
     const rows = await db
@@ -506,9 +556,11 @@ export async function getTodaysAppointmentsAcrossDoctors(
       .innerJoin(patients, eq(appointments.patientId, patients.id))
       .innerJoin(users, eq(appointments.providerId, users.id))
       .innerJoin(treatments, eq(appointments.treatmentId, treatments.id))
+      .innerJoin(locations, eq(appointments.locationId, locations.id)) 
       .where(
         and(
-          eq(appointments.locationId, locationId),
+          eq(locations.orgId, session.orgId),
+          locationId ? eq(appointments.locationId, locationId) : undefined, 
           gte(appointments.startTime, startOfDay(now)),
           lte(appointments.startTime, endOfDay(now)),
         ),
@@ -557,18 +609,13 @@ export type ActivityFeedResult =
 // currently is. A true activity feed needs a dedicated audit table that
 // every action writes to - this is a working approximation until then.
 export async function getRecentActivityFeed(
-  locationId: string,
+  locationId?: string,
   limit: number = 10,
 ): Promise<ActivityFeedResult> {
   try {
-    const session = await requireSession();
+    const session = await requireSession();  // unchanged, already captured
 
-    const [
-      recentAppointments,
-      recentPatients,
-      recentTreatments,
-      recentSchedules,
-    ] = await Promise.all([
+    const [recentAppointments, recentPatients, recentTreatments, recentSchedules] = await Promise.all([
       db
         .select({
           patientName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`,
@@ -580,7 +627,13 @@ export async function getRecentActivityFeed(
         .innerJoin(patients, eq(appointments.patientId, patients.id))
         .innerJoin(users, eq(appointments.providerId, users.id))
         .innerJoin(treatments, eq(appointments.treatmentId, treatments.id))
-        .where(eq(appointments.locationId, locationId))
+        .innerJoin(locations, eq(appointments.locationId, locations.id))  // ADDED: needed to reach orgId
+        .where(
+          and(
+            eq(locations.orgId, session.orgId),  // ADDED: the actual missing security check
+            locationId ? eq(appointments.locationId, locationId) : undefined,  // CHANGED: now conditional, was unconditional + broken against the optional param
+          ),
+        )
         .orderBy(desc(appointments.createdAt))
         .limit(limit),
       db
@@ -589,23 +642,37 @@ export async function getRecentActivityFeed(
           createdAt: patients.createdAt,
         })
         .from(patients)
-        .where(eq(patients.locationId, locationId))
+        .where(
+          and(
+            eq(patients.orgId, session.orgId),  // ADDED: patients HAS a direct orgId column, so no join needed here
+            locationId ? eq(patients.locationId, locationId) : undefined,  // CHANGED: now conditional
+          ),
+        )
         .orderBy(desc(patients.createdAt))
         .limit(limit),
       db
         .select({ name: treatments.name, createdAt: treatments.createdAt })
         .from(treatments)
-        .where(eq(treatments.locationId, locationId))
+        .innerJoin(locations, eq(treatments.locationId, locations.id))  // ADDED: treatments has no orgId column either
+        .where(
+          and(
+            eq(locations.orgId, session.orgId),  // ADDED
+            locationId ? eq(treatments.locationId, locationId) : undefined,  // CHANGED: now conditional
+          ),
+        )
         .orderBy(desc(treatments.createdAt))
         .limit(limit),
       db
-        .select({
-          doctorName: users.name,
-          createdAt: providerSchedules.createdAt,
-        })
+        .select({ doctorName: users.name, createdAt: providerSchedules.createdAt })
         .from(providerSchedules)
         .innerJoin(users, eq(providerSchedules.userId, users.id))
-        .where(eq(providerSchedules.locationId, locationId))
+        .innerJoin(locations, eq(providerSchedules.locationId, locations.id))  // ADDED
+        .where(
+          and(
+            eq(locations.orgId, session.orgId),  // ADDED
+            locationId ? eq(providerSchedules.locationId, locationId) : undefined,  // CHANGED: now conditional
+          ),
+        )
         .orderBy(desc(providerSchedules.createdAt))
         .limit(limit),
     ]);
@@ -637,9 +704,6 @@ export async function getRecentActivityFeed(
       })),
     ];
 
-    // Merge all four sources by real timestamp, most recent first -
-    // this is the step that actually makes it one unified feed instead
-    // of four separate lists.
     activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
     return { success: true, activities: activities.slice(0, limit) };
@@ -648,11 +712,7 @@ export async function getRecentActivityFeed(
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return {
-      success: false,
-      error: "Something went wrong loading the activity feed.",
-      code: "SERVER_ERROR",
-    };
+    return { success: false, error: "Something went wrong loading the activity feed.", code: "SERVER_ERROR" };
   }
 }
 

@@ -70,18 +70,10 @@ export async function createLocation(
         timezone: data.timezone,
         openingTime: data.openingTime,
         closingTime: data.closingTime,
-
+        // notes: data.notes,
         isActive: data.isActive,
       })
       .returning();
-
-    if (data.managerId) {
-      await db.insert(userLocationRoles).values({
-        userId: data.managerId,
-        locationId: location.id,
-        role: "manager",
-      });
-    }
 
     return { success: true, location };
   } catch (err) {
@@ -105,10 +97,7 @@ export async function createLocation(
 }
 
 // -------------------get All Outlets ---------------------------------
-export type LocationWithManager = typeof locations.$inferSelect & {
-  managerName: string | null;
-  managerId: string | null;
-};
+export type LocationWithManager = typeof locations.$inferSelect & { managerName: string | null };
 
 export type GetLocationsResult =
   | { success: true; locations: Awaited<ReturnType<typeof getLocationsQuery>> }
@@ -129,18 +118,10 @@ async function getLocationsQuery(orgId: string) {
       closingTime: locations.closingTime,
       notes: locations.notes,
       isActive: locations.isActive,
-      createdAt: locations.createdAt,
       managerName: users.name,
-      managerId: users.id,
     })
     .from(locations)
-    .leftJoin(
-      userLocationRoles,
-      and(
-        eq(userLocationRoles.locationId, locations.id),
-        eq(userLocationRoles.role, "manager"),
-      ),
-    )
+    .leftJoin(userLocationRoles, and(eq(userLocationRoles.locationId, locations.id), eq(userLocationRoles.role, "manager")))
     .leftJoin(users, eq(users.id, userLocationRoles.userId))
     .where(eq(locations.orgId, orgId))
     .orderBy(locations.name);
@@ -157,40 +138,6 @@ export async function getLocations(): Promise<GetLocationsResult> {
     }
     console.error(err);
     return { success: false, error: "Something went wrong loading outlets.", code: "SERVER_ERROR" };
-  }
-}
-
-// ------------------- Branch Managers ---------------------------------
-export type BranchManagerOption = {
-  id: string;
-  name: string;
-  email: string;
-};
-
-export type GetBranchManagersResult =
-  | { success: true; managers: BranchManagerOption[] }
-  | { success: false; error: string; code: LocationErrorCode };
-
-export async function getBranchManagers(): Promise<GetBranchManagersResult> {
-  try {
-    const session = await requireSession();
-    const results = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        email: users.email,
-      })
-      .from(users)
-      .where(and(eq(users.orgId, session.orgId), eq(users.isActive, true)))
-      .orderBy(users.name);
-
-    return { success: true, managers: results };
-  } catch (err) {
-    if (err instanceof SessionError) {
-      return { success: false, error: err.message, code: "UNAUTHORIZED" };
-    }
-    console.error(err);
-    return { success: false, error: "Something went wrong loading managers.", code: "SERVER_ERROR" };
   }
 }
 
@@ -288,33 +235,11 @@ export async function updateLocation(
       return { success: false, error: "Outlet not found.", code: "NOT_FOUND" };
     }
 
-    const { managerId, ...updateData } = parsed.data;
-
     const [updated] = await db
       .update(locations)
-      .set(updateData)
+      .set(parsed.data)
       .where(eq(locations.id, locationId))
       .returning();
-
-    if (managerId !== undefined) {
-      await db
-        .delete(userLocationRoles)
-        .where(
-          and(
-            eq(userLocationRoles.locationId, locationId),
-            eq(userLocationRoles.role, "manager"),
-          ),
-        );
-
-      if (managerId) {
-        await db.insert(userLocationRoles).values({
-          userId: managerId,
-          locationId,
-          role: "manager",
-        });
-      }
-    }
-
     return { success: true, location: updated };
   } catch (err) {
     if (err instanceof SessionError) {
