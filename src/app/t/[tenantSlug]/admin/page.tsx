@@ -95,8 +95,7 @@ interface LowStockItem {
 
 const PIE_COLORS = ["#7da3b3", "#10b981", "#6366f1", "#f59e0b", "#345263", "#ec4899", "#8b5cf6", "#06b6d4"];
 
-// Static placeholder data until an inventory endpoint is wired up.
-// Shape mirrors what a real /api/admin-dashboard/inventory-low-stock response would look like.
+
 const STATIC_LOW_STOCK_ITEMS: LowStockItem[] = [
   { id: "inv-1", name: "Dental Anesthetic Cartridges", unit: "cartridges", currentQty: 8, reorderLevel: 25 },
   { id: "inv-2", name: "Disposable Gloves (M)", unit: "boxes", currentQty: 3, reorderLevel: 10 },
@@ -173,7 +172,7 @@ export default function AdminDashboardPage() {
   const [todaysAppointments, setTodaysAppointments] = useState<TodaysAppointmentItem[]>([]);
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
 
-  // Static for now — swap for a fetched list once an inventory endpoint exists.
+
   const [lowStockItems] = useState<LowStockItem[]>(STATIC_LOW_STOCK_ITEMS);
   const [lowStockBannerDismissed, setLowStockBannerDismissed] = useState(false);
   const [lowStockExpanded, setLowStockExpanded] = useState(false);

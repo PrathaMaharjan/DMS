@@ -53,21 +53,22 @@ function SuperAdminSidebar() {
   return (
     <aside className="sticky top-0 flex h-screen w-70 shrink-0 flex-col self-start bg-[#3f6274] py-6">
       {/* Brand */}
-      <div className="flex items-center gap-2 px-6">
+      <div className="flex items-center justify-center gap-2 px-6">
         <span className="text-2xl font-semibold tracking-tight text-white">
-          Chitwan Dental
+          Abstrakt
         </span>
       </div>
+      <hr className="text-white/50 mx-5 mt-4" />
 
       {/* Nav */}
-      <nav className="mt-10 flex flex-1 flex-col gap-2">
+      <nav className="mt-6 flex flex-1 flex-col gap-2">
         {NAV_ITEMS.map(({ label, href, icon: Icon, exact }) => {
           const fullHref = `${superAdminRoot}${href}`;
 
           const active = exact
             ? pathname === fullHref
             : pathname === fullHref ||
-              pathname?.startsWith(`${fullHref}/`);
+            pathname?.startsWith(`${fullHref}/`);
 
           return (
             <Link

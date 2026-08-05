@@ -67,7 +67,7 @@ function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="mt-10 flex flex-1 flex-col gap-2">
+      <nav className="mt-6 flex flex-1 flex-col gap-2">
         {NAV_ITEMS.map(({ label, href, icon: Icon, exact }) => {
           const fullHref = `${adminRoot}${href}`;
           const active = exact
