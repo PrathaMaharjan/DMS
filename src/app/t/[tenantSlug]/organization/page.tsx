@@ -2,6 +2,8 @@
 
 import { useMemo, useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   XAxis,
   YAxis,
@@ -37,6 +39,8 @@ import {
   MapPin,
   Building2,
   Banknote,
+  PackageX,
+  X,
 } from "lucide-react";
 
 const PIE_COLORS = ["#7da3b3", "#10b981", "#6366f1", "#f59e0b", "#345263", "#ec4899", "#8b5cf6", "#06b6d4"];
@@ -71,6 +75,24 @@ type ActivityItem = {
   description: string;
   timestamp: string;
 };
+
+type LowStockItem = {
+  id: string;
+  name: string;
+  unit: string;
+  currentQty: number;
+  reorderLevel: number;
+  outletName: string;
+};
+
+// Static placeholder data until an inventory endpoint is wired up.
+// Shape mirrors what a real org-wide low-stock response would look like.
+const STATIC_LOW_STOCK_ITEMS: LowStockItem[] = [
+  { id: "inv-1", name: "Dental Anesthetic Cartridges", unit: "cartridges", currentQty: 8, reorderLevel: 25, outletName: "Chitwan Dental Home" },
+  { id: "inv-2", name: "Disposable Gloves (M)", unit: "boxes", currentQty: 3, reorderLevel: 10, outletName: "Chitwan Dental Home" },
+  { id: "inv-3", name: "Composite Resin", unit: "syringes", currentQty: 5, reorderLevel: 15, outletName: "Bharatpur Branch" },
+  { id: "inv-4", name: "Sterilization Pouches", unit: "packs", currentQty: 2, reorderLevel: 8, outletName: "Bharatpur Branch" },
+];
 
 function getStatusBadge(status: string) {
   const s = (status || "").toLowerCase();
@@ -131,6 +153,9 @@ function centsToDisplay(n: number) {
 const ITEMS_PER_PAGE = 5;
 
 export default function OrganizationDashboardPage() {
+  const params = useParams<{ tenantSlug: string }>();
+  const adminRoot = `/t/${params.tenantSlug}/admin`;
+
   const [outletFilter, setOutletFilter] = useState("all");
   const [timeframe, setTimeframe] = useState<"7d" | "14d" | "1m" | "1y">("14d");
 
@@ -155,6 +180,11 @@ export default function OrganizationDashboardPage() {
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
   const [outletPerformance, setOutletPerformance] = useState<OutletStats[]>([]);
 
+  // Static for now — swap for a fetched org-wide list once an inventory endpoint exists.
+  const [lowStockItems] = useState<LowStockItem[]>(STATIC_LOW_STOCK_ITEMS);
+  const [lowStockBannerDismissed, setLowStockBannerDismissed] = useState(false);
+  const [lowStockExpanded, setLowStockExpanded] = useState(false);
+
   useEffect(() => {
     async function fetchOutlets() {
       try {
@@ -173,7 +203,7 @@ export default function OrganizationDashboardPage() {
           });
           setOutletsList([{ id: "all", name: "All outlets" }, ...mapped]);
         }
-      } catch (err) {}
+      } catch (err) { }
     }
     fetchOutlets();
   }, []);
@@ -264,7 +294,7 @@ export default function OrganizationDashboardPage() {
                     }
                   });
                 }
-              } catch (e) {}
+              } catch (e) { }
             }
 
             if (apptsRes?.data?.success && Array.isArray(apptsRes.data.data.appointments)) {
@@ -292,7 +322,7 @@ export default function OrganizationDashboardPage() {
                 });
               });
             }
-          } catch (err) {}
+          } catch (err) { }
         })
       );
 
@@ -411,6 +441,73 @@ export default function OrganizationDashboardPage() {
       </div>
 
       <div className="relative mx-auto max-w-[1600px] space-y-6 px-6 pb-10 pt-6 lg:px-10">
+        {/* Low Stock Inventory Banner (static placeholder data) */}
+        {!lowStockBannerDismissed && lowStockItems.length > 0 && (
+          <div className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50">
+            <div className="flex items-start gap-3 p-4">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                <PackageX className="h-4.5 w-4.5" />
+              </span>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-amber-900">
+                    {lowStockItems.length} item{lowStockItems.length > 1 ? "s" : ""} running low across outlets
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setLowStockExpanded((v) => !v)}
+                      className="text-xs font-semibold text-amber-700 hover:underline"
+                    >
+                      {lowStockExpanded ? "Hide details" : "View details"}
+                    </button>
+                    <button
+                      onClick={() => setLowStockBannerDismissed(true)}
+                      aria-label="Dismiss low stock banner"
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-amber-500 transition-colors hover:bg-amber-100 hover:text-amber-800"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-0.5 text-xs text-amber-700">
+                  {lowStockItems
+                    .slice(0, 3)
+                    .map((i) => i.name)
+                    .join(", ")}
+                  {lowStockItems.length > 3 ? `, and ${lowStockItems.length - 3} more` : ""} —
+                  reorder soon to avoid disruption.
+                </p>
+              </div>
+            </div>
+
+            {lowStockExpanded && (
+              <div className="border-t border-amber-200 bg-white/60 px-4 py-3">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {lowStockItems.map((item) => (
+                    <Link
+                      key={item.id}
+                      href={`${adminRoot}/inventory?item=${item.id}`}
+                      className="flex items-center justify-between rounded-xl border border-amber-100 bg-white px-3 py-2 transition-colors hover:border-amber-300 hover:bg-amber-50/60"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold text-slate-800">{item.name}</p>
+                        <p className="text-[0.7rem] text-slate-500">
+                          {item.currentQty} / {item.reorderLevel} {item.unit}
+                        </p>
+                        <p className="truncate text-[0.65rem] text-slate-400">{item.outletName}</p>
+                      </div>
+                      <span className="ml-2 shrink-0 rounded-full bg-rose-50 px-2 py-0.5 text-[0.65rem] font-bold text-rose-600">
+                        Low
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Top 4 Stats Cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-slate-900/5 bg-white p-5 shadow-sm transition-all hover:shadow-md">
@@ -477,9 +574,8 @@ export default function OrganizationDashboardPage() {
                       key={tf}
                       type="button"
                       onClick={() => setTimeframe(tf)}
-                      className={`rounded-lg px-2.5 py-1 text-[0.7rem] font-semibold transition-colors ${
-                        timeframe === tf ? "bg-white text-[#345263] shadow-sm" : "text-slate-500 hover:text-slate-900"
-                      }`}
+                      className={`rounded-lg px-2.5 py-1 text-[0.7rem] font-semibold transition-colors ${timeframe === tf ? "bg-white text-[#345263] shadow-sm" : "text-slate-500 hover:text-slate-900"
+                        }`}
                     >
                       {labels[tf]}
                     </button>

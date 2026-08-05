@@ -39,6 +39,8 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  PackageX,
+  X,
 } from "lucide-react";
 
 interface AdminStats {
@@ -83,7 +85,24 @@ interface ActivityItem {
   timestamp: string;
 }
 
+interface LowStockItem {
+  id: string;
+  name: string;
+  unit: string;
+  currentQty: number;
+  reorderLevel: number;
+}
+
 const PIE_COLORS = ["#7da3b3", "#10b981", "#6366f1", "#f59e0b", "#345263", "#ec4899", "#8b5cf6", "#06b6d4"];
+
+// Static placeholder data until an inventory endpoint is wired up.
+// Shape mirrors what a real /api/admin-dashboard/inventory-low-stock response would look like.
+const STATIC_LOW_STOCK_ITEMS: LowStockItem[] = [
+  { id: "inv-1", name: "Dental Anesthetic Cartridges", unit: "cartridges", currentQty: 8, reorderLevel: 25 },
+  { id: "inv-2", name: "Disposable Gloves (M)", unit: "boxes", currentQty: 3, reorderLevel: 10 },
+  { id: "inv-3", name: "Composite Resin", unit: "syringes", currentQty: 5, reorderLevel: 15 },
+  { id: "inv-4", name: "Sterilization Pouches", unit: "packs", currentQty: 2, reorderLevel: 8 },
+];
 
 function getStatusBadge(status: string) {
   const s = (status || "").toLowerCase();
@@ -153,6 +172,11 @@ export default function AdminDashboardPage() {
   const [doctorUtilization, setDoctorUtilization] = useState<DoctorUtilizationItem[]>([]);
   const [todaysAppointments, setTodaysAppointments] = useState<TodaysAppointmentItem[]>([]);
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
+
+  // Static for now — swap for a fetched list once an inventory endpoint exists.
+  const [lowStockItems] = useState<LowStockItem[]>(STATIC_LOW_STOCK_ITEMS);
+  const [lowStockBannerDismissed, setLowStockBannerDismissed] = useState(false);
+  const [lowStockExpanded, setLowStockExpanded] = useState(false);
 
   const [apptsPage, setApptsPage] = useState(1);
   const [activityPage, setActivityPage] = useState(1);
@@ -319,6 +343,72 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
+        {/* Low Stock Inventory Banner (static placeholder data) */}
+        {!lowStockBannerDismissed && lowStockItems.length > 0 && (
+          <div className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50">
+            <div className="flex items-start gap-3 p-4">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                <PackageX className="h-4.5 w-4.5" />
+              </span>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-amber-900">
+                    {lowStockItems.length} item{lowStockItems.length > 1 ? "s" : ""} running low on stock
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setLowStockExpanded((v) => !v)}
+                      className="text-xs font-semibold text-amber-700 hover:underline"
+                    >
+                      {lowStockExpanded ? "Hide details" : "View details"}
+                    </button>
+                    <button
+                      onClick={() => setLowStockBannerDismissed(true)}
+                      aria-label="Dismiss low stock banner"
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-amber-500 transition-colors hover:bg-amber-100 hover:text-amber-800"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-0.5 text-xs text-amber-700">
+                  {lowStockItems
+                    .slice(0, 3)
+                    .map((i) => i.name)
+                    .join(", ")}
+                  {lowStockItems.length > 3 ? `, and ${lowStockItems.length - 3} more` : ""} —
+                  reorder soon to avoid disruption.
+                </p>
+              </div>
+            </div>
+
+            {lowStockExpanded && (
+              <div className="border-t border-amber-200 bg-white/60 px-4 py-3">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {lowStockItems.map((item) => (
+                    <Link
+                      key={item.id}
+                      href={`${adminRoot}/inventory?item=${item.id}`}
+                      className="flex items-center justify-between rounded-xl border border-amber-100 bg-white px-3 py-2 transition-colors hover:border-amber-300 hover:bg-amber-50/60"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold text-slate-800">{item.name}</p>
+                        <p className="text-[0.7rem] text-slate-500">
+                          {item.currentQty} / {item.reorderLevel} {item.unit}
+                        </p>
+                      </div>
+                      <span className="ml-2 shrink-0 rounded-full bg-rose-50 px-2 py-0.5 text-[0.65rem] font-bold text-rose-600">
+                        Low
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Top 4 Stats Cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {/* Total Patients */}
@@ -419,11 +509,10 @@ export default function AdminDashboardPage() {
                       type="button"
                       onClick={() => handleTimeframeChange(tf)}
                       disabled={trendLoading}
-                      className={`px-2.5 py-1 text-[0.7rem] font-semibold rounded-lg transition-colors ${
-                        timeframe === tf
-                          ? "bg-white text-[#345263] shadow-sm"
-                          : "text-slate-500 hover:text-slate-900"
-                      }`}
+                      className={`px-2.5 py-1 text-[0.7rem] font-semibold rounded-lg transition-colors ${timeframe === tf
+                        ? "bg-white text-[#345263] shadow-sm"
+                        : "text-slate-500 hover:text-slate-900"
+                        }`}
                     >
                       {labels[tf]}
                     </button>
@@ -551,13 +640,12 @@ export default function AdminDashboardPage() {
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold text-slate-900 truncate">{doc.name}</h4>
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[0.65rem] font-bold ${
-                        doc.percentBooked >= 90
-                          ? "bg-rose-50 text-rose-700 border border-rose-200"
-                          : doc.percentBooked >= 60
+                      className={`px-2 py-0.5 rounded-full text-[0.65rem] font-bold ${doc.percentBooked >= 90
+                        ? "bg-rose-50 text-rose-700 border border-rose-200"
+                        : doc.percentBooked >= 60
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                           : "bg-sky-50 text-sky-700 border border-sky-200"
-                      }`}
+                        }`}
                     >
                       {doc.percentBooked}% Booked
                     </span>

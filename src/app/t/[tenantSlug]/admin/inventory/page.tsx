@@ -160,7 +160,6 @@ const SEED_MATERIALS: Material[] = [
 
 const EMPTY_FORM = {
   name: "",
-  currentStock: "" as number | "",
   unit: "boxes" as Material["unit"],
   minStockLevel: "" as number | "",
   categoryId: "" as string,
@@ -186,7 +185,6 @@ const STOCK_STYLE: Record<StockLevel, { badge: string; label: string }> = {
 function materialToForm(m: Material): FormState {
   return {
     name: m.name,
-    currentStock: m.currentStock,
     unit: m.unit,
     minStockLevel: m.minStockLevel,
     categoryId: m.categoryId ?? "",
@@ -375,7 +373,7 @@ export default function InventoryPage() {
         itemId: `INV-${1000 + materials.length + 1}`,
         name: form.name.trim(),
         unit: form.unit,
-        currentStock: Number(form.currentStock) || 0,
+        currentStock: 0,
         minStockLevel: Number(form.minStockLevel) || 0,
         createdAt: new Date().toISOString().slice(0, 10),
         categoryId: form.categoryId || null,
@@ -893,25 +891,6 @@ export default function InventoryPage() {
                       </div>
                     )}
                   </label>
-
-                  {modalMode === "add" && (
-                    <label className="block">
-                      <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                        <Package className="h-3.5 w-3.5" strokeWidth={2} />
-                        Starting stock
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={form.currentStock}
-                        onChange={(e) =>
-                          update("currentStock", e.target.value === "" ? "" : Number(e.target.value))
-                        }
-                        placeholder="0"
-                        className={inputClass}
-                      />
-                    </label>
-                  )}
                 </div>
 
                 <label className="block">
