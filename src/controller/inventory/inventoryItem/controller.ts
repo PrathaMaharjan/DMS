@@ -8,7 +8,11 @@ import {
   locations,
   users,
 } from "@/db/schema";
-import { addMovementSchema, createInventoryItemSchema, updateItemSchema } from "@/lib/validators/inventory";
+import {
+  addMovementSchema,
+  createInventoryItemSchema,
+  updateItemSchema,
+} from "@/lib/validators/inventory";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 // ---------------------- create treatment item --------------------
 export type CreateInventoryItemResult =
@@ -247,32 +251,39 @@ export async function getInventoryItem(
   }
 }
 
-
 // ----------------------------------- UPDATE INVENTORY ITEM --------------------------------------------------------
 export type UpdateInventoryItemResult =
   | { success: true; item: { id: string; name: string } }
   | { success: false; error: string; code: InventoryErrorCode };
 
-  // Optimized the same way updateStaff was - ownership check and the
+// Optimized the same way updateStaff was - ownership check and the
 // actual write happen in ONE statement (UPDATE...WHERE...RETURNING),
 // not a separate SELECT-then-UPDATE. An empty RETURNING is itself the
 // NOT_FOUND signal - no second round trip needed either way.
 export async function updateInventoryItem(
   itemId: string,
   locationId: string,
-  input: unknown
+  input: unknown,
 ): Promise<UpdateInventoryItemResult> {
   try {
     const session = await requireSession();
 
     const parsed = updateItemSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input.", code: "VALIDATION" };
+      return {
+        success: false,
+        error: parsed.error.issues[0]?.message ?? "Invalid input.",
+        code: "VALIDATION",
+      };
     }
     const data = parsed.data;
 
     if (Object.keys(data).length === 0) {
-      return { success: false, error: "No fields to update.", code: "VALIDATION" };
+      return {
+        success: false,
+        error: "No fields to update.",
+        code: "VALIDATION",
+      };
     }
 
     // UPDATE ... FROM locations - a real JOIN, not a raw sql IN-subquery.
@@ -291,8 +302,8 @@ export async function updateInventoryItem(
           eq(inventoryItems.locationId, locationId),
           eq(inventoryItems.locationId, locations.id),
           eq(locations.orgId, session.orgId),
-          isNull(inventoryItems.deletedAt)
-        )
+          isNull(inventoryItems.deletedAt),
+        ),
       )
       .returning({
         id: inventoryItems.id,
@@ -309,17 +320,25 @@ export async function updateInventoryItem(
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong updating the item.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong updating the item.",
+      code: "SERVER_ERROR",
+    };
   }
 }
 
-
-export type DeleteInventoryItemResult = { success: true } | { success: false; error: string; code: InventoryErrorCode };
+export type DeleteInventoryItemResult =
+  | { success: true }
+  | { success: false; error: string; code: InventoryErrorCode };
 
 // Soft delete, same one-statement approach - sets deletedAt directly in
 // the same UPDATE that verifies ownership, rather than checking first
 // and deleting second.
-export async function deleteInventoryItem(itemId: string, locationId: string): Promise<DeleteInventoryItemResult> {
+export async function deleteInventoryItem(
+  itemId: string,
+  locationId: string,
+): Promise<DeleteInventoryItemResult> {
   try {
     const session = await requireSession();
 
@@ -331,8 +350,8 @@ export async function deleteInventoryItem(itemId: string, locationId: string): P
           eq(inventoryItems.id, itemId),
           eq(inventoryItems.locationId, locationId),
           isNull(inventoryItems.deletedAt),
-          sql`${inventoryItems.locationId} in (select id from ${locations} where org_id = ${session.orgId})`
-        )
+          sql`${inventoryItems.locationId} in (select id from ${locations} where org_id = ${session.orgId})`,
+        ),
       )
       .returning();
 
@@ -346,10 +365,13 @@ export async function deleteInventoryItem(itemId: string, locationId: string): P
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong removing the item.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong removing the item.",
+      code: "SERVER_ERROR",
+    };
   }
 }
-
 
 // ---------- Movements ----------
 
@@ -357,23 +379,33 @@ export type AddMovementResult =
   | { success: true; movementId: string; newStock: number }
   | { success: false; error: string; code: InventoryErrorCode };
 
-  export async function addInventoryMovement(locationId: string, input: unknown): Promise<AddMovementResult> {
+export async function addInventoryMovement(
+  locationId: string,
+  input: unknown,
+): Promise<AddMovementResult> {
   try {
     const session = await requireSession();
 
     const parsed = addMovementSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input.", code: "VALIDATION" };
+      return {
+        success: false,
+        error: parsed.error.issues[0]?.message ?? "Invalid input.",
+        code: "VALIDATION",
+      };
     }
     const data = parsed.data;
 
     const item = await db.query.inventoryItems.findFirst({
-      where: and(eq(inventoryItems.id, data.itemId), eq(inventoryItems.locationId, locationId)),
+      where: and(
+        eq(inventoryItems.id, data.itemId),
+        eq(inventoryItems.locationId, locationId),
+      ),
     });
     if (!item) {
       return { success: false, error: "Item not found.", code: "NOT_FOUND" };
     }
-        // "received" and positive "adjusted" entries add stock; "used",
+    // "received" and positive "adjusted" entries add stock; "used",
     // "wasted", and negative "adjusted" reduce it - the sign comes
     // straight from what the caller sends, matching quantity's own
     // signed-value convention on the schema.
@@ -390,20 +422,29 @@ export type AddMovementResult =
       .returning();
 
     const [stockResult] = await db
-      .select({ stock: sql<number>`coalesce(sum(${inventoryMovements.quantity}), 0)::int` })
+      .select({
+        stock: sql<number>`coalesce(sum(${inventoryMovements.quantity}), 0)::int`,
+      })
       .from(inventoryMovements)
       .where(eq(inventoryMovements.itemId, data.itemId));
 
-    return { success: true, movementId: movement.id, newStock: stockResult.stock };
+    return {
+      success: true,
+      movementId: movement.id,
+      newStock: stockResult.stock,
+    };
   } catch (err) {
     if (err instanceof SessionError) {
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong recording the movement.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong recording the movement.",
+      code: "SERVER_ERROR",
+    };
   }
 }
-
 
 // get inventory movemenr-------------
 export type MovementHistoryResult =
@@ -420,7 +461,9 @@ export type MovementHistoryResult =
     }
   | { success: false; error: string; code: InventoryErrorCode };
 
-  export async function getMovementHistory(itemId: string): Promise<MovementHistoryResult> {
+export async function getMovementHistory(
+  itemId: string,
+): Promise<MovementHistoryResult> {
   try {
     await requireSession();
 
@@ -444,6 +487,52 @@ export type MovementHistoryResult =
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong loading movement history.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong loading movement history.",
+      code: "SERVER_ERROR",
+    };
+  }
+}
+
+export type LowStockCountResult =
+  | { success: true; count: number; items: { id: string; name: string; currentStock: number; reorderThreshold: number }[] }
+  | { success: false; error: string; code: InventoryErrorCode };
+
+export async function getLowStockCount(locationId: string): Promise<LowStockCountResult> {
+  try {
+    const session = await requireSession();
+
+    // Same currentStock-via-sum math as getInventoryItems - now also
+    // selecting name, since the caller wants to know WHICH items are
+    // low, not just how many.
+    const rows = await db
+      .select({
+        id: inventoryItems.id,
+        name: inventoryItems.name,
+        reorderThreshold: inventoryItems.reorderThreshold,
+        currentStock: sql<number>`coalesce(sum(${inventoryMovements.quantity}), 0)::int`,
+      })
+      .from(inventoryItems)
+      .innerJoin(locations, eq(inventoryItems.locationId, locations.id))
+      .leftJoin(inventoryMovements, eq(inventoryMovements.itemId, inventoryItems.id))
+      .where(
+        and(
+          eq(inventoryItems.locationId, locationId),
+          eq(locations.orgId, session.orgId),
+          isNull(inventoryItems.deletedAt)
+        )
+      )
+      .groupBy(inventoryItems.id);
+
+    const lowStockItems = rows.filter((r) => r.currentStock <= r.reorderThreshold);
+
+    return { success: true, count: lowStockItems.length, items: lowStockItems };
+  } catch (err) {
+    if (err instanceof SessionError) {
+      return { success: false, error: err.message, code: "UNAUTHORIZED" };
+    }
+    console.error(err);
+    return { success: false, error: "Something went wrong loading the low stock count.", code: "SERVER_ERROR" };
   }
 }

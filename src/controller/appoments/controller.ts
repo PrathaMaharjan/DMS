@@ -22,6 +22,9 @@ import {
   userLocationRoles,
   providerSchedules,
   locations,
+  inventoryMovements,
+  inventoryItems,
+  treatmentSupplies,
 } from "@/db/schema";
 import { requireSession, SessionError } from "@/lib/auth/get-session";
 import {
@@ -380,27 +383,149 @@ const VALID_STATUSES = [
   "cancelled",
   "no_show",
 ];
+async function checkOwnerOrManager(userId: string): Promise<boolean> {
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (user?.isOwner) return true;
+
+  const role = await db.query.userLocationRoles.findFirst({
+    where: and(eq(userLocationRoles.userId, userId), eq(userLocationRoles.role, "manager")),
+  });
+  return !!role;
+}
+// export async function updateAppointmentStatus(
+
+//   appointmentId: string,
+//   status: string,
+// ): Promise<UpdateStatusResult> {
+//   try {
+//     const session = await requireSession();
+
+//     if (!VALID_STATUSES.includes(status)) {
+//       return {
+//         success: false,
+//         error: "Invalid status value.",
+//         code: "VALIDATION",
+//       };
+//     }
+
+//     // Fetches everything an email would need (patient name/email, treatment
+//     // name, time) in the SAME query that already confirms ownership - no
+//     // separate lookup needed just to build the email later.
+//     const [existingAppointment] = await db
+//       .select({
+//         id: appointments.id,
+//         patientName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`,
+//         patientEmail: patients.email,
+//         treatmentName: treatments.name,
+//         startTime: appointments.startTime,
+//       })
+//       .from(appointments)
+//       .innerJoin(locations, eq(appointments.locationId, locations.id))
+//       .innerJoin(patients, eq(appointments.patientId, patients.id))
+//       .innerJoin(treatments, eq(appointments.treatmentId, treatments.id))
+//       .where(
+//         and(
+//           eq(appointments.id, appointmentId),
+//           eq(locations.orgId, session.orgId),
+//         ),
+//       )
+//       .limit(1);
+
+//     if (!existingAppointment) {
+//       return {
+//         success: false,
+//         error: "Appointment not found.",
+//         code: "NOT_FOUND",
+//       };
+//     }
+
+//     await db
+//       .update(appointments)
+//       .set({ status: status as any })
+//       .where(eq(appointments.id, appointmentId));
+
+//     // Email is deliberately best-effort, AFTER the status change already
+//     // succeeded - a flaky email must never roll back or fail an otherwise
+//     // successful status update, same reasoning as the doctor welcome email.
+//     if (existingAppointment.patientEmail) {
+//       try {
+//         if (status === "confirmed") {
+//           await sendAppointmentConfirmedEmail(
+//             existingAppointment.patientEmail,
+//             existingAppointment.patientName,
+//             existingAppointment.treatmentName,
+//             existingAppointment.startTime,
+//           );
+//         } else if (status === "cancelled") {
+//           await sendAppointmentCancelledEmail(
+//             existingAppointment.patientEmail,
+//             existingAppointment.patientName,
+//             existingAppointment.treatmentName,
+//             existingAppointment.startTime,
+//           );
+//         }
+//       } catch (emailErr) {
+//         console.error(
+//           "Appointment status updated, but email failed to send:",
+//           emailErr,
+//         );
+//       }
+//     }
+
+//     return { success: true };
+//   } catch (err) {
+//     if (err instanceof SessionError) {
+//       return { success: false, error: err.message, code: "UNAUTHORIZED" };
+//     }
+//     console.error(err);
+//     return {
+//       success: false,
+//       error: "Something went wrong updating the appointment.",
+//       code: "SERVER_ERROR",
+//     };
+//   }
+// }
+
+// ---------------------- assign doctor ------------------------------------
+
+
+export const updateStatusSchema = z.object({
+  status: z.enum(["requested", "confirmed", "checked_in", "completed", "cancelled", "no_show"]),
+  // Only ever has any effect when status is "completed" AND stock is
+  // genuinely insufficient AND the caller holds isOwner/manager -
+  // silently ignored in every other case, checked inside
+  // updateAppointmentStatus itself via checkOwnerOrManager.
+  forceComplete: z.boolean().optional(),
+});
+
+
+
 export async function updateAppointmentStatus(
   appointmentId: string,
-  status: string,
+  input: unknown
 ): Promise<UpdateStatusResult> {
   try {
     const session = await requireSession();
 
+    const parsed = updateStatusSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input.", code: "VALIDATION" };
+    }
+    const { status, forceComplete } = parsed.data;
+
     if (!VALID_STATUSES.includes(status)) {
-      return {
-        success: false,
-        error: "Invalid status value.",
-        code: "VALIDATION",
-      };
+      return { success: false, error: "Invalid status value.", code: "VALIDATION" };
     }
 
-    // Fetches everything an email would need (patient name/email, treatment
-    // name, time) in the SAME query that already confirms ownership - no
-    // separate lookup needed just to build the email later.
+    // Now also fetches currentStatus and treatmentId - needed for the
+    // redundant-completion guard and the supply lookup below, on top of
+    // everything the email logic already needed.
     const [existingAppointment] = await db
       .select({
         id: appointments.id,
+        currentStatus: appointments.status,
+        treatmentId: appointments.treatmentId,
+        locationId: appointments.locationId,
         patientName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`,
         patientEmail: patients.email,
         treatmentName: treatments.name,
@@ -410,30 +535,81 @@ export async function updateAppointmentStatus(
       .innerJoin(locations, eq(appointments.locationId, locations.id))
       .innerJoin(patients, eq(appointments.patientId, patients.id))
       .innerJoin(treatments, eq(appointments.treatmentId, treatments.id))
-      .where(
-        and(
-          eq(appointments.id, appointmentId),
-          eq(locations.orgId, session.orgId),
-        ),
-      )
+      .where(and(eq(appointments.id, appointmentId), eq(locations.orgId, session.orgId)))
       .limit(1);
 
     if (!existingAppointment) {
-      return {
-        success: false,
-        error: "Appointment not found.",
-        code: "NOT_FOUND",
-      };
+      return { success: false, error: "Appointment not found.", code: "NOT_FOUND" };
     }
 
-    await db
-      .update(appointments)
-      .set({ status: status as any })
-      .where(eq(appointments.id, appointmentId));
+    // Only a genuine transition INTO completed triggers deduction -
+    // re-saving an already-completed appointment never deducts twice.
+    const isNewCompletion = status === "completed" && existingAppointment.currentStatus !== "completed";
 
-    // Email is deliberately best-effort, AFTER the status change already
-    // succeeded - a flaky email must never roll back or fail an otherwise
-    // successful status update, same reasoning as the doctor welcome email.
+    if (isNewCompletion) {
+      const supplies = await db
+        .select({
+          itemId: treatmentSupplies.itemId,
+          itemName: inventoryItems.name,
+          quantityRequired: treatmentSupplies.quantityRequired,
+        })
+        .from(treatmentSupplies)
+        .innerJoin(inventoryItems, eq(treatmentSupplies.itemId, inventoryItems.id))
+        .where(eq(treatmentSupplies.treatmentId, existingAppointment.treatmentId));
+
+      if (supplies.length > 0) {
+        const itemIds = supplies.map((s) => s.itemId);
+        const stockRows = await db
+          .select({
+            itemId: inventoryMovements.itemId,
+            currentStock: sql<number>`coalesce(sum(${inventoryMovements.quantity}), 0)::int`,
+          })
+          .from(inventoryMovements)
+          .where(inArray(inventoryMovements.itemId, itemIds))
+          .groupBy(inventoryMovements.itemId);
+
+        const stockByItem = new Map(stockRows.map((r) => [r.itemId, r.currentStock]));
+        const shortages = supplies.filter((s) => (stockByItem.get(s.itemId) ?? 0) < s.quantityRequired);
+
+        if (shortages.length > 0) {
+          const canOverride = forceComplete && (await checkOwnerOrManager(session.userId));
+          if (!canOverride) {
+            const shortageList = shortages.map((s) => s.itemName).join(", ");
+            return {
+              success: false,
+              error: `Not enough stock to complete: ${shortageList}. An owner or manager can override this.`,
+              code: "VALIDATION",
+            };
+          }
+        }
+
+        // Status change and every deduction happen together - either
+        // all succeed, or none do.
+        await db.transaction(async (tx) => {
+          await tx.update(appointments).set({ status: "completed" }).where(eq(appointments.id, appointmentId));
+          await tx.insert(inventoryMovements).values(
+            supplies.map((s) => ({
+              itemId: s.itemId,
+              locationId: existingAppointment.locationId,
+              quantity: -s.quantityRequired,
+              type: "used" as const,
+              note: "Auto-deducted from appointment completion",
+              appointmentId: existingAppointment.id,
+              recordedByUserId: session.userId,
+            }))
+          );
+        });
+      } else {
+        // No supply list defined for this treatment - completes normally.
+        await db.update(appointments).set({ status: "completed" }).where(eq(appointments.id, appointmentId));
+      }
+    } else {
+      // Every other status change - unchanged from before, no inventory
+      // logic involved at all.
+      await db.update(appointments).set({ status: status as any }).where(eq(appointments.id, appointmentId));
+    }
+
+    // Email logic - completely unchanged from your original file.
     if (existingAppointment.patientEmail) {
       try {
         if (status === "confirmed") {
@@ -441,21 +617,18 @@ export async function updateAppointmentStatus(
             existingAppointment.patientEmail,
             existingAppointment.patientName,
             existingAppointment.treatmentName,
-            existingAppointment.startTime,
+            existingAppointment.startTime
           );
         } else if (status === "cancelled") {
           await sendAppointmentCancelledEmail(
             existingAppointment.patientEmail,
             existingAppointment.patientName,
             existingAppointment.treatmentName,
-            existingAppointment.startTime,
+            existingAppointment.startTime
           );
         }
       } catch (emailErr) {
-        console.error(
-          "Appointment status updated, but email failed to send:",
-          emailErr,
-        );
+        console.error("Appointment status updated, but email failed to send:", emailErr);
       }
     }
 
@@ -465,15 +638,20 @@ export async function updateAppointmentStatus(
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return {
-      success: false,
-      error: "Something went wrong updating the appointment.",
-      code: "SERVER_ERROR",
-    };
+    return { success: false, error: "Something went wrong updating the appointment.", code: "SERVER_ERROR" };
   }
 }
 
-// ---------------------- assign doctor ------------------------------------
+
+
+
+
+
+
+
+
+
+
 export type ReassignResult =
   | { success: true }
   | { success: false; error: string; code: BookAppointmentErrorCode };
