@@ -52,7 +52,7 @@ interface Material {
   itemId?: string;
   name: string;
   currentStock: number;
-  unit: "g" | "kg" | "ml" | "L" | "pieces" | "boxes";
+  unit: string;
   minStockLevel: number;
   createdAt: string;
   categoryId?: string | null;
@@ -228,6 +228,17 @@ export default function InventoryPage() {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState("");
 
+  const [unitsList, setUnitsList] = useState<string[]>([
+    "boxes",
+    "pieces",
+    "kg",
+    "g",
+    "L",
+    "ml",
+  ]);
+  const [isAddingUnit, setIsAddingUnit] = useState(false);
+  const [newUnitInput, setNewUnitInput] = useState("");
+
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
   const [profileTab, setProfileTab] = useState<"detail" | "history">("detail");
 
@@ -259,12 +270,25 @@ export default function InventoryPage() {
     setIsAddingCategory(false);
   }
 
+  function addNewUnit() {
+    const trimmed = newUnitInput.trim();
+    if (!trimmed) return;
+    if (!unitsList.includes(trimmed)) {
+      setUnitsList((prev) => [...prev, trimmed]);
+    }
+    setForm((p) => ({ ...p, unit: trimmed }));
+    setNewUnitInput("");
+    setIsAddingUnit(false);
+  }
+
   function openAddModal() {
     setModalMode("add");
     setEditingId(null);
     setForm({ ...EMPTY_FORM, categoryId: categories[0]?.id ?? "" });
     setIsAddingCategory(false);
     setNewCategoryInput("");
+    setIsAddingUnit(false);
+    setNewUnitInput("");
     setModalOpen(true);
   }
 
@@ -274,6 +298,11 @@ export default function InventoryPage() {
     setForm(materialToForm(m));
     setIsAddingCategory(false);
     setNewCategoryInput("");
+    setIsAddingUnit(false);
+    setNewUnitInput("");
+    if (m.unit && !unitsList.includes(m.unit)) {
+      setUnitsList((prev) => [...prev, m.unit]);
+    }
     setModalOpen(true);
   }
 
@@ -320,6 +349,7 @@ export default function InventoryPage() {
             ? {
                 ...m,
                 name: form.name.trim(),
+                unit: form.unit,
                 minStockLevel: Number(form.minStockLevel) || 0,
                 categoryId: form.categoryId || null,
                 categoryName: category?.name ?? null,
@@ -332,6 +362,7 @@ export default function InventoryPage() {
           ? {
               ...prev,
               name: form.name.trim(),
+              unit: form.unit,
               minStockLevel: Number(form.minStockLevel) || 0,
               categoryId: form.categoryId || null,
               categoryName: category?.name ?? null,
@@ -803,19 +834,64 @@ export default function InventoryPage() {
                       <Boxes className="h-3.5 w-3.5" strokeWidth={2} />
                       Unit
                     </span>
-                    <select
-                      disabled={modalMode === "edit"}
-                      value={form.unit}
-                      onChange={(e) => update("unit", e.target.value as Material["unit"])}
-                      className={`${inputClass} disabled:bg-slate-100 disabled:text-slate-400`}
-                    >
-                      <option value="boxes">Boxes</option>
-                      <option value="pieces">Pieces</option>
-                      <option value="kg">Kilograms (kg)</option>
-                      <option value="g">Grams (g)</option>
-                      <option value="L">Liters (L)</option>
-                      <option value="ml">Milliliters (ml)</option>
-                    </select>
+                    {!isAddingUnit ? (
+                      <select
+                        value={form.unit}
+                        onChange={(e) => {
+                          if (e.target.value === ADD_NEW_VALUE) {
+                            setIsAddingUnit(true);
+                          } else {
+                            update("unit", e.target.value);
+                          }
+                        }}
+                        className={inputClass}
+                      >
+                        {unitsList.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                        <option value={ADD_NEW_VALUE}>+ Add New Unit</option>
+                      </select>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <input
+                          autoFocus
+                          type="text"
+                          placeholder="New unit (e.g. bottles)"
+                          value={newUnitInput}
+                          onChange={(e) => setNewUnitInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addNewUnit();
+                            }
+                            if (e.key === "Escape") {
+                              setIsAddingUnit(false);
+                              setNewUnitInput("");
+                            }
+                          }}
+                          className={inputClass}
+                        />
+                        <button
+                          type="button"
+                          onClick={addNewUnit}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#7da3b3] text-white transition-colors hover:bg-[#345263]"
+                        >
+                          <Check className="h-4 w-4" strokeWidth={2} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingUnit(false);
+                            setNewUnitInput("");
+                          }}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-900/10 text-slate-500 transition-colors hover:bg-slate-50"
+                        >
+                          <X className="h-4 w-4" strokeWidth={2} />
+                        </button>
+                      </div>
+                    )}
                   </label>
 
                   {modalMode === "add" && (

@@ -19,6 +19,8 @@ import {
   Globe,
   MapPin,
   Layers,
+  ImagePlus,
+  X,
 } from "lucide-react";
 
 const STATUSES = ["Active", "Inactive"] as const;
@@ -35,11 +37,13 @@ type Organization = {
   name: string;
   slug: string;
   status: OrgStatus;
+  email: string;
   ownerName: string;
   ownerEmail: string;
   phone: string;
   outletCount: number;
   createdDate: string;
+  picture: string | null;
 };
 
 const SEED_ORGS: Organization[] = [
@@ -49,11 +53,13 @@ const SEED_ORGS: Organization[] = [
     name: "Chitwan Dental Home",
     slug: "chitwan-dental",
     status: "Active",
+    email: "hello@chitwandental.com",
     ownerName: "Dr. Anish Shrestha",
     ownerEmail: "anish@chitwandental.com",
     phone: "+977 56-123456",
     outletCount: 2,
     createdDate: "2025-11-02",
+    picture: null,
   },
   {
     id: "2",
@@ -61,11 +67,13 @@ const SEED_ORGS: Organization[] = [
     name: "Everest Smile Studio",
     slug: "everest-smile",
     status: "Active",
+    email: "hello@everestsmile.com",
     ownerName: "Dr. Sarita Lama",
     ownerEmail: "sarita@everestsmile.com",
     phone: "+977 1-4456789",
     outletCount: 1,
     createdDate: "2026-07-15",
+    picture: null,
   },
   {
     id: "3",
@@ -73,11 +81,13 @@ const SEED_ORGS: Organization[] = [
     name: "Pokhara Family Dental",
     slug: "pokhara-family-dental",
     status: "Active",
+    email: "hello@pokharafamily.com",
     ownerName: "Dr. Bikash Gurung",
     ownerEmail: "bikash@pokharafamily.com",
     phone: "+977 61-556677",
     outletCount: 3,
     createdDate: "2026-01-20",
+    picture: null,
   },
   {
     id: "4",
@@ -85,11 +95,13 @@ const SEED_ORGS: Organization[] = [
     name: "Lumbini Orthodontics",
     slug: "lumbini-ortho",
     status: "Inactive",
+    email: "hello@lumbiniortho.com",
     ownerName: "Dr. Rekha Poudel",
     ownerEmail: "rekha@lumbiniortho.com",
     phone: "+977 71-889900",
     outletCount: 4,
     createdDate: "2025-09-08",
+    picture: null,
   },
 ];
 
@@ -97,9 +109,11 @@ const EMPTY_FORM = {
   name: "",
   slug: "",
   status: "Active" as OrgStatus,
+  email: "",
   ownerName: "",
   ownerEmail: "",
   phone: "",
+  picture: null as string | null,
 };
 
 type FormState = typeof EMPTY_FORM;
@@ -112,9 +126,11 @@ function orgToForm(o: Organization): FormState {
     name: o.name,
     slug: o.slug,
     status: o.status,
+    email: o.email,
     ownerName: o.ownerName,
     ownerEmail: o.ownerEmail,
     phone: o.phone,
+    picture: o.picture ?? null,
   };
 }
 
@@ -130,6 +146,15 @@ function formatDateLabel(dateStr?: string) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString();
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function OrganizationsPage() {
@@ -197,6 +222,19 @@ export default function OrganizationsPage() {
       }
       return next;
     });
+  }
+
+  async function handlePictureChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      update("picture", dataUrl);
+    } catch {
+      // ignore read errors silently, user can retry
+    } finally {
+      e.target.value = "";
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -343,6 +381,7 @@ export default function OrganizationsPage() {
                   <th className="px-5 py-3 font-medium">Organization</th>
                   <th className="px-5 py-3 font-medium">Owner</th>
                   <th className="px-5 py-3 font-medium">Email</th>
+                  <th className="px-5 py-3 font-medium">Phone</th>
                   <th className="px-5 py-3 font-medium">Outlets</th>
                   <th className="px-5 py-3 font-medium">Created</th>
                   <th className="px-5 py-3 font-medium">Status</th>
@@ -358,15 +397,19 @@ export default function OrganizationsPage() {
                   >
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#7da3b3]/15 text-[#345263]">
-                          <Building2 className="h-4 w-4" strokeWidth={2} />
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#7da3b3]/15 text-[#345263]">
+                          {o.picture ? (
+                            <img
+                              src={o.picture}
+                              alt={o.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <Building2 className="h-4 w-4" strokeWidth={2} />
+                          )}
                         </div>
                         <div>
                           <p className="text-[0.9rem] font-semibold text-slate-900">{o.name}</p>
-                          <p className="mt-0.5 flex items-center gap-1 text-[0.75rem] text-slate-500">
-                            <Globe className="h-3 w-3" strokeWidth={2} />
-                            {o.slug}.abstrakt.app
-                          </p>
                         </div>
                       </div>
                     </td>
@@ -379,7 +422,13 @@ export default function OrganizationsPage() {
                     <td className="px-5 py-4 text-[0.85rem] text-slate-600">
                       <p className="flex items-center gap-1.5">
                         <Mail className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                        {o.ownerEmail}
+                        {o.email}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4 text-[0.85rem] text-slate-600">
+                      <p className="flex items-center gap-1.5">
+                        <Phone className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                        {o.phone || "—"}
                       </p>
                     </td>
                     <td className="px-5 py-4 text-[0.85rem] text-slate-600">
@@ -436,7 +485,7 @@ export default function OrganizationsPage() {
 
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="bg-white py-16 text-center text-slate-500">
+                    <td colSpan={8} className="bg-white py-16 text-center text-slate-500">
                       No organizations match your filters.
                     </td>
                   </tr>
@@ -471,11 +520,10 @@ export default function OrganizationsPage() {
                   <button
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
-                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${
-                      currentPage === pageNum
-                        ? "bg-[#7da3b3] text-white shadow-sm"
-                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                    }`}
+                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
+                      ? "bg-[#7da3b3] text-white shadow-sm"
+                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      }`}
                   >
                     {pageNum}
                   </button>
@@ -520,6 +568,48 @@ export default function OrganizationsPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <label className="block">
                   <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                    <ImagePlus className="h-3.5 w-3.5" strokeWidth={2} />
+                    Organization picture
+                  </span>
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#7da3b3]/15 text-[#345263]">
+                      {form.picture ? (
+                        <img
+                          src={form.picture}
+                          alt="Organization preview"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Building2 className="h-6 w-6" strokeWidth={2} />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-900/10 bg-white px-4 py-2 text-[0.8rem] font-medium text-slate-600 transition-colors hover:bg-slate-100">
+                        <ImagePlus className="h-3.5 w-3.5" strokeWidth={2} />
+                        {form.picture ? "Change picture" : "Upload picture"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePictureChange}
+                          className="hidden"
+                        />
+                      </label>
+                      {form.picture && (
+                        <button
+                          type="button"
+                          onClick={() => update("picture", null)}
+                          className="inline-flex items-center gap-1 rounded-full px-3 py-2 text-[0.8rem] font-medium text-rose-500 transition-colors hover:bg-rose-50"
+                        >
+                          <X className="h-3.5 w-3.5" strokeWidth={2} />
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
                     <Building2 className="h-3.5 w-3.5" strokeWidth={2} />
                     Organization name
                   </span>
@@ -536,22 +626,36 @@ export default function OrganizationsPage() {
                 <label className="block">
                   <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
                     <Globe className="h-3.5 w-3.5" strokeWidth={2} />
-                    Slug (subdomain)
+                    Slug
                   </span>
-                  <div className="flex items-center gap-2">
-                    <input
-                      required
-                      type="text"
-                      value={form.slug}
-                      onChange={(e) => {
-                        setSlugTouched(true);
-                        update("slug", slugify(e.target.value));
-                      }}
-                      placeholder="everest-smile"
-                      className={inputClass}
-                    />
-                    <span className="whitespace-nowrap text-[0.8rem] text-slate-400">.abstrakt.app</span>
-                  </div>
+                  <input
+
+
+                    required
+                    type="text"
+                    value={form.slug}
+                    onChange={(e) => {
+                      setSlugTouched(true);
+                      update("slug", slugify(e.target.value));
+                    }}
+                    placeholder="everest-smile"
+                    className={inputClass}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
+                    <Mail className="h-3.5 w-3.5" strokeWidth={2} />
+                    Organization email
+                  </span>
+                  <input
+                    required
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => update("email", e.target.value)}
+                    placeholder="hello@everestsmile.com"
+                    className={inputClass}
+                  />
                 </label>
 
                 <label className="block">
@@ -671,15 +775,23 @@ export default function OrganizationsPage() {
 
             <div className="px-6 py-6">
               <div className="flex items-start gap-4">
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[#7da3b3]/15 text-[#3f6274] ring-4 ring-white">
-                  <Building2 className="h-8 w-8" strokeWidth={1.8} />
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#7da3b3]/15 text-[#3f6274] ring-4 ring-white">
+                  {selectedOrg.picture ? (
+                    <img
+                      src={selectedOrg.picture}
+                      alt={selectedOrg.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Building2 className="h-8 w-8" strokeWidth={1.8} />
+                  )}
                 </div>
 
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900">{selectedOrg.name}</h2>
                   <p className="mt-1 flex items-center gap-1 text-[0.82rem] text-slate-500">
                     <Globe className="h-3.5 w-3.5" strokeWidth={2} />
-                    {selectedOrg.slug}.abstrakt.app
+                    {selectedOrg.email}
                   </p>
 
                   <div className="mt-2 flex flex-wrap items-center gap-2">

@@ -13,14 +13,14 @@ import { and, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 export type ErrorCode = "UNAUTHORIZED" | "SERVER_ERROR";
 export type OrgBillingStatsResult =
   | {
-    success: true;
-    stats: {
-      totalRevenueCents: number;
-      totalCollectedCents: number;
-      outstandingDuesCents: number;
-      collectionRatePercent: number;
-    };
-  }
+      success: true;
+      stats: {
+        totalRevenueCents: number;
+        totalCollectedCents: number;
+        outstandingDuesCents: number;
+        collectionRatePercent: number;
+      };
+    }
   | { success: false; error: string; code: ErrorCode };
 
 // Org-wide by default, matching the "All outlets" selector - narrows to
@@ -287,7 +287,7 @@ export async function getPaymentMethodMix(
         (r: any): r is { method: string; amountCents: number } =>
           r.method !== null,
       )
-      .map((r) => ({ method: r.method, amountCents: r.amountCents }));
+      .map((r:any) => ({ method: r.method, amountCents: r.amountCents }));
 
     return { success: true, breakdown };
   } catch (err) {
@@ -305,16 +305,16 @@ export async function getPaymentMethodMix(
 
 export type OutletPerformanceResult =
   | {
-    success: true;
-    outlets: {
-      locationId: string;
-      outletName: string;
-      chargedCents: number;
-      collectedCents: number;
-      outstandingCents: number;
-      collectionRatePercent: number;
-    }[];
-  }
+      success: true;
+      outlets: {
+        locationId: string;
+        outletName: string;
+        chargedCents: number;
+        collectedCents: number;
+        outstandingCents: number;
+        collectionRatePercent: number;
+      }[];
+    }
   | { success: false; error: string; code: ErrorCode };
 
 export async function getOutletPerformance(): Promise<OutletPerformanceResult> {
@@ -360,9 +360,9 @@ export async function getOutletPerformance(): Promise<OutletPerformanceResult> {
 
 export type RevenueByDoctorResult =
   | {
-    success: true;
-    doctors: { doctorId: string; doctorName: string; revenueCents: number }[];
-  }
+      success: true;
+      doctors: { doctorId: string; doctorName: string; revenueCents: number }[];
+    }
   | { success: false; error: string; code: ErrorCode };
 
 // Org-wide, across EVERY outlet - not locationId-scoped like the admin
@@ -415,19 +415,19 @@ export async function getRevenueByDoctor(
 
 export type TopOutstandingResult =
   | {
-    success: true;
-    patients: {
-      patientId: string;
-      patientName: string;
-      patientPhone: string | null;
-      outletName: string;
-      lastActivity: Date | null;
-      chargedCents: number;
-      paidCents: number;
-      balanceCents: number;
-    }[];
-    pagination: { total: number; limit: number; offset: number };
-  }
+      success: true;
+      patients: {
+        patientId: string;
+        patientName: string;
+        patientPhone: string | null;
+        outletName: string;
+        lastActivity: Date | null;
+        chargedCents: number;
+        paidCents: number;
+        balanceCents: number;
+      }[];
+      pagination: { total: number; limit: number; offset: number };
+    }
   | { success: false; error: string; code: ErrorCode };
 
 const DEFAULT_LIMIT = 5;
@@ -506,44 +506,44 @@ export async function getTopOutstandingPatients(options?: {
 // getAll
 export type AllOrganizationDashboardResult =
   | {
-    success: true;
-    dashboard: {
-      billingStats: {
-        totalRevenueCents: number;
-        totalCollectedCents: number;
-        outstandingDuesCents: number;
-        collectionRatePercent: number;
-      };
-      collectionsChart: { label: string; amountCents: number }[];
-      paymentMethodMix: { method: string; amountCents: number }[];
-      outletPerformance: {
-        locationId: string;
-        outletName: string;
-        chargedCents: number;
-        collectedCents: number;
-        outstandingCents: number;
-        collectionRatePercent: number;
-      }[];
-      revenueByDoctor: {
-        doctorId: string;
-        doctorName: string;
-        revenueCents: number;
-      }[];
-      topOutstanding: {
-        patients: {
-          patientId: string;
-          patientName: string;
-          patientPhone: string | null;
+      success: true;
+      dashboard: {
+        billingStats: {
+          totalRevenueCents: number;
+          totalCollectedCents: number;
+          outstandingDuesCents: number;
+          collectionRatePercent: number;
+        };
+        collectionsChart: { label: string; amountCents: number }[];
+        paymentMethodMix: { method: string; amountCents: number }[];
+        outletPerformance: {
+          locationId: string;
           outletName: string;
-          lastActivity: Date | null;
           chargedCents: number;
-          paidCents: number;
-          balanceCents: number;
+          collectedCents: number;
+          outstandingCents: number;
+          collectionRatePercent: number;
         }[];
-        pagination: { total: number; limit: number; offset: number };
+        revenueByDoctor: {
+          doctorId: string;
+          doctorName: string;
+          revenueCents: number;
+        }[];
+        topOutstanding: {
+          patients: {
+            patientId: string;
+            patientName: string;
+            patientPhone: string | null;
+            outletName: string;
+            lastActivity: Date | null;
+            chargedCents: number;
+            paidCents: number;
+            balanceCents: number;
+          }[];
+          pagination: { total: number; limit: number; offset: number };
+        };
       };
-    };
-  }
+    }
   | { success: false; error: string };
 export async function getAllOrganizationDashboard(options?: {
   locationId?: string;

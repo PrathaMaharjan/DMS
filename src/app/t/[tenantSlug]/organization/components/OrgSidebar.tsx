@@ -11,9 +11,11 @@ import {
   TrendingUp,
   Settings,
   LogOut,
-    CalendarDays,
-    Stethoscope,
-    Wallet,
+  CalendarDays,
+  Package,
+  Wrench,
+  Stethoscope,
+  Wallet,
 } from "lucide-react";
 
 const ORG_NAV_ITEMS = [
@@ -21,14 +23,23 @@ const ORG_NAV_ITEMS = [
   { label: "Outlets", href: "/outlets", icon: Store },
   { label: "Staffs", href: "/staffs", icon: Users },
 
-  { label: "Doctors", href: "/doctors", icon: Stethoscope},
+  { label: "Doctors", href: "/doctors", icon: Stethoscope },
   { label: "Appointments", href: "/appointments", icon: CalendarDays },
-    { label: "Patients", href: "/patients", icon:  Users  },
-    { label: "Treatments", href: "/treatments", icon: Briefcase },
-    { label: "Billing", href: "/billing", icon: Wallet },
+  { label: "Patients", href: "/patients", icon: Users },
+  { label: "Treatments", href: "/treatments", icon: Briefcase },
+  { label: "Inventory", href: "/inventory", icon: Package },
+  { label: "Service Material", href: "/material", icon: Wrench },
+  { label: "Billing", href: "/billing", icon: Wallet },
 
   { label: " Settings", href: "/settings", icon: Settings },
 ];
+
+function formatTenantSlug(slug?: string): string {
+  if (!slug) return "Chitwan Group";
+  return slug
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 function OrgSidebar() {
   const pathname = usePathname();
@@ -51,19 +62,21 @@ function OrgSidebar() {
     }
   }
 
+  const displayTitle = formatTenantSlug(params.tenantSlug);
+
   return (
     <aside className="sticky top-0 flex h-screen w-70 shrink-0 flex-col self-start bg-[#3f6274] py-6">
 
 
       <div className="flex flex-col gap-1 px-6">
-        <span className="text-2xl font-semibold tracking-tight text-white">
-          Chitwan Group
+        <span className="text-2xl font-semibold tracking-tight text-white capitalize truncate" title={displayTitle}>
+          {displayTitle}
         </span>
         <hr className="border-white/15 mt-7" />
 
       </div>
 
-      <nav className="mt-10 flex flex-1 flex-col gap-2">
+      <nav className="mt-6 flex flex-1 flex-col gap-2">
         {ORG_NAV_ITEMS.map(({ label, href, icon: Icon, exact }) => {
           const fullHref = `${orgRoot}${href}`;
           const active = exact
@@ -88,7 +101,7 @@ function OrgSidebar() {
         })}
       </nav>
 
-    
+
       <div className="mt-auto border-t border-white/15 px-4 pt-4">
         <button
           type="button"

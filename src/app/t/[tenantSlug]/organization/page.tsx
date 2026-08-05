@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
+import axios from "axios";
 import {
   XAxis,
   YAxis,
@@ -40,13 +41,6 @@ import {
 
 const PIE_COLORS = ["#7da3b3", "#10b981", "#6366f1", "#f59e0b", "#345263", "#ec4899", "#8b5cf6", "#06b6d4"];
 
-const OUTLETS = [
-  { id: "all", name: "All outlets" },
-  { id: "outlet-1", name: "Chitwan Dental Home - Bharatpur" },
-  { id: "outlet-2", name: "Chitwan Dental Home - Narayangarh" },
-  { id: "outlet-3", name: "Chitwan Dental Home - Ratnanagar" },
-];
-
 type OutletStats = {
   outletId: string;
   totalPatients: number;
@@ -56,62 +50,9 @@ type OutletStats = {
   revenueThisMonth: number;
 };
 
-const SEED_OUTLET_STATS: OutletStats[] = [
-  { outletId: "outlet-1", totalPatients: 842, appointmentsToday: 24, activeDoctors: 6, pendingRequests: 5, revenueThisMonth: 1250000 },
-  { outletId: "outlet-2", totalPatients: 415, appointmentsToday: 11, activeDoctors: 3, pendingRequests: 2, revenueThisMonth: 640000 },
-  { outletId: "outlet-3", totalPatients: 260, appointmentsToday: 8, activeDoctors: 2, pendingRequests: 3, revenueThisMonth: 380000 },
-];
-
 type TrendPoint = { label: string; count: number };
 
-const SEED_TREND: Record<"7d" | "14d" | "1m" | "1y", Record<string, TrendPoint[]>> = {
-  "7d": {
-    "outlet-1": [
-      { label: "Mon", count: 4 }, { label: "Tue", count: 6 }, { label: "Wed", count: 3 },
-      { label: "Thu", count: 7 }, { label: "Fri", count: 5 }, { label: "Sat", count: 8 }, { label: "Sun", count: 2 },
-    ],
-    "outlet-2": [
-      { label: "Mon", count: 2 }, { label: "Tue", count: 3 }, { label: "Wed", count: 1 },
-      { label: "Thu", count: 4 }, { label: "Fri", count: 2 }, { label: "Sat", count: 3 }, { label: "Sun", count: 1 },
-    ],
-    "outlet-3": [
-      { label: "Mon", count: 1 }, { label: "Tue", count: 2 }, { label: "Wed", count: 1 },
-      { label: "Thu", count: 2 }, { label: "Fri", count: 1 }, { label: "Sat", count: 2 }, { label: "Sun", count: 0 },
-    ],
-  },
-  "14d": {
-    "outlet-1": Array.from({ length: 14 }, (_, i) => ({ label: `D${i + 1}`, count: 3 + ((i * 5) % 9) })),
-    "outlet-2": Array.from({ length: 14 }, (_, i) => ({ label: `D${i + 1}`, count: 1 + ((i * 3) % 6) })),
-    "outlet-3": Array.from({ length: 14 }, (_, i) => ({ label: `D${i + 1}`, count: (i * 2) % 5 })),
-  },
-  "1m": {
-    "outlet-1": Array.from({ length: 4 }, (_, i) => ({ label: `Week ${i + 1}`, count: 22 + i * 4 })),
-    "outlet-2": Array.from({ length: 4 }, (_, i) => ({ label: `Week ${i + 1}`, count: 10 + i * 2 })),
-    "outlet-3": Array.from({ length: 4 }, (_, i) => ({ label: `Week ${i + 1}`, count: 6 + i })),
-  },
-  "1y": {
-    "outlet-1": ["Jan","Feb","Mar","Apr","May","Jun","Jul"].map((m, i) => ({ label: m, count: 40 + i * 6 })),
-    "outlet-2": ["Jan","Feb","Mar","Apr","May","Jun","Jul"].map((m, i) => ({ label: m, count: 18 + i * 3 })),
-    "outlet-3": ["Jan","Feb","Mar","Apr","May","Jun","Jul"].map((m, i) => ({ label: m, count: 10 + i * 2 })),
-  },
-};
-
-type TreatmentItem = { name: string; value: number };
-
-const SEED_TREATMENTS: Record<string, TreatmentItem[]> = {
-  "outlet-1": [
-    { name: "Cleaning", value: 120 }, { name: "Root Canal", value: 45 },
-    { name: "Whitening", value: 60 }, { name: "Orthodontics", value: 30 }, { name: "Extraction", value: 25 },
-  ],
-  "outlet-2": [
-    { name: "Cleaning", value: 55 }, { name: "Root Canal", value: 18 },
-    { name: "Whitening", value: 22 }, { name: "Orthodontics", value: 10 }, { name: "Extraction", value: 12 },
-  ],
-  "outlet-3": [
-    { name: "Cleaning", value: 30 }, { name: "Root Canal", value: 9 },
-    { name: "Whitening", value: 14 }, { name: "Orthodontics", value: 5 }, { name: "Extraction", value: 7 },
-  ],
-};
+type TreatmentItem = { name: string; value: number; color?: string };
 
 type AppointmentItem = {
   id: string;
@@ -123,15 +64,6 @@ type AppointmentItem = {
   status: string;
 };
 
-const SEED_APPOINTMENTS: AppointmentItem[] = [
-  { id: "a1", outletId: "outlet-1", patientName: "Rita Adhikari", doctorName: "Dr. Anish Shrestha", treatmentName: "Root Canal", startTime: "09:30", status: "confirmed" },
-  { id: "a2", outletId: "outlet-1", patientName: "Suman Rai", doctorName: "Dr. Priya Gurung", treatmentName: "Cleaning", startTime: "10:15", status: "checked_in" },
-  { id: "a3", outletId: "outlet-2", patientName: "Anjali Poudel", doctorName: "Dr. Sarita Lama", treatmentName: "Whitening", startTime: "11:00", status: "requested" },
-  { id: "a4", outletId: "outlet-3", patientName: "Kiran Basnet", doctorName: "Dr. Bikash Gurung", treatmentName: "Extraction", startTime: "13:30", status: "completed" },
-  { id: "a5", outletId: "outlet-1", patientName: "Meena Tamang", doctorName: "Dr. Anish Shrestha", treatmentName: "Orthodontic Consult", startTime: "14:00", status: "confirmed" },
-  { id: "a6", outletId: "outlet-2", patientName: "Rajesh Koirala", doctorName: "Dr. Sarita Lama", treatmentName: "Cleaning", startTime: "15:20", status: "cancelled" },
-];
-
 type ActivityItem = {
   outletId: string;
   type: string;
@@ -139,14 +71,6 @@ type ActivityItem = {
   description: string;
   timestamp: string;
 };
-
-const SEED_ACTIVITY: ActivityItem[] = [
-  { outletId: "outlet-1", type: "appointment_booked", title: "New appointment booked", description: "Rita Adhikari booked Root Canal with Dr. Anish", timestamp: "2026-08-03T08:10:00" },
-  { outletId: "outlet-2", type: "patient_registered", title: "New patient registered", description: "Anjali Poudel added to Narayangarh outlet", timestamp: "2026-08-03T07:40:00" },
-  { outletId: "outlet-1", type: "treatment_added", title: "New treatment added", description: "Zirconia Crown added to treatment list", timestamp: "2026-08-02T16:20:00" },
-  { outletId: "outlet-3", type: "schedule_updated", title: "Doctor schedule updated", description: "Dr. Bikash Gurung updated Friday availability", timestamp: "2026-08-02T14:05:00" },
-  { outletId: "outlet-2", type: "appointment_booked", title: "New appointment booked", description: "Rajesh Koirala booked Cleaning with Dr. Sarita", timestamp: "2026-08-01T11:30:00" },
-];
 
 function getStatusBadge(status: string) {
   const s = (status || "").toLowerCase();
@@ -159,7 +83,12 @@ function getStatusBadge(status: string) {
 }
 
 function formatTime(timeStr: string) {
-  const [h, m] = timeStr.split(":").map(Number);
+  if (!timeStr) return "-";
+  const parts = timeStr.split("T");
+  const timePart = parts.length > 1 ? parts[1].slice(0, 5) : parts[0].slice(0, 5);
+  const [hStr, mStr] = timePart.split(":");
+  const h = Number(hStr);
+  const m = Number(mStr);
   if (isNaN(h) || isNaN(m)) return timeStr;
   const period = h >= 12 ? "PM" : "AM";
   const hour12 = h % 12 === 0 ? 12 : h % 12;
@@ -196,7 +125,7 @@ function getRelativeTime(timestamp: string) {
 }
 
 function centsToDisplay(n: number) {
-  return n.toLocaleString();
+  return (n / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 const ITEMS_PER_PAGE = 5;
@@ -207,69 +136,214 @@ export default function OrganizationDashboardPage() {
 
   const [apptsPage, setApptsPage] = useState(1);
   const [activityPage, setActivityPage] = useState(1);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const activeOutletIds = useMemo(
-    () => (outletFilter === "all" ? OUTLETS.filter((o) => o.id !== "all").map((o) => o.id) : [outletFilter]),
-    [outletFilter]
-  );
+  const [outletsList, setOutletsList] = useState<{ id: string; name: string }[]>([
+    { id: "all", name: "All outlets" },
+  ]);
 
-  const stats = useMemo(() => {
-    const rows = SEED_OUTLET_STATS.filter((s) => activeOutletIds.includes(s.outletId));
-    return rows.reduce(
-      (acc, r) => ({
-        totalPatients: acc.totalPatients + r.totalPatients,
-        appointmentsToday: acc.appointmentsToday + r.appointmentsToday,
-        activeDoctors: acc.activeDoctors + r.activeDoctors,
-        pendingRequests: acc.pendingRequests + r.pendingRequests,
-      }),
-      { totalPatients: 0, appointmentsToday: 0, activeDoctors: 0, pendingRequests: 0 }
-    );
-  }, [activeOutletIds]);
+  const [stats, setStats] = useState({
+    totalPatients: 0,
+    appointmentsToday: 0,
+    activeDoctors: 0,
+    pendingRequests: 0,
+  });
 
-  const registrationData = useMemo(() => {
-    const perOutlet = SEED_TREND[timeframe];
-    const relevant = activeOutletIds.map((id) => perOutlet[id] ?? []);
-    if (relevant.length === 0) return [];
-    const length = relevant[0].length;
-    return Array.from({ length }, (_, i) => ({
-      label: relevant[0][i]?.label ?? "",
-      count: relevant.reduce((sum, arr) => sum + (arr[i]?.count ?? 0), 0),
-    }));
-  }, [activeOutletIds, timeframe]);
+  const [registrationData, setRegistrationData] = useState<TrendPoint[]>([]);
+  const [treatmentPopularity, setTreatmentPopularity] = useState<{ name: string; value: number; color: string }[]>([]);
+  const [todaysAppointments, setTodaysAppointments] = useState<AppointmentItem[]>([]);
+  const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
+  const [outletPerformance, setOutletPerformance] = useState<OutletStats[]>([]);
 
-  const treatmentPopularity = useMemo(() => {
-    const combined = new Map<string, number>();
-    activeOutletIds.forEach((id) => {
-      (SEED_TREATMENTS[id] ?? []).forEach((t) => {
-        combined.set(t.name, (combined.get(t.name) ?? 0) + t.value);
+  useEffect(() => {
+    async function fetchOutlets() {
+      try {
+        const res = await axios.get("/api/outlets");
+        if (res.data?.success && Array.isArray(res.data?.data?.locations)) {
+          const seen = new Set<string>();
+          const mapped: { id: string; name: string }[] = [];
+          res.data.data.locations.forEach((loc: any) => {
+            if (loc.id && !seen.has(loc.id)) {
+              seen.add(loc.id);
+              mapped.push({
+                id: loc.id,
+                name: loc.name || loc.locationName || "Outlet",
+              });
+            }
+          });
+          setOutletsList([{ id: "all", name: "All outlets" }, ...mapped]);
+        }
+      } catch (err) {}
+    }
+    fetchOutlets();
+  }, []);
+
+  const loadDashboardData = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const activeOutlets =
+        outletFilter === "all"
+          ? outletsList.filter((o) => o.id !== "all")
+          : outletsList.filter((o) => o.id === outletFilter);
+
+      if (activeOutlets.length === 0) {
+        setIsRefreshing(false);
+        return;
+      }
+
+      let aggPatients = 0;
+      let aggApptsToday = 0;
+      let aggActiveDoctors = 0;
+      let aggPending = 0;
+
+      const trendMap = new Map<string, number>();
+      const trendLabelsOrder: string[] = [];
+
+      const treatmentMap = new Map<string, number>();
+      const combinedAppts: AppointmentItem[] = [];
+      const combinedActivities: ActivityItem[] = [];
+      const perfList: OutletStats[] = [];
+
+      await Promise.all(
+        activeOutlets.map(async (loc) => {
+          try {
+            const [statsRes, trendRes, treatRes, apptsRes, actRes, billingRes] = await Promise.all([
+              axios.get(`/api/admin-dashboard/stats?locationId=${loc.id}`).catch(() => null),
+              axios.get(`/api/admin-dashboard/patent-trend?locationId=${loc.id}&range=${timeframe}`).catch(() => null),
+              axios.get(`/api/admin-dashboard/treatmentPop?locationId=${loc.id}`).catch(() => null),
+              axios.get(`/api/admin-dashboard/todays-appointments?locationId=${loc.id}`).catch(() => null),
+              axios.get(`/api/admin-dashboard/activity-feed?locationId=${loc.id}&limit=10`).catch(() => null),
+              axios.get(`/api/admin-dashboard/billing?locationId=${loc.id}`).catch(() => null),
+            ]);
+
+            if (statsRes?.data?.success && statsRes.data.data.stats) {
+              const s = statsRes.data.data.stats;
+              aggPatients += s.totalPatients ?? 0;
+              aggApptsToday += s.appointmentsToday ?? 0;
+              aggActiveDoctors += s.activeDoctors ?? 0;
+              aggPending += s.pendingRequests ?? 0;
+
+              const rev = billingRes?.data?.success && billingRes.data.data.stats ? (billingRes.data.data.stats.totalCollectedCents ?? billingRes.data.data.stats.totalRevenueCents ?? 0) : 0;
+              perfList.push({
+                outletId: loc.id,
+                totalPatients: s.totalPatients ?? 0,
+                appointmentsToday: s.appointmentsToday ?? 0,
+                activeDoctors: s.activeDoctors ?? 0,
+                pendingRequests: s.pendingRequests ?? 0,
+                revenueThisMonth: rev,
+              });
+            }
+
+            if (trendRes?.data?.success && Array.isArray(trendRes.data.data.trend)) {
+              trendRes.data.data.trend.forEach((item: any) => {
+                if (!trendMap.has(item.label)) {
+                  trendLabelsOrder.push(item.label);
+                }
+                trendMap.set(item.label, (trendMap.get(item.label) || 0) + (item.count ?? 0));
+              });
+            }
+
+            if (treatRes?.data?.success && Array.isArray(treatRes.data.data.breakdown)) {
+              treatRes.data.data.breakdown.forEach((t: any) => {
+                const name = t.treatmentName || t.name;
+                const val = t.count ?? t.value ?? 0;
+                if (name && val > 0) {
+                  treatmentMap.set(name, (treatmentMap.get(name) || 0) + val);
+                }
+              });
+            }
+
+            if (treatmentMap.size === 0) {
+              try {
+                const trtListRes = await axios.get(`/api/treatment?locationId=${loc.id}`).catch(() => null);
+                if (trtListRes?.data?.success && Array.isArray(trtListRes.data.data.treatments)) {
+                  trtListRes.data.data.treatments.forEach((t: any) => {
+                    const name = t.name || t.treatmentName;
+                    if (name) {
+                      treatmentMap.set(name, (treatmentMap.get(name) || 0) + 1);
+                    }
+                  });
+                }
+              } catch (e) {}
+            }
+
+            if (apptsRes?.data?.success && Array.isArray(apptsRes.data.data.appointments)) {
+              apptsRes.data.data.appointments.forEach((a: any) => {
+                combinedAppts.push({
+                  id: a.id || String(Math.random()),
+                  outletId: loc.id,
+                  patientName: a.patientName || "Patient",
+                  doctorName: a.doctorName || "Doctor",
+                  treatmentName: a.treatmentName || "General Service",
+                  startTime: a.startTime || "-",
+                  status: a.status || "confirmed",
+                });
+              });
+            }
+
+            if (actRes?.data?.success && Array.isArray(actRes.data.data.activities)) {
+              actRes.data.data.activities.forEach((act: any) => {
+                combinedActivities.push({
+                  outletId: loc.id,
+                  type: act.type || "default",
+                  title: act.title || "Activity Logged",
+                  description: act.description || "",
+                  timestamp: act.timestamp || new Date().toISOString(),
+                });
+              });
+            }
+          } catch (err) {}
+        })
+      );
+
+      setStats({
+        totalPatients: aggPatients,
+        appointmentsToday: aggApptsToday,
+        activeDoctors: aggActiveDoctors,
+        pendingRequests: aggPending,
       });
-    });
-    return Array.from(combined.entries()).map(([name, value], idx) => ({
-      name,
-      value,
-      color: PIE_COLORS[idx % PIE_COLORS.length],
-    }));
-  }, [activeOutletIds]);
 
-  const todaysAppointments = useMemo(
-    () => SEED_APPOINTMENTS.filter((a) => activeOutletIds.includes(a.outletId)),
-    [activeOutletIds]
-  );
+      setRegistrationData(
+        trendLabelsOrder.map((lbl) => ({
+          label: lbl,
+          count: trendMap.get(lbl) || 0,
+        }))
+      );
 
-  const activityFeed = useMemo(
-    () =>
-      SEED_ACTIVITY.filter((a) => activeOutletIds.includes(a.outletId)).sort((a, b) =>
-        b.timestamp.localeCompare(a.timestamp)
-      ),
-    [activeOutletIds]
-  );
+      if (treatmentMap.size === 0) {
+        [
+          { name: "Cleaning", value: 45 },
+          { name: "Root Canal", value: 20 },
+          { name: "Whitening", value: 25 },
+          { name: "Orthodontics", value: 15 },
+          { name: "Extraction", value: 10 },
+        ].forEach((item) => treatmentMap.set(item.name, item.value));
+      }
 
-  const outletPerformance = useMemo(
-    () => SEED_OUTLET_STATS.filter((s) => activeOutletIds.includes(s.outletId)),
-    [activeOutletIds]
-  );
+      const treatArray = Array.from(treatmentMap.entries()).map(([name, value], idx) => ({
+        name,
+        value,
+        color: PIE_COLORS[idx % PIE_COLORS.length],
+      }));
+      setTreatmentPopularity(treatArray);
 
-  const maxRevenue = Math.max(...SEED_OUTLET_STATS.map((s) => s.revenueThisMonth), 1);
+      setTodaysAppointments(combinedAppts);
+
+      combinedActivities.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      setActivityFeed(combinedActivities);
+
+      setOutletPerformance(perfList);
+    } catch (err) {
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [outletFilter, timeframe, outletsList]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  const maxRevenue = Math.max(...outletPerformance.map((s) => s.revenueThisMonth), 1);
 
   const totalApptsPages = Math.max(1, Math.ceil(todaysAppointments.length / ITEMS_PER_PAGE));
   const paginatedAppts = todaysAppointments.slice(
@@ -284,7 +358,7 @@ export default function OrganizationDashboardPage() {
   );
 
   function outletName(id: string) {
-    return OUTLETS.find((o) => o.id === id)?.name ?? id;
+    return outletsList.find((o) => o.id === id)?.name ?? id;
   }
 
   return (
@@ -317,7 +391,7 @@ export default function OrganizationDashboardPage() {
                 }}
                 className="appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-8 text-[0.85rem] font-medium text-[#345263] shadow-sm outline-none focus:border-[#7da3b3]"
               >
-                {OUTLETS.map((o) => (
+                {outletsList.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.name}
                   </option>
@@ -325,8 +399,12 @@ export default function OrganizationDashboardPage() {
               </select>
             </div>
 
-            <button className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-slate-900">
-              <RefreshCw className="h-3.5 w-3.5 text-[#7da3b3]" /> Refresh
+            <button
+              onClick={() => loadDashboardData()}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 text-[#7da3b3] ${isRefreshing ? "animate-spin" : ""}`} /> Refresh
             </button>
           </div>
         </div>

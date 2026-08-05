@@ -194,7 +194,7 @@ export default function ManagerBillingPage() {
   const [piechartData, setPiechartData] = useState<{ method: string; amountCents: number }[]>([]);
   const [doctorRevenueData, setDoctorRevenueData] = useState<{ name: string; revenueCents: number; pct: number }[]>([]);
   const [adminOutletName, setAdminOutletName] = useState<string>("");
-  const [collectionTimeframe, setCollectionTimeframe] = useState<"7days" | "20days" | "1year">("7days");
+  const [collectionTimeframe, setCollectionTimeframe] = useState<"7d" | "1m" | "6m" | "1y">("7d");
 
   useEffect(() => {
     async function loadAdminLocationAndBilling() {
@@ -223,7 +223,7 @@ export default function ManagerBillingPage() {
 
         if (targetLocId) {
           setAdminOutletName(targetName);
-          const rangeParam = collectionTimeframe === "1year" ? "1y" : collectionTimeframe === "20days" ? "1m" : "7d";
+          const rangeParam = collectionTimeframe;
           const [statsRes, chartRes, pieRes, doctorRes, topPatientsRes, patientsDetailRes] = await Promise.all([
             axios.get(`/api/admin-dashboard/billing?locationId=${targetLocId}`).catch(() => null),
             axios.get(`/api/admin-dashboard/billing/barchart?locationId=${targetLocId}&range=${rangeParam}`).catch(() => null),
@@ -272,7 +272,7 @@ export default function ManagerBillingPage() {
           if (rawPatients.length > 0) {
             const mappedPatients: OutstandingPatient[] = rawPatients.map((p: any) => ({
               id: p.patientId || p.id,
-              name: p.patientName || `${p.firstName || ""} ${p.lastName || ""}`.trim(),
+              name: p.patientName || `${p.firstName || ""}`.trim(),
               phone: p.patientPhone || p.phone || "-",
               outletId: targetLocId,
               chargedCents: p.chargedCents ?? 0,
@@ -308,15 +308,25 @@ export default function ManagerBillingPage() {
 
   const weeklyTrend = useMemo(() => {
     if (barchartData.length > 0) return barchartData;
-    if (collectionTimeframe === "20days") {
+    if (collectionTimeframe === "1m") {
       return [
-        { label: "Day 1-5", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 0.7), 0) },
-        { label: "Day 6-10", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 0.95), 0) },
-        { label: "Day 11-15", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 1.1), 0) },
-        { label: "Day 16-20", collected: activeOutlets.reduce((s, o) => s + Math.round(o.weeklyCollectedNpr.reduce((a, b) => a + b, 0) * 1.25), 0) },
+        { label: "W1", collected: activeOutlets.reduce((s, o) => s + Math.round((o.weeklyCollectedNpr[0] ?? 0) * 0.7), 0) },
+        { label: "W2", collected: activeOutlets.reduce((s, o) => s + Math.round((o.weeklyCollectedNpr[1] ?? 0) * 0.95), 0) },
+        { label: "W3", collected: activeOutlets.reduce((s, o) => s + Math.round((o.weeklyCollectedNpr[2] ?? 0) * 1.1), 0) },
+        { label: "W4", collected: activeOutlets.reduce((s, o) => s + Math.round((o.weeklyCollectedNpr[3] ?? 0) * 1.25), 0) },
       ];
     }
-    if (collectionTimeframe === "1year") {
+    if (collectionTimeframe === "6m") {
+      return [
+        { label: "Month 1", collected: 1250000 },
+        { label: "Month 2", collected: 1400000 },
+        { label: "Month 3", collected: 1350000 },
+        { label: "Month 4", collected: 1600000 },
+        { label: "Month 5", collected: 1750000 },
+        { label: "Month 6", collected: 1550000 },
+      ];
+    }
+    if (collectionTimeframe === "1y") {
       return [
         { label: "Jan", collected: 1250000 },
         { label: "Feb", collected: 1400000 },
@@ -419,7 +429,6 @@ export default function ManagerBillingPage() {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
             Billing Overview
           </h1>
-
         </div>
       </div>
 
@@ -452,7 +461,15 @@ export default function ManagerBillingPage() {
                   <BarChart3 className="h-4 w-4" strokeWidth={2} />
                 </span>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Collections — {collectionTimeframe === "7days" ? "Last 7 Days" : collectionTimeframe === "20days" ? "Last 20 Days" : "Last 1 Year"}
+                  Collections — {
+                    collectionTimeframe === "7d"
+                      ? "Last 7 Days"
+                      : collectionTimeframe === "1m"
+                        ? "Last 1 Month"
+                        : collectionTimeframe === "6m"
+                          ? "Last 6 Months"
+                          : "Last 1 Year"
+                  }
                 </h3>
               </div>
               <select
@@ -460,9 +477,10 @@ export default function ManagerBillingPage() {
                 onChange={(e) => setCollectionTimeframe(e.target.value as any)}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-[#7da3b3]"
               >
-                <option value="7days">7 Days</option>
-                <option value="20days">20 Days</option>
-                <option value="1year">1 Year</option>
+                <option value="7d">7 Days</option>
+                <option value="1m">1 Month</option>
+                <option value="6m">6 Months</option>
+                <option value="1y">1 Year</option>
               </select>
             </div>
             <div className="h-64">
@@ -653,8 +671,8 @@ export default function ManagerBillingPage() {
                     <div className="min-w-[7rem]">
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.72rem] font-medium ${isSettled
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-rose-100 text-rose-700"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-rose-100 text-rose-700"
                           }`}
                       >
                         {isSettled
@@ -699,8 +717,8 @@ export default function ManagerBillingPage() {
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
                     className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
-                        ? "bg-[#7da3b3] text-white shadow-sm"
-                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      ? "bg-[#7da3b3] text-white shadow-sm"
+                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
                       }`}
                   >
                     {pageNum}

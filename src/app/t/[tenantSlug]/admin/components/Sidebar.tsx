@@ -12,6 +12,7 @@ import {
   LogOut,
   Wallet,
   Package,
+  Wrench,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -19,11 +20,21 @@ const NAV_ITEMS = [
   { label: "Appointments", href: "/appointments", icon: CalendarDays },
   { label: "Doctors", href: "/doctors", icon: Stethoscope },
   { label: "Patients", href: "/patients", icon: Users },
+  { label: "Staffs", href: "/staffs", icon: Users },
   { label: "Treatments", href: "/treatments", icon: CalendarDays },
   { label: "Billing", href: "/billing", icon: Wallet },
   { label: "Inventory", href: "/inventory", icon: Package },
+  { label: "Service Material", href: "/material", icon: Wrench },
+
   { label: "Settings", href: "/settings", icon: Settings },
 ];
+
+function formatTenantSlug(slug?: string): string {
+  if (!slug) return "Chitwan Dental";
+  return slug
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 function Sidebar() {
   const pathname = usePathname();
@@ -42,13 +53,15 @@ function Sidebar() {
     router.refresh();
   }
 
+  const displayTitle = formatTenantSlug(params.tenantSlug);
+
   return (
     <aside className="sticky top-0 flex h-screen w-70 shrink-0 flex-col self-start bg-[#3f6274]  py-6">
 
       {/* Brand */}
-      <div className="flex items-center gap-2 px-6">
-        <span className="text-2xl font-semibold tracking-tight text-white">
-          Chitwan Dental
+      <div className="flex flex-col gap-1 px-6">
+        <span className="text-2xl font-semibold tracking-tight text-white capitalize truncate" title={displayTitle}>
+          {displayTitle}
         </span>
         <hr className="border-white/15 mt-7" />
       </div>

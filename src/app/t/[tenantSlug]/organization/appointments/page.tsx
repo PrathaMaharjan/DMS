@@ -76,6 +76,7 @@ type Appointment = {
   rawStatus: string;
   notes?: string;
   createdDate?: string;
+  locationId: string;
 };
 
 const inputClass =
@@ -92,7 +93,6 @@ function getTodayStr() {
   return `${year}-${month}-${day}`;
 }
 
-
 function splitIsoStartTime(isoString: string) {
   const d = new Date(isoString);
   if (isNaN(d.getTime())) return { date: getTodayStr(), time: "09:00" };
@@ -103,7 +103,6 @@ function splitIsoStartTime(isoString: string) {
   const minutes = String(d.getMinutes()).padStart(2, "0");
   return { date: `${year}-${month}-${day}`, time: `${hours}:${minutes}` };
 }
-
 
 function mapApiStatus(rawStatus: string | undefined): Status {
   switch (rawStatus) {
@@ -120,7 +119,6 @@ function mapApiStatus(rawStatus: string | undefined): Status {
       return "Scheduled";
   }
 }
-
 
 function statusToApiValue(status: Status): string {
   switch (status) {
@@ -179,7 +177,6 @@ function getInitials(name: string) {
   return (first + last).toUpperCase();
 }
 
-
 const LIST_GRID = "grid grid-cols-[2fr_1.2fr_1fr_0.9fr_1fr_5rem] items-center gap-4";
 
 export default function AppointmentsPage() {
@@ -214,22 +211,24 @@ export default function AppointmentsPage() {
   const [profileTab, setProfileTab] = useState<"detail" | "notes">("detail");
   const todayStr = getTodayStr();
 
+  // Fetches ALL outlets' appointments once, tags each with its locationId,
+  // and lets the outlet filter run entirely client-side (mirrors the patients page).
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setErrorMsg(null);
 
       const outletsRes = await axios.get("/api/outlets").catch(() => null);
+      let mappedOutletsList: { id: string; name: string }[] = [];
       if (outletsRes?.data?.success && outletsRes.data.data?.locations) {
         const seenOutlets = new Set<string>();
-        const mappedOutlets: { id: string; name: string }[] = [];
         outletsRes.data.data.locations.forEach((l: any) => {
           if (l.id && !seenOutlets.has(l.id)) {
             seenOutlets.add(l.id);
-            mappedOutlets.push({ id: l.id, name: l.name });
+            mappedOutletsList.push({ id: l.id, name: l.name });
           }
         });
-        setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutlets]);
+        setOutletsList([{ id: "all", name: "All outlets" }, ...mappedOutletsList]);
       }
 
       let currentLocId = locationId;
@@ -251,7 +250,7 @@ export default function AppointmentsPage() {
         if (currentLocId) setLocationId(currentLocId);
       }
 
-      if (!currentLocId) {
+      if (!currentLocId && mappedOutletsList.length === 0) {
         setErrorMsg("Location ID could not be identified for this session.");
         setLoading(false);
         return;
@@ -275,7 +274,6 @@ export default function AppointmentsPage() {
         setDoctorsList(docs);
       }
 
-
       const treatmentsRes = await axios.get("/api/treatment").catch(() => null);
       let treatments: TreatmentOption[] = [];
       if (treatmentsRes?.data?.success && treatmentsRes.data.data.treatments) {
@@ -289,35 +287,31 @@ export default function AppointmentsPage() {
         setTreatmentsList(treatments);
       }
 
+      // Always pull appointments for EVERY outlet, tagging each with its
+      // source locationId so filtering can happen client-side without refetching.
+      const targetIds =
+        mappedOutletsList.length > 0 ? mappedOutletsList.map((o) => o.id) : [currentLocId as string];
 
-      let rawAppts: any[] = [];
-      const mappedOutlets = outletsRes?.data?.success && outletsRes.data.data?.locations
-        ? outletsRes.data.data.locations.map((l: any) => l.id).filter(Boolean)
-        : [];
+      const responses = await Promise.all(
+        targetIds.map((id: string) =>
+          axios
+            .get("/api/appoments", { params: { locationId: id } })
+            .then((res) => ({ id, res }))
+            .catch(() => null)
+        )
+      );
 
-      if (outletFilter !== "all") {
-        const apptsRes = await axios.get("/api/appoments", {
-          params: { locationId: outletFilter },
-        });
-        if (apptsRes.data?.success && apptsRes.data.data.appointments) {
-          rawAppts = apptsRes.data.data.appointments;
+      let rawAppts: { raw: any; locationId: string }[] = [];
+      responses.forEach((entry) => {
+        if (entry?.res?.data?.success && entry.res.data.data?.appointments) {
+          entry.res.data.data.appointments.forEach((raw: any) => {
+            rawAppts.push({ raw, locationId: raw.locationId || entry.id });
+          });
         }
-      } else {
-        const targetIds = mappedOutlets.length > 0 ? mappedOutlets : [currentLocId];
-        const responses = await Promise.all(
-          targetIds.map((id: string) =>
-            axios.get("/api/appoments", { params: { locationId: id } }).catch(() => null)
-          )
-        );
-        responses.forEach((res) => {
-          if (res?.data?.success && res.data.data?.appointments) {
-            rawAppts.push(...res.data.data.appointments);
-          }
-        });
-      }
+      });
 
       if (rawAppts.length > 0) {
-        const mapped: Appointment[] = rawAppts.map((a: any) => {
+        const mapped: Appointment[] = rawAppts.map(({ raw: a, locationId: locId }) => {
           const { date, time } = splitIsoStartTime(a.startTime);
 
           const docObj = docs.find(
@@ -343,6 +337,7 @@ export default function AppointmentsPage() {
             createdDate: a.createdAt
               ? new Date(a.createdAt).toISOString().slice(0, 16).replace("T", " ")
               : undefined,
+            locationId: locId,
           };
         });
 
@@ -360,7 +355,9 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     loadData();
-  }, [loadData, outletFilter]);
+    // outletFilter intentionally excluded — filtering now happens client-side
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadData]);
 
   function openProfile(a: Appointment) {
     setSelected(a);
@@ -417,20 +414,24 @@ export default function AppointmentsPage() {
           dateFilter === "All" ||
           (dateFilter === "Today" && a.date === todayStr) ||
           (dateFilter === "Upcoming" && a.date >= todayStr);
-        return matchesQuery && matchesStatus && matchesDate;
+        const matchesOutlet = outletFilter === "all" || a.locationId === outletFilter;
+        return matchesQuery && matchesStatus && matchesDate && matchesOutlet;
       })
       .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-  }, [appointments, query, statusFilter, dateFilter, todayStr]);
+  }, [appointments, query, statusFilter, dateFilter, outletFilter, todayStr]);
 
   const stats = useMemo(() => {
-    const todayCount = appointments.filter((a) => a.date === todayStr).length;
-    const confirmedToday = appointments.filter(
+    // Stats should reflect the currently selected outlet too
+    const scoped =
+      outletFilter === "all" ? appointments : appointments.filter((a) => a.locationId === outletFilter);
+    const todayCount = scoped.filter((a) => a.date === todayStr).length;
+    const confirmedToday = scoped.filter(
       (a) => a.date === todayStr && a.status === "Confirmed"
     ).length;
-    const completed = appointments.filter((a) => a.status === "Completed").length;
-    const cancelled = appointments.filter((a) => a.status === "Cancelled").length;
+    const completed = scoped.filter((a) => a.status === "Completed").length;
+    const cancelled = scoped.filter((a) => a.status === "Cancelled").length;
     return [
-      { icon: CalendarClock, label: "Total Appointments", value: String(appointments.length) },
+      { icon: CalendarClock, label: "Total Appointments", value: String(scoped.length) },
       {
         icon: CalendarDays,
         label: "Today's Appointments",
@@ -445,7 +446,7 @@ export default function AppointmentsPage() {
         trend: cancelled > 0 ? "Needs follow-up" : "None this week",
       },
     ];
-  }, [appointments, todayStr]);
+  }, [appointments, outletFilter, todayStr]);
 
   function updateEdit<K extends keyof typeof editForm>(key: K, value: (typeof editForm)[K]) {
     setEditForm((prev) => ({ ...prev, [key]: value }));
