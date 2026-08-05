@@ -95,7 +95,7 @@ async function deductInventoryForCompletedAppointment(params: {
       if (outletsRes?.data?.success && Array.isArray(outletsRes.data.data?.locations) && outletsRes.data.data.locations.length > 0) {
         locId = outletsRes.data.data.locations[0]?.id;
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   if (!locId) return;
@@ -146,7 +146,7 @@ async function deductInventoryForCompletedAppointment(params: {
             }
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (recipeItems.length === 0 && matchingTreatment && Array.isArray(matchingTreatment.supplies)) {
@@ -175,7 +175,7 @@ async function deductInventoryForCompletedAppointment(params: {
           .catch(() => null);
       }
     }
-  } catch (err) {}
+  } catch (err) { }
 }
 
 function formatDateTime(isoString: string | Date | null | undefined) {
@@ -250,7 +250,7 @@ export default function AppointmentsTab() {
       setLoading(true);
       setErrorMsg(null);
 
-   
+
       let currentLocId = locationId;
       if (!currentLocId) {
         const [servicesRes, treatmentsRes, patientsRes] = await Promise.all([
@@ -272,7 +272,7 @@ export default function AppointmentsTab() {
         }
       }
 
-  
+
       let doctorsRes = await axios
         .get("/api/doctor", {
           params: currentLocId ? { locationId: currentLocId } : undefined,
@@ -304,7 +304,7 @@ export default function AppointmentsTab() {
         }
       }
 
-      
+
       const patientsRes = await axios.get("/api/patent").catch(() => null);
       if (patientsRes?.data?.success && patientsRes.data.data.patients) {
         const pts: Patient[] = patientsRes.data.data.patients.map((p: any) => ({
@@ -406,10 +406,10 @@ export default function AppointmentsTab() {
 
   const filteredPatients = searchPatientQuery
     ? patientsList.filter(
-        (p) =>
-          p.name.toLowerCase().includes(searchPatientQuery.toLowerCase()) ||
-          p.phone.includes(searchPatientQuery)
-      )
+      (p) =>
+        p.name.toLowerCase().includes(searchPatientQuery.toLowerCase()) ||
+        p.phone.includes(searchPatientQuery)
+    )
     : [];
 
   const handleDobChange = (dobValue: string) => {
@@ -618,7 +618,7 @@ export default function AppointmentsTab() {
             return;
           }
         } else {
-       
+
           const fullName = selectedPatient
             ? selectedPatient.name
             : `${registerForm.firstName.trim()} ${registerForm.lastName.trim()}`.trim();
@@ -703,16 +703,9 @@ export default function AppointmentsTab() {
 
   async function handleAttendance(id: string, newStatus: string) {
     try {
-      const targetAppt = appointments.find((a) => a.id === id);
+
       const res = await axios.patch(`/api/appoments/${id}/status`, { status: newStatus });
       if (res.data?.success) {
-        if (newStatus.toLowerCase() === "completed") {
-          await deductInventoryForCompletedAppointment({
-            treatmentId: targetAppt?.treatmentId,
-            treatmentName: targetAppt?.service || (targetAppt as any)?.treatment,
-            locationId: (targetAppt as any)?.locationId || locationId || undefined,
-          });
-        }
         await loadData();
       } else {
         alert(res.data?.error || "Failed to update status.");
@@ -731,10 +724,10 @@ export default function AppointmentsTab() {
       prev.map((a) =>
         a.id === id
           ? {
-              ...a,
-              providerId: newProviderId,
-              dentist: doctorObj ? doctorObj.name : a.dentist,
-            }
+            ...a,
+            providerId: newProviderId,
+            dentist: doctorObj ? doctorObj.name : a.dentist,
+          }
           : a
       )
     );
@@ -828,22 +821,20 @@ export default function AppointmentsTab() {
           <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 p-1">
             <button
               onClick={() => setView("list")}
-              className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
-                view === "list"
+              className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-colors ${view === "list"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-500 hover:text-slate-800"
-              }`}
+                }`}
             >
               <ListChecks className="h-3.5 w-3.5" />
               Appointments
             </button>
             <button
               onClick={() => setView("review")}
-              className={`relative flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
-                view === "review"
+              className={`relative flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-colors ${view === "review"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-500 hover:text-slate-800"
-              }`}
+                }`}
             >
               <Inbox className="h-3.5 w-3.5" />
               Pending Review
@@ -943,9 +934,8 @@ export default function AppointmentsTab() {
                         <StickyNote className="h-3 w-3" /> Notes
                       </p>
                       <p
-                        className={`text-xs leading-snug ${
-                          appt.notes ? "text-slate-600" : "text-slate-400 italic"
-                        }`}
+                        className={`text-xs leading-snug ${appt.notes ? "text-slate-600" : "text-slate-400 italic"
+                          }`}
                       >
                         {appt.notes || "No additional notes from the patient."}
                       </p>
@@ -1057,11 +1047,10 @@ export default function AppointmentsTab() {
                           setPatientMode("search");
                           setSelectedPatient(null);
                         }}
-                        className={`flex items-center justify-center gap-1.5 rounded-lg py-2 transition-all ${
-                          patientMode === "search"
+                        className={`flex items-center justify-center gap-1.5 rounded-lg py-2 transition-all ${patientMode === "search"
                             ? "bg-white text-slate-900 shadow-sm font-semibold"
                             : "text-slate-500 hover:text-slate-800"
-                        }`}
+                          }`}
                       >
                         <Search className="h-3.5 w-3.5" />
                         Existing Patient
@@ -1072,11 +1061,10 @@ export default function AppointmentsTab() {
                           setPatientMode("new");
                           setSelectedPatient(null);
                         }}
-                        className={`flex items-center justify-center gap-1.5 rounded-lg py-2 transition-all ${
-                          patientMode === "new"
+                        className={`flex items-center justify-center gap-1.5 rounded-lg py-2 transition-all ${patientMode === "new"
                             ? "bg-white text-slate-900 shadow-sm font-semibold"
                             : "text-slate-500 hover:text-slate-800"
-                        }`}
+                          }`}
                       >
                         <UserPlus className="h-3.5 w-3.5" />
                         New Patient
@@ -1655,21 +1643,20 @@ export default function AppointmentsTab() {
                                 (appt.attendance === "Checked In"
                                   ? "checked_in"
                                   : appt.attendance === "No-Show"
-                                  ? "no_show"
-                                  : appt.attendance === "Completed"
-                                  ? "completed"
-                                  : "confirmed")
+                                    ? "no_show"
+                                    : appt.attendance === "Completed"
+                                      ? "completed"
+                                      : "confirmed")
                               }
                               onChange={(e) => handleAttendance(appt.id, e.target.value)}
-                              className={`rounded-lg border px-2.5 py-1 text-xs font-semibold outline-none transition-all cursor-pointer ${
-                                appt.attendance === "Checked In" || appt.rawStatus === "checked_in"
+                              className={`rounded-lg border px-2.5 py-1 text-xs font-semibold outline-none transition-all cursor-pointer ${appt.attendance === "Checked In" || appt.rawStatus === "checked_in"
                                   ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                   : appt.attendance === "No-Show" || appt.rawStatus === "no_show"
-                                  ? "border-rose-200 bg-rose-50 text-rose-700"
-                                  : appt.rawStatus === "completed"
-                                  ? "border-slate-200 bg-slate-100 text-slate-600"
-                                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                              }`}
+                                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                                    : appt.rawStatus === "completed"
+                                      ? "border-slate-200 bg-slate-100 text-slate-600"
+                                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                                }`}
                             >
                               <option value="confirmed">Confirmed (Pending)</option>
                               <option value="checked_in">Checked In</option>
@@ -1745,11 +1732,10 @@ export default function AppointmentsTab() {
                         <button
                           key={pageNum}
                           onClick={() => setCurrentPage(pageNum)}
-                          className={`h-7 w-7 rounded-lg text-xs font-semibold transition-colors ${
-                            currentPage === pageNum
+                          className={`h-7 w-7 rounded-lg text-xs font-semibold transition-colors ${currentPage === pageNum
                               ? "bg-[#7da3b3] text-white shadow-sm"
                               : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
-                          }`}
+                            }`}
                         >
                           {pageNum}
                         </button>

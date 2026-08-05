@@ -8,7 +8,6 @@ import {
   Store,
   Users,
   Briefcase,
-  TrendingUp,
   Settings,
   LogOut,
   CalendarDays,
@@ -18,19 +17,17 @@ import {
   Wallet,
 } from "lucide-react";
 
-const ORG_NAV_ITEMS = [
+const BASE_ORG_NAV_ITEMS = [
   { label: "Dashboard", href: "", icon: LayoutDashboard, exact: true },
   { label: "Outlets", href: "/outlets", icon: Store },
   { label: "Staffs", href: "/staffs", icon: Users },
-
   { label: "Doctors", href: "/doctors", icon: Stethoscope },
   { label: "Appointments", href: "/appointments", icon: CalendarDays },
   { label: "Patients", href: "/patients", icon: Users },
   { label: "Treatments", href: "/treatments", icon: Briefcase },
-  { label: "Inventory", href: "/inventory", icon: Package },
-  { label: "Service Material", href: "/material", icon: Wrench },
+  { label: "Inventory", href: "/inventory", icon: Package, requiresInventory: true },
+  { label: "Service Material", href: "/material", icon: Wrench, requiresInventory: true },
   { label: "Billing", href: "/billing", icon: Wallet },
-
   { label: " Settings", href: "/settings", icon: Settings },
 ];
 
@@ -41,12 +38,20 @@ function formatTenantSlug(slug?: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function OrgSidebar() {
+interface OrgSidebarProps {
+  inventoryEnabled?: boolean;
+}
+
+function OrgSidebar({ inventoryEnabled = true }: OrgSidebarProps) {
   const pathname = usePathname();
   const params = useParams<{ tenantSlug: string }>();
   const router = useRouter();
 
   const orgRoot = `/t/${params.tenantSlug}/organization`;
+
+  const ORG_NAV_ITEMS = BASE_ORG_NAV_ITEMS.filter(
+    (item) => !item.requiresInventory || inventoryEnabled
+  );
 
   async function handleLogout() {
     try {

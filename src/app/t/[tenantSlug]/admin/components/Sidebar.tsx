@@ -15,7 +15,7 @@ import {
   Wrench,
 } from "lucide-react";
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { label: "Dashboard", href: "", icon: LayoutDashboard, exact: true },
   { label: "Appointments", href: "/appointments", icon: CalendarDays },
   { label: "Doctors", href: "/doctors", icon: Stethoscope },
@@ -23,9 +23,8 @@ const NAV_ITEMS = [
   { label: "Staffs", href: "/staffs", icon: Users },
   { label: "Treatments", href: "/treatments", icon: CalendarDays },
   { label: "Billing", href: "/billing", icon: Wallet },
-  { label: "Inventory", href: "/inventory", icon: Package },
-  { label: "Service Material", href: "/material", icon: Wrench },
-
+  { label: "Inventory", href: "/inventory", icon: Package, requiresInventory: true },
+  { label: "Service Material", href: "/material", icon: Wrench, requiresInventory: true },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -36,12 +35,20 @@ function formatTenantSlug(slug?: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function Sidebar() {
+interface SidebarProps {
+  inventoryEnabled?: boolean;
+}
+
+function Sidebar({ inventoryEnabled = true }: SidebarProps) {
   const pathname = usePathname();
   const params = useParams<{ tenantSlug: string }>();
   const router = useRouter();
 
   const adminRoot = `/t/${params.tenantSlug}/admin`;
+
+  const NAV_ITEMS = BASE_NAV_ITEMS.filter(
+    (item) => !item.requiresInventory || inventoryEnabled
+  );
 
   async function handleLogout() {
     await axios.post(

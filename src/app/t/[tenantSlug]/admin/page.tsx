@@ -96,17 +96,12 @@ interface LowStockItem {
 const PIE_COLORS = ["#7da3b3", "#10b981", "#6366f1", "#f59e0b", "#345263", "#ec4899", "#8b5cf6", "#06b6d4"];
 
 
-const SOFT_DELETED_INVENTORY_KEY = "dms_soft_deleted_inventory_item_ids_v1";
-
-function getSoftDeletedInventoryIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = localStorage.getItem(SOFT_DELETED_INVENTORY_KEY);
-    return raw ? new Set(JSON.parse(raw)) : new Set();
-  } catch {
-    return new Set();
-  }
-}
+const STATIC_LOW_STOCK_ITEMS: LowStockItem[] = [
+  { id: "inv-1", name: "Dental Anesthetic Cartridges", unit: "cartridges", currentQty: 8, reorderLevel: 25 },
+  { id: "inv-2", name: "Disposable Gloves (M)", unit: "boxes", currentQty: 3, reorderLevel: 10 },
+  { id: "inv-3", name: "Composite Resin", unit: "syringes", currentQty: 5, reorderLevel: 15 },
+  { id: "inv-4", name: "Sterilization Pouches", unit: "packs", currentQty: 2, reorderLevel: 8 },
+];
 
 function getStatusBadge(status: string) {
   const s = (status || "").toLowerCase();
@@ -178,7 +173,7 @@ export default function AdminDashboardPage() {
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
 
 
-  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
+  const [lowStockItems] = useState<LowStockItem[]>(STATIC_LOW_STOCK_ITEMS);
   const [lowStockBannerDismissed, setLowStockBannerDismissed] = useState(false);
   const [lowStockExpanded, setLowStockExpanded] = useState(false);
 
@@ -205,25 +200,18 @@ export default function AdminDashboardPage() {
 
       let currentLocId = locationId;
       if (!currentLocId) {
-        const outletsRes = await axios.get("/api/outlets").catch(() => null);
-        if (outletsRes?.data?.success && Array.isArray(outletsRes.data.data?.locations) && outletsRes.data.data.locations.length > 0) {
-          currentLocId = outletsRes.data.data.locations[0].id;
-        }
+        const [servicesRes, treatmentsRes, patientsRes] = await Promise.all([
+          axios.get("/api/services").catch(() => null),
+          axios.get("/api/treatment").catch(() => null),
+          axios.get("/api/patent").catch(() => null),
+        ]);
 
-        if (!currentLocId) {
-          const [servicesRes, treatmentsRes, patientsRes] = await Promise.all([
-            axios.get("/api/services").catch(() => null),
-            axios.get("/api/treatment").catch(() => null),
-            axios.get("/api/patent").catch(() => null),
-          ]);
-
-          if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
-            currentLocId = servicesRes.data.data.services[0].locationId;
-          } else if (treatmentsRes?.data?.success && treatmentsRes.data.data.treatments?.length > 0) {
-            currentLocId = treatmentsRes.data.data.treatments[0].locationId;
-          } else if (patientsRes?.data?.success && patientsRes.data.data.patients?.length > 0) {
-            currentLocId = patientsRes.data.data.patients[0].locationId;
-          }
+        if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
+          currentLocId = servicesRes.data.data.services[0].locationId;
+        } else if (treatmentsRes?.data?.success && treatmentsRes.data.data.treatments?.length > 0) {
+          currentLocId = treatmentsRes.data.data.treatments[0].locationId;
+        } else if (patientsRes?.data?.success && patientsRes.data.data.patients?.length > 0) {
+          currentLocId = patientsRes.data.data.patients[0].locationId;
         }
 
         if (currentLocId) {
@@ -244,8 +232,6 @@ export default function AdminDashboardPage() {
         utilizationRes,
         appointmentsRes,
         activityRes,
-        lowStockRes,
-        invItemRes,
       ] = await Promise.all([
         axios.get("/api/admin-dashboard/stats", { params: { locationId: currentLocId } }).catch(() => null),
         axios.get("/api/admin-dashboard/patent-trend", { params: { locationId: currentLocId, range: timeframe } }).catch(() => null),
@@ -253,51 +239,11 @@ export default function AdminDashboardPage() {
         axios.get("/api/admin-dashboard/doctor-utilization", { params: { locationId: currentLocId } }).catch(() => null),
         axios.get("/api/admin-dashboard/todays-appointments", { params: { locationId: currentLocId } }).catch(() => null),
         axios.get("/api/admin-dashboard/activity-feed", { params: { locationId: currentLocId, limit: 10 } }).catch(() => null),
-        axios.get("/api/inventory/low-stock", { params: { locationId: currentLocId } }).catch(() => null),
-        axios.get("/api/inventory/item", { params: { locationId: currentLocId } }).catch(() => null),
       ]);
 
       if (statsRes?.data?.success && statsRes.data.data?.stats) {
         setStats(statsRes.data.data.stats);
       }
-
-      const combinedLowStock: LowStockItem[] = [];
-      const seenLowIds = new Set<string>();
-      const deletedIds = getSoftDeletedInventoryIds();
-
-      if (lowStockRes?.data?.success && Array.isArray(lowStockRes.data.data?.items)) {
-        lowStockRes.data.data.items.forEach((it: any) => {
-          if (!deletedIds.has(it.id) && !seenLowIds.has(it.id)) {
-            seenLowIds.add(it.id);
-            combinedLowStock.push({
-              id: it.id,
-              name: it.name,
-              unit: it.unit || "boxes",
-              currentQty: it.currentStock ?? 0,
-              reorderLevel: it.reorderThreshold ?? 0,
-            });
-          }
-        });
-      }
-
-      if (invItemRes?.data?.success && Array.isArray(invItemRes.data.data?.items)) {
-        invItemRes.data.data.items.forEach((it: any) => {
-          const stock = it.currentStock ?? 0;
-          const threshold = it.reorderThreshold ?? 0;
-          if (stock <= threshold && !deletedIds.has(it.id) && !seenLowIds.has(it.id)) {
-            seenLowIds.add(it.id);
-            combinedLowStock.push({
-              id: it.id,
-              name: it.name,
-              unit: it.unit || "boxes",
-              currentQty: stock,
-              reorderLevel: threshold,
-            });
-          }
-        });
-      }
-
-      setLowStockItems(combinedLowStock);
       if (trendRes?.data?.success && trendRes.data.data?.trend) {
         setRegistrationData(trendRes.data.data.trend);
       }
@@ -425,8 +371,14 @@ export default function AdminDashboardPage() {
                     </button>
                   </div>
                 </div>
-
-
+                <p className="mt-0.5 text-xs text-amber-700">
+                  {lowStockItems
+                    .slice(0, 3)
+                    .map((i) => i.name)
+                    .join(", ")}
+                  {lowStockItems.length > 3 ? `, and ${lowStockItems.length - 3} more` : ""} —
+                  reorder soon to avoid disruption.
+                </p>
               </div>
             </div>
 
@@ -442,7 +394,7 @@ export default function AdminDashboardPage() {
                       <div className="min-w-0">
                         <p className="truncate text-xs font-semibold text-slate-800">{item.name}</p>
                         <p className="text-[0.7rem] text-slate-500">
-                          {item.currentQty} {item.unit}
+                          {item.currentQty} / {item.reorderLevel} {item.unit}
                         </p>
                       </div>
                       <span className="ml-2 shrink-0 rounded-full bg-rose-50 px-2 py-0.5 text-[0.65rem] font-bold text-rose-600">

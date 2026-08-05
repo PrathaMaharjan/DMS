@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
+
 import { Calendar, Users, Eye, LogOut, Settings, LayoutDashboard, Wallet } from "lucide-react";
 
 export type FrontDeskTabType = "dashboard" | "appointments" | "patients" | "availability" | "billing" |"settings";
@@ -34,29 +35,9 @@ export default function FrontDeskHeader({
   );
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  useEffect(() => {
-    if (!tenantSlug) return;
+  // Org name is derived from the tenant slug already set as initial state.
+  // (The /api/organization endpoint does not exist — slug formatting is sufficient.)
 
-    let cancelled = false;
-
-    async function loadOrgName() {
-      try {
-        const res = await axios.get(`/api/organization`, {
-          params: { slug: tenantSlug },
-        });
-        if (!cancelled && res.data?.success && res.data.data?.organization?.name) {
-          setOrgName(res.data.data.organization.name);
-        }
-      } catch (err) {
-        console.error("Failed to load organization name", err);
-      }
-    }
-
-    loadOrgName();
-    return () => {
-      cancelled = true;
-    };
-  }, [tenantSlug]);
 
   const handleLogout = async () => {
     if (isLoggingOut) return;

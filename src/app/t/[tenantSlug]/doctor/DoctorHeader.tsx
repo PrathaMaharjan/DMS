@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 import { CalendarDays, Clock, Users, LogOut, Settings } from "lucide-react";
@@ -34,29 +35,9 @@ export default function DoctorHeader({
   );
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  useEffect(() => {
-    if (!tenantSlug) return;
 
-    let cancelled = false;
 
-    async function loadOrgName() {
-      try {
-        const res = await axios.get(`/api/organization`, {
-          params: { slug: tenantSlug },
-        });
-        if (!cancelled && res.data?.success && res.data.data?.organization?.name) {
-          setOrgName(res.data.data.organization.name);
-        }
-      } catch (err) {
-        console.error("Failed to load organization name", err);
-      }
-    }
 
-    loadOrgName();
-    return () => {
-      cancelled = true;
-    };
-  }, [tenantSlug]);
 
   const handleLogout = async () => {
     if (isLoggingOut) return;
@@ -107,55 +88,50 @@ export default function DoctorHeader({
       <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <button
           onClick={() => setActiveTab("dashboard")}
-          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${
-            activeTab === "dashboard"
+          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${activeTab === "dashboard"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <CalendarDays className="h-3.5 w-3.5" />
           Dashboard
         </button>
         <button
           onClick={() => setActiveTab("appointments")}
-          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${
-            activeTab === "appointments"
+          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${activeTab === "appointments"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <CalendarDays className="h-3.5 w-3.5" />
           Appointments
         </button>
         <button
           onClick={() => setActiveTab("patients")}
-          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${
-            activeTab === "patients"
+          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${activeTab === "patients"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <Users className="h-3.5 w-3.5" />
           Patient Records
         </button>
         <button
           onClick={() => setActiveTab("schedule")}
-          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${
-            activeTab === "schedule"
+          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${activeTab === "schedule"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <Clock className="h-3.5 w-3.5" />
           My Availability
         </button>
         <button
           onClick={() => setActiveTab("settings")}
-          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${
-            activeTab === "settings"
+          className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 sm:flex-1 ${activeTab === "settings"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <Settings className="h-3.5 w-3.5" />
           Settings

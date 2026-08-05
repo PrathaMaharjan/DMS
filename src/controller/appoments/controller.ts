@@ -47,11 +47,11 @@ export type BookAppointmentErrorCode =
 
 export type BookAppointmentResult =
   | {
-      success: true;
-      appointmentId: string;
-      patientId: string;
-      wasNewPatient: boolean;
-    }
+    success: true;
+    appointmentId: string;
+    patientId: string;
+    wasNewPatient: boolean;
+  }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 // Schedule-time check disabled for now, on purpose - every active clinical
@@ -311,18 +311,18 @@ export async function bookAppointment(
 // ---------------get gending appoment --------------------------------
 export type PendingReviewResult =
   | {
-      success: true;
-      appointments: {
-        id: string;
-        patientName: string;
-        patientPhone: string | null;
-        patientEmail: string | null;
-        treatmentName: string;
-        startTime: Date;
-        source: string;
-        notes: string | null;
-      }[];
-    }
+    success: true;
+    appointments: {
+      id: string;
+      patientName: string;
+      patientPhone: string | null;
+      patientEmail: string | null;
+      treatmentName: string;
+      startTime: Date;
+      source: string;
+      notes: string | null;
+    }[];
+  }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 export async function getPendingAppointments(
@@ -539,11 +539,7 @@ export async function updateAppointmentStatus(
     const isNewCompletion = status === "completed" && existingAppointment.currentStatus !== "completed";
 
     if (isNewCompletion) {
-      // ADDED - the org-level toggle check. If inventory is off, this
-      // completion behaves exactly as if the treatment had no supply
-      // list at all, regardless of what treatment_supplies actually
-      // contains - "off" genuinely means off everywhere, per what we
-      // agreed a few messages back.
+
       const inventoryOn = await checkInventoryEnabled(session.orgId);
 
       if (!inventoryOn) {
@@ -553,6 +549,7 @@ export async function updateAppointmentStatus(
           .select({
             itemId: treatmentSupplies.itemId,
             itemName: inventoryItems.name,
+            itemLocationId: inventoryItems.locationId,
             quantityRequired: treatmentSupplies.quantityRequired,
           })
           .from(treatmentSupplies)
@@ -561,6 +558,11 @@ export async function updateAppointmentStatus(
 
         if (supplies.length > 0) {
           const itemIds = supplies.map((s) => s.itemId);
+          // Sum movements per item WITHOUT filtering by location — the item's
+          // own locationId (set when the item was created) is the source of
+          // truth for stock. The appointment locationId may be a different UUID
+          // even for the same physical clinic, which caused every stock check
+          // to return 0 and falsely report a shortage.
           const stockRows = await db
             .select({
               itemId: inventoryMovements.itemId,
@@ -590,7 +592,8 @@ export async function updateAppointmentStatus(
             await tx.insert(inventoryMovements).values(
               supplies.map((s) => ({
                 itemId: s.itemId,
-                locationId: existingAppointment.locationId,
+
+                locationId: s.itemLocationId,
                 quantity: -s.quantityRequired,
                 type: "used" as const,
                 note: "Auto-deducted from appointment completion",
@@ -727,22 +730,22 @@ export async function reassignAppointmentDoctor(
 
 export type GetAppointmentsResult =
   | {
-      success: true;
-      appointments: {
-        id: string;
-        patientName: string;
-        patientPhone: string | null;
-        patientEmail: string | null;
-        providerName: string;
-        treatmentName: string;
-        startTime: Date;
-        endTime: Date;
-        status: string;
-        source: string;
-        notes: string | null;
-      }[];
-      pagination: { total: number; limit: number; offset: number };
-    }
+    success: true;
+    appointments: {
+      id: string;
+      patientName: string;
+      patientPhone: string | null;
+      patientEmail: string | null;
+      providerName: string;
+      treatmentName: string;
+      startTime: Date;
+      endTime: Date;
+      status: string;
+      source: string;
+      notes: string | null;
+    }[];
+    pagination: { total: number; limit: number; offset: number };
+  }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 const DEFAULT_LIMIT = 20;
@@ -837,24 +840,24 @@ export async function getAppointments(
 // -----------------------get dingle appoment ----------------------------
 export type GetAppointmentResult =
   | {
-      success: true;
-      appointment: {
-        id: string;
-        patientId: string;
-        patientName: string;
-        patientPhone: string | null;
-        patientEmail: string | null;
-        providerId: string;
-        providerName: string;
-        treatmentId: string;
-        treatmentName: string;
-        startTime: Date;
-        endTime: Date;
-        status: string;
-        source: string;
-        notes: string | null;
-      };
-    }
+    success: true;
+    appointment: {
+      id: string;
+      patientId: string;
+      patientName: string;
+      patientPhone: string | null;
+      patientEmail: string | null;
+      providerId: string;
+      providerName: string;
+      treatmentId: string;
+      treatmentName: string;
+      startTime: Date;
+      endTime: Date;
+      status: string;
+      source: string;
+      notes: string | null;
+    };
+  }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 export async function getAppointment(

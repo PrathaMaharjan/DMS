@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/get-session";
 import { getPrimaryRoleForUser } from "@/lib/auth/role-redirect";
+import { resolveOrgBySlug } from "@/lib/public/resolve-org";
 import Sidebar from "./components/Sidebar";
 
 export default async function AdminLayout({
@@ -24,9 +25,12 @@ export default async function AdminLayout({
     redirect(ownFolder ? `/t/${tenantSlug}/${ownFolder}` : "/login");
   }
 
+  const orgResult = await resolveOrgBySlug(tenantSlug);
+  const inventoryEnabled = orgResult.success ? orgResult.org.inventoryEnabled : false;
+
   return (
     <div className="flex">
-      <Sidebar />
+      <Sidebar inventoryEnabled={inventoryEnabled} />
       <main className="min-h-screen flex-1 bg-slate-50">{children}</main>
     </div>
   );
