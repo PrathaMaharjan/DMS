@@ -73,22 +73,17 @@ interface FrontDeskDashboardData {
     }[];
 }
 
-// TODO: hardcoded placeholder until the billing/ledger API is wired into
-// this dashboard (see BillingPage.tsx for the real computation logic —
-// computeTotals/computeBalance over each patient's ledger entries).
-// Swap these for real aggregates once a /api/billing/summary-style
-// endpoint exists.
-const HARDCODED_BILLING_SNAPSHOT = {
-    collectedTodayCents: 4500000, // NPR 45,000
-    outstandingDuesCents: 12850000, // NPR 128,500
-    patientsWithDues: 7,
-};
-
 function centsToDisplay(cents: number) {
     return (cents / 100).toLocaleString(undefined, {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
     });
+}
+
+interface BillingSnapshot {
+    totalCollectedCents: number;
+    outstandingDuesCents: number;
+    patientsWithDuesCount: number;
 }
 
 export default function DashboardTab({
@@ -99,6 +94,7 @@ export default function DashboardTab({
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [dashboardData, setDashboardData] = useState<FrontDeskDashboardData | null>(null);
+    const [billingStats, setBillingStats] = useState<BillingSnapshot | null>(null);
 
     const loadData = useCallback(async () => {
         try {
@@ -126,17 +122,23 @@ export default function DashboardTab({
                 return;
             }
 
-            const res = await axios.get("/api/frontDesk/dashboard/getAll", {
-                params: { locationId },
-            });
+
+            const [res, billingRes] = await Promise.all([
+                axios.get("/api/frontDesk/dashboard/getAll", { params: { locationId } }),
+                axios.get("/api/billing/stats", { params: { locationId } }).catch(() => null),
+            ]);
 
             if (res?.data?.success && res.data.data) {
                 setDashboardData(res.data.data);
             } else {
                 setErrorMsg(res?.data?.error || "Failed to load dashboard data.");
             }
+
+            if (billingRes?.data?.success && billingRes.data.data?.stats) {
+                setBillingStats(billingRes.data.data.stats);
+            }
         } catch (err: any) {
-            console.error("Failed to load frontdesk dashboard data:", err);
+            console.error("[FrontDesk Dashboard] error:", err?.response?.data || err?.message);
             setErrorMsg(err?.response?.data?.error || "Failed to load dashboard data from server.");
         } finally {
             setLoading(false);
@@ -504,7 +506,7 @@ export default function DashboardTab({
                             </div>
                         </div>
 
-                        {/* Billing Snapshot — hardcoded for now, see HARDCODED_BILLING_SNAPSHOT above */}
+                        {/* Billing Snapshot — live from /api/billing/stats */}
                         <div className="rounded-2xl border border-slate-900/5 bg-white/90 shadow-lg backdrop-blur-sm overflow-hidden">
                             <div className="flex items-center justify-between border-b border-slate-100 p-5">
                                 <div className="flex items-center gap-2">
@@ -527,12 +529,12 @@ export default function DashboardTab({
                                 <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
                                     <div className="flex items-center justify-between">
                                         <p className="text-[0.7rem] font-semibold uppercase tracking-wider text-slate-400">
-                                            Collected Today
+                                            Total Collected
                                         </p>
                                         <Receipt className="h-3.5 w-3.5 text-emerald-600" />
                                     </div>
                                     <p className="mt-1.5 text-lg font-bold text-slate-900">
-                                        NPR {centsToDisplay(HARDCODED_BILLING_SNAPSHOT.collectedTodayCents)}
+                                        NPR {centsToDisplay(billingStats?.totalCollectedCents ?? 0)}
                                     </p>
                                 </div>
 
@@ -544,7 +546,7 @@ export default function DashboardTab({
                                         <TrendingDown className="h-3.5 w-3.5 text-rose-600" />
                                     </div>
                                     <p className="mt-1.5 text-lg font-bold text-rose-700">
-                                        NPR {centsToDisplay(HARDCODED_BILLING_SNAPSHOT.outstandingDuesCents)}
+                                        NPR {centsToDisplay(billingStats?.outstandingDuesCents ?? 0)}
                                     </p>
                                 </div>
 
@@ -556,7 +558,7 @@ export default function DashboardTab({
                                         <User className="h-3.5 w-3.5 text-slate-500" />
                                     </div>
                                     <p className="mt-1.5 text-lg font-bold text-slate-900">
-                                        {HARDCODED_BILLING_SNAPSHOT.patientsWithDues}
+                                        {billingStats?.patientsWithDuesCount ?? 0}
                                     </p>
                                 </div>
                             </div>

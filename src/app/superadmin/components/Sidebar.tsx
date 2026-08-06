@@ -14,7 +14,7 @@ import {
 const NAV_ITEMS = [
   {
     label: "Dashboard",
-    href: "",
+    href: "/dashboard",
     icon: LayoutDashboard,
     exact: true,
   },

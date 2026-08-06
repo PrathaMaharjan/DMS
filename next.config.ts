@@ -3,12 +3,22 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
-  // pdfkit reads its own font data files (.afm) via relative paths at
-  // runtime. If Next's bundler tries to trace/bundle it, those relative
-  // paths break (ENOENT: Helvetica.afm not found). This tells Next to
-  // leave pdfkit alone entirely - required directly from node_modules,
-  // the normal Node way, so its internal paths resolve correctly.
   serverExternalPackages: ["pdfkit"],
+
+
+  async headers() {
+    return [
+      {
+        source: "/api/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "http://localhost:3001" }, // your website app port
+          { key: "Access-Control-Allow-Methods", value: "GET,POST,PUT,PATCH,DELETE,OPTIONS" },
+          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
+          { key: "Access-Control-Allow-Credentials", value: "true" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

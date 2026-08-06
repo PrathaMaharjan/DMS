@@ -1,262 +1,83 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import axios from "axios";
 import {
   Search,
   Plus,
-  Wallet,
-  TrendingUp,
-  TrendingDown,
   Filter,
+  SquarePen,
+  Trash2,
   ChevronLeft,
   ChevronRight,
-  IdCard,
-  Clock,
-  User,
-  Receipt,
-  Banknote,
-  CreditCard,
-  Smartphone,
-  ShieldCheck,
-  ArrowUpCircle,
-  ArrowDownCircle,
-  Scale,
-  Stethoscope,
-  Syringe,
-  HeartPulse,
-  Cross,
-  Pill,
-  Activity,
-  MapPin,
-  ClipboardList,
-  CalendarDays,
-  Printer,
-  X,
+  Users,
+  UserPlus,
+  CalendarCheck,
+  Mail,
   Phone,
+  MapPin,
+  Droplet,
+  IdCard,
+  Cake,
+  VenusAndMars,
+  Stethoscope,
+  ClipboardList,
+  AlertCircle,
+  Pill,
+  ImagePlus,
+  User,
+  Loader2,
+  FileText,
+  Wallet,
+  CheckCircle2,
 } from "lucide-react";
 
-const OUTLETS = [
-  { id: "all", name: "All outlets" },
-  { id: "outlet-1", name: "Chitwan Dental Home - Bharatpur" },
-  { id: "outlet-2", name: "Chitwan Dental Home - Narayangarh" },
+const STATUSES = ["Active", "Inactive"] as const;
+
+const ASSIGNED_DOCTORS = [
+  "Dr. Anisha Sharma",
+  "Dr. Rajiv Thapa",
+  "Dr. Priya Gurung",
+  "Dr. Suresh Karki",
 ];
 
-const ENTRY_TYPES = ["charge", "payment", "adjustment"] as const;
-type EntryType = (typeof ENTRY_TYPES)[number];
-
-const PAYMENT_METHODS = ["Cash", "Card", "Wallet"];
-
-const ENTRY_TYPE_LABELS: Record<EntryType, string> = {
-  charge: "Charge",
-  payment: "Payment",
-  adjustment: "Adjustment",
-};
-
-const ENTRY_TYPE_COLORS: Record<EntryType, string> = {
-  charge: "bg-amber-100 text-amber-700",
-  payment: "bg-emerald-100 text-emerald-700",
-  adjustment: "bg-violet-100 text-violet-700",
-};
-
-const ENTRY_TYPE_ICONS: Record<EntryType, typeof ArrowUpCircle> = {
-  charge: ArrowUpCircle,
-  payment: ArrowDownCircle,
-  adjustment: Scale,
-};
-
-type LedgerEntry = {
+type Patient = {
   id: string;
-  type: EntryType;
-  amountCents: number;
-  createdAt: string; // ISO
-  appointmentId?: string;
-  treatmentName?: string;
-  method?: string; // local-only, not in schema yet
-  note?: string; // local-only, not in schema yet
-};
-
-type PatientLedger = {
   patientId: string;
-  patientName: string;
+  name: string;
+  age: string;
+  dob?: string;
+  gender: string;
+  bloodGroup: string;
   phone: string;
-  entries: LedgerEntry[];
+  email: string;
+  address?: string;
+  assignedDoctor: string;
+  lastVisit: string;
+  status: (typeof STATUSES)[number];
+  imageUrl?: string;
+  allergies?: string[];
+  medicalHistory?: string[];
+  medications?: string[];
+  balanceDueCents: number | null; // null = no billing data available yet
 };
 
-const SEED_LEDGERS: PatientLedger[] = [
-  {
-    patientId: "p1",
-    patientName: "Rita Adhikari",
-    phone: "+977 981-1112223",
-    entries: [
-      {
-        id: "e1",
-        type: "charge",
-        amountCents: 650000,
-        createdAt: "2026-07-28T10:15:00",
-        appointmentId: "apt-101",
-        treatmentName: "Root Canal Treatment",
-      },
-      {
-        id: "e2",
-        type: "payment",
-        amountCents: 400000,
-        createdAt: "2026-07-28T10:20:00",
-        method: "Cash",
-      },
-    ],
-  },
-  {
-    patientId: "p2",
-    patientName: "Suman Rai",
-    phone: "+977 981-3334445",
-    entries: [
-      {
-        id: "e3",
-        type: "charge",
-        amountCents: 150000,
-        createdAt: "2026-07-30T09:00:00",
-        appointmentId: "apt-102",
-        treatmentName: "Dental Cleaning",
-      },
-      {
-        id: "e4",
-        type: "payment",
-        amountCents: 150000,
-        createdAt: "2026-07-30T09:10:00",
-        method: "Card",
-      },
-    ],
-  },
-  {
-    patientId: "p3",
-    patientName: "Anjali Poudel",
-    phone: "+977 981-5556667",
-    entries: [
-      {
-        id: "e5",
-        type: "charge",
-        amountCents: 900000,
-        createdAt: "2026-08-01T11:30:00",
-        appointmentId: "apt-103",
-        treatmentName: "Orthodontic Consultation",
-      },
-      {
-        id: "e6",
-        type: "adjustment",
-        amountCents: -50000,
-        createdAt: "2026-08-01T11:35:00",
-        note: "Loyalty discount",
-      },
-    ],
-  },
-  {
-    patientId: "p4",
-    patientName: "Kiran Basnet",
-    phone: "+977 981-7778889",
-    entries: [
-      {
-        id: "e7",
-        type: "charge",
-        amountCents: 250000,
-        createdAt: "2026-08-02T08:45:00",
-        appointmentId: "apt-104",
-        treatmentName: "Teeth Whitening",
-      },
-    ],
-  },
-];
-
-const EMPTY_ENTRY_FORM = {
-  type: "charge" as EntryType,
-  amount: "",
-  method: PAYMENT_METHODS[0],
-  note: "",
-};
-
-type EntryFormState = typeof EMPTY_ENTRY_FORM;
-
-const inputClass =
-  "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
-
-const textareaClass =
-  "w-full rounded-xl border border-slate-900/10 bg-white px-3.5 py-2.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3]";
+function initialsOf(name: string) {
+  return name
+    .trim()
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
 
 function centsToDisplay(cents: number) {
-  const value = Number.isFinite(cents) ? cents : 0;
-  return (value / 100).toLocaleString(undefined, {
+  return (cents / 100).toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
-}
-
-function computeBalance(entries: LedgerEntry[]) {
-  return entries.reduce((sum, e) => {
-    if (e.type === "charge") return sum + e.amountCents;
-    if (e.type === "payment") return sum - e.amountCents;
-    return sum + e.amountCents; // adjustment: signed (negative = discount, positive = fee)
-  }, 0);
-}
-
-function computeTotals(entries: LedgerEntry[]) {
-  const charged = entries
-    .filter((e) => e.type === "charge")
-    .reduce((s, e) => s + e.amountCents, 0);
-  const paid = entries
-    .filter((e) => e.type === "payment")
-    .reduce((s, e) => s + e.amountCents, 0);
-  return { charged, paid };
-}
-
-// Running balance immediately after a given entry, based on all entries
-// up to and including it (sorted chronologically).
-function balanceAfterEntry(entries: LedgerEntry[], entryId: string) {
-  const sorted = [...entries].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  let running = 0;
-  for (const e of sorted) {
-    if (e.type === "charge") running += e.amountCents;
-    else if (e.type === "payment") running -= e.amountCents;
-    else running += e.amountCents;
-    if (e.id === entryId) break;
-  }
-  return running;
-}
-
-function formatDateTime(iso: string) {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatDateOnly(iso: string) {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  const first = parts[0][0] ?? "";
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
-  return (first + last).toUpperCase();
-}
-
-// Placeholder receipt number derived from the entry id — once a real
-// receiptNumber column/table exists on the backend, swap this out.
-function receiptNumberFor(entryId: string) {
-  const digits = entryId.replace(/\D/g, "");
-  const suffix = (digits || entryId).slice(-4).padStart(4, "0");
-  return `RCP-2026-${suffix}`;
 }
 
 const AVATAR_COLORS = [
@@ -264,63 +85,348 @@ const AVATAR_COLORS = [
   "bg-sky-100 text-sky-700",
   "bg-amber-100 text-amber-700",
   "bg-emerald-100 text-emerald-700",
-  "bg-violet-100 text-violet-700",
-  "bg-teal-100 text-teal-700",
 ];
 
-const METHOD_ICONS: Record<string, typeof Banknote> = {
-  Cash: Banknote,
-  Card: CreditCard,
-  Wallet: Smartphone,
-  Insurance: ShieldCheck,
+const EMPTY_FORM = {
+  imageUrl: "",
+  name: "",
+  age: "",
+  dob: "",
+  gender: "Female",
+  bloodGroup: "A+",
+  phone: "",
+  email: "",
+  address: "",
+  assignedDoctor: ASSIGNED_DOCTORS[0],
+  status: "Active" as (typeof STATUSES)[number],
+  lastVisit: "",
+  allergies: "",
+  medicalHistory: "",
+  medications: "",
 };
 
-export default function BillingPage() {
-  const [ledgers, setLedgers] = useState<PatientLedger[]>(SEED_LEDGERS);
-  const [outletFilter, setOutletFilter] = useState("all");
+type FormState = typeof EMPTY_FORM;
+
+function patientToForm(p: Patient): FormState {
+  return {
+    imageUrl: p.imageUrl ?? "",
+    name: p.name,
+    age: p.age,
+    dob: p.dob ?? "",
+    gender: p.gender,
+    bloodGroup: p.bloodGroup,
+    phone: p.phone,
+    email: p.email,
+    address: p.address ?? "",
+    assignedDoctor: p.assignedDoctor,
+    status: p.status,
+    lastVisit: p.lastVisit,
+    allergies: (p.allergies ?? []).join("\n"),
+    medicalHistory: (p.medicalHistory ?? []).join("\n"),
+    medications: (p.medications ?? []).join("\n"),
+  };
+}
+
+function linesToArray(value: string): string[] {
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function apiPatientToPatient(p: any): Patient {
+  return {
+    id: p.id,
+    patientId: p.patientId || `PAT-${String(p.id).slice(-4)}`,
+    name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Patient",
+    age: p.age != null ? String(p.age) : "",
+    dob: p.dob || undefined,
+    gender: p.gender || "Other",
+    bloodGroup: p.bloodGroup || "-",
+    phone: p.phone || "-",
+    email: p.email || "-",
+    address: p.address || "",
+    assignedDoctor: p.assignedDoctorName || "Unassigned",
+    lastVisit: p.lastVisit || p.updatedAt || p.createdAt || "",
+    status: p.treatmentCompleted ? "Inactive" : "Active",
+    imageUrl: p.imageUrl || undefined,
+    allergies: p.allergies || [],
+    medicalHistory: p.medicalHistory || [],
+    medications: p.medications || [],
+    balanceDueCents: typeof p.balanceDueCents === "number" ? p.balanceDueCents : null,
+  };
+}
+
+const cellInputClass =
+  "w-full rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3] focus:bg-white";
+
+const cellTextareaClass =
+  "w-full resize-none rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-[0.9rem] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#7da3b3] focus:bg-white";
+
+type FieldDef =
+  | { key: keyof FormState; label: string; icon: typeof User; type: "text" | "email" | "tel" | "date" | "number"; placeholder?: string; required?: boolean }
+  | { key: keyof FormState; label: string; icon: typeof User; type: "select"; options: readonly string[] }
+  | { key: keyof FormState; label: string; icon: typeof User; type: "textarea"; placeholder?: string };
+
+const FORM_SECTIONS: { title: string; fields: FieldDef[] }[] = [
+  {
+    title: "Personal Information",
+    fields: [
+      { key: "name", label: "Full name", icon: User, type: "text", placeholder: "Sita Rai", required: true },
+      { key: "gender", label: "Gender", icon: VenusAndMars, type: "select", options: ["Female", "Male", "Other"] },
+      { key: "dob", label: "Date of birth", icon: Cake, type: "date" },
+      { key: "age", label: "Age", icon: Cake, type: "number", placeholder: "28" },
+      { key: "bloodGroup", label: "Blood group", icon: Droplet, type: "select", options: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] },
+    ],
+  },
+  {
+    title: "Contact Information",
+    fields: [
+      { key: "email", label: "Email", icon: Mail, type: "email", placeholder: "patient@email.com" },
+      { key: "phone", label: "Phone", icon: Phone, type: "tel", placeholder: "98XXXXXXXX", required: true },
+      { key: "address", label: "Address", icon: MapPin, type: "text", placeholder: "Bharatpur-10, Chitwan, Nepal" },
+    ],
+  },
+  {
+    title: "Care Information",
+    fields: [
+      { key: "assignedDoctor", label: "Assigned doctor", icon: Stethoscope, type: "select", options: ASSIGNED_DOCTORS },
+      { key: "status", label: "Status", icon: UserPlus, type: "select", options: STATUSES },
+      { key: "lastVisit", label: "Last visit", icon: CalendarCheck, type: "date" },
+    ],
+  },
+  {
+    title: "Medical Information",
+    fields: [
+      { key: "allergies", label: "Known allergies (one per line)", icon: AlertCircle, type: "textarea", placeholder: "Penicillin" },
+      { key: "medicalHistory", label: "Medical history (one per line)", icon: ClipboardList, type: "textarea", placeholder: "Type 2 diabetes" },
+      { key: "medications", label: "Current medications (one per line)", icon: Pill, type: "textarea", placeholder: "Metformin 500mg" },
+    ],
+  },
+];
+
+export default function PatientsPage() {
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const [query, setQuery] = useState("");
-  const [balanceFilter, setBalanceFilter] = useState<"All" | "Due" | "Settled">("All");
+  const [doctorFilter, setDoctorFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [profileTab, setProfileTab] = useState<"detail" | "medical" | "appointments">(
+    "detail"
+  );
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const loadPatients = async () => {
+    try {
+      setLoading(true);
+      setLoadError(null);
+      const res = await axios.get("/api/patent");
+      if (res.data?.success && res.data.data?.patients) {
+        const rawPatients = res.data.data.patients;
+        const mapped: Patient[] = await Promise.all(
+          rawPatients.map(async (p: any) => {
+            const base = apiPatientToPatient(p);
+            const ledgerRes = await axios.get(`/api/patent/${p.id}/ledger`).catch(() => null);
+            const summary = ledgerRes?.data?.success ? ledgerRes.data.data.summary : null;
+            const balanceDueCents = summary
+              ? summary.balanceDueCents
+              : (typeof p.balanceDueCents === "number" ? p.balanceDueCents : 0);
+            return { ...base, balanceDueCents };
+          })
+        );
+        setPatients(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to load patients:", err);
+      setLoadError("Failed to load patients from database.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const [entryModalOpen, setEntryModalOpen] = useState(false);
-  const [entryTargetPatientId, setEntryTargetPatientId] = useState<string | null>(null);
-  const [entryForm, setEntryForm] = useState<EntryFormState>(EMPTY_ENTRY_FORM);
+  useEffect(() => {
+    loadPatients();
+  }, []);
 
-  const [receiptEntryId, setReceiptEntryId] = useState<string | null>(null);
-
-  const rows = useMemo(() => {
-    return ledgers.map((l) => {
-      const { charged, paid } = computeTotals(l.entries);
-      const balance = computeBalance(l.entries);
-      const lastActivity = l.entries.reduce(
-        (latest, e) => (e.createdAt > latest ? e.createdAt : latest),
-        l.entries[0]?.createdAt ?? ""
-      );
-      return { ...l, charged, paid, balance, lastActivity };
+  function update<K extends keyof FormState>(key: K, value: string) {
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === "dob" && value) {
+        const birthDate = new Date(value);
+        if (!isNaN(birthDate.getTime())) {
+          const today = new Date();
+          let age = today.getFullYear() - birthDate.getFullYear();
+          const m = today.getMonth() - birthDate.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+          }
+          if (age >= 0) {
+            next.age = String(age);
+          }
+        }
+      } else if (key === "age" && value && !prev.dob) {
+        const ageNum = parseInt(value, 10);
+        if (!isNaN(ageNum) && ageNum >= 0) {
+          const birthYear = new Date().getFullYear() - ageNum;
+          next.dob = `${birthYear}-01-01`;
+        }
+      }
+      return next;
     });
-  }, [ledgers]);
+  }
+
+  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    update("imageUrl", URL.createObjectURL(file));
+  }
+
+  function openAddModal() {
+    setModalMode("add");
+    setEditingId(null);
+    setForm({ ...EMPTY_FORM, lastVisit: new Date().toISOString().slice(0, 10) });
+    setModalOpen(true);
+  }
+
+  function openEditModal(p: Patient) {
+    setModalMode("edit");
+    setEditingId(p.id);
+    setForm(patientToForm(p));
+    setModalOpen(true);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    const { allergies, medicalHistory, medications } = form;
+    const allergiesList = linesToArray(allergies);
+    const medicalHistoryList = linesToArray(medicalHistory);
+    const medicationsList = linesToArray(medications);
+
+    const trimmedName = form.name.trim();
+    const [firstName, ...rest] = trimmedName.split(" ");
+    const lastName = rest.join(" ") || "-";
+
+    try {
+      if (modalMode === "edit" && editingId) {
+        const payload: Record<string, any> = {
+          firstName,
+          lastName,
+          age: Number(form.age) || 0,
+          dob: form.dob || undefined,
+          phone: form.phone || undefined,
+          email: form.email || undefined,
+          address: form.address || undefined,
+          gender: form.gender || undefined,
+          bloodGroup: form.bloodGroup || undefined,
+          treatmentCompleted: form.status === "Inactive",
+          allergies: allergiesList,
+          medicalHistory: medicalHistoryList,
+          medications: medicationsList,
+        };
+
+        const res = await axios.patch(`/api/patent/${editingId}`, payload);
+        if (res.data?.success === false) {
+          alert(res.data?.error || "Failed to update patient.");
+          return;
+        }
+      } else {
+        let locId = "";
+        const servicesRes = await axios.get("/api/services").catch(() => null);
+        if (servicesRes?.data?.success && servicesRes.data.data.services?.length > 0) {
+          locId = servicesRes.data.data.services[0].locationId;
+        }
+
+        const payload: Record<string, any> = {
+          locationId: locId,
+          firstName,
+          lastName,
+          age: Number(form.age) || 0,
+          dob: form.dob || undefined,
+          phone: form.phone || undefined,
+          email: form.email || undefined,
+          address: form.address || undefined,
+          gender: form.gender || undefined,
+          bloodGroup: form.bloodGroup || undefined,
+          allergies: allergiesList,
+          medicalHistory: medicalHistoryList,
+          currentMedications: medicationsList,
+        };
+
+        const res = await axios.post("/api/patent", payload);
+        if (res.data?.success === false) {
+          alert(res.data?.error || "Failed to create patient.");
+          return;
+        }
+      }
+
+      await loadPatients();
+      setForm(EMPTY_FORM);
+      setEditingId(null);
+      setModalOpen(false);
+
+    } catch (err: any) {
+      console.error("Failed to save patient:", err);
+
+      alert(err.response?.data?.error || "Failed to save patient.");
+    }
+  }
+
+  async function handleDeletePatient(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+
+    const confirmed = window.confirm("Delete this patient? This action cannot be undone.");
+    if (!confirmed) return;
+
+    const previous = patients;
+    setDeletingId(id);
+    // Optimistically remove from the list
+    setPatients((prev) => prev.filter((p) => p.id !== id));
+
+    try {
+      const res = await axios.delete(`/api/patent/${id}`);
+      if (!res.data?.success) {
+        throw new Error(res.data?.error || "Delete failed");
+      }
+      if (selectedPatient?.id === id) setSelectedPatient(null);
+    } catch (err) {
+      console.error("Failed to delete patient:", err);
+      // Roll back on failure
+      setPatients(previous);
+      window.alert("Failed to delete patient. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
+    return patients.filter((p) => {
       const matchesQuery =
         !q ||
-        r.patientName.toLowerCase().includes(q) ||
-        r.phone.toLowerCase().includes(q);
-      const matchesBalance =
-        balanceFilter === "All" ||
-        (balanceFilter === "Due" && r.balance > 0) ||
-        (balanceFilter === "Settled" && r.balance <= 0);
-      return matchesQuery && matchesBalance;
+        p.name.toLowerCase().includes(q) ||
+        p.phone.includes(q) ||
+        p.email.toLowerCase().includes(q) ||
+        p.patientId.toLowerCase().includes(q);
+      const matchesDoctor = doctorFilter === "All" || p.assignedDoctor === doctorFilter;
+      const matchesStatus = statusFilter === "All" || p.status === statusFilter;
+      return matchesQuery && matchesDoctor && matchesStatus;
     });
-  }, [rows, query, balanceFilter]);
+  }, [patients, query, doctorFilter, statusFilter]);
+
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedRows = filtered.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedPatients = filtered.slice(startIndex, startIndex + itemsPerPage);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -328,134 +434,85 @@ export default function BillingPage() {
     }
   };
 
-  const selectedLedger = useMemo(
-    () => ledgers.find((l) => l.patientId === selectedPatientId) ?? null,
-    [ledgers, selectedPatientId]
-  );
+  const newThisMonth = useMemo(() => {
+    const now = new Date();
+    return patients.filter((p) => {
+      const visit = new Date(p.lastVisit);
+      return visit.getMonth() === now.getMonth() && visit.getFullYear() === now.getFullYear();
+    }).length;
+  }, [patients]);
 
-  // Ledger + entry currently shown in the receipt modal.
-  // Searches every ledger's entries directly by id, so it doesn't depend
-  // on selectedLedger being open at the same time.
-  const receiptContext = useMemo(() => {
-    if (!receiptEntryId) return null;
-    for (const l of ledgers) {
-      const entry = l.entries.find((e) => e.id === receiptEntryId);
-      if (entry) return { ledger: l, entry };
+  const stats = [
+    { icon: Users, label: "Total Patients", value: String(patients.length) },
+    { icon: UserPlus, label: "New This Month", value: String(newThisMonth) },
+    { icon: CalendarCheck, label: "Active Patients", value: String(patients.filter((p) => p.status === "Active").length) },
+  ];
+
+  const [patientAppointments, setPatientAppointments] = useState<any[]>([]);
+  const [loadingAppts, setLoadingAppts] = useState(false);
+
+  async function openProfile(p: Patient) {
+    setSelectedPatient(p);
+    setProfileTab("detail");
+    setPatientAppointments([]);
+    setLoadingAppts(true);
+
+    try {
+      const [historyRes, apptsRes] = await Promise.all([
+        axios.get(`/api/patent/${p.id}/medical-History`).catch(() => axios.get(`/api/patent/${p.id}/medical-history`).catch(() => null)),
+        axios.get(`/api/patent/${p.id}/appoments`).catch(() => null),
+      ]);
+
+      let updated = { ...p };
+      let apptsList: any[] = [];
+
+      if (apptsRes?.data?.success && apptsRes.data.data.appointments) {
+        apptsList = apptsRes.data.data.appointments;
+        setPatientAppointments(apptsList);
+      }
+
+      if (historyRes?.data?.success && historyRes.data.data.medicalHistory) {
+        const mh = historyRes.data.data.medicalHistory;
+        updated.allergies = mh.allergies || [];
+        updated.medicalHistory = mh.medicalHistory || [];
+        updated.medications = mh.currentMedications || [];
+      }
+
+      setSelectedPatient(updated);
+    } catch (err) {
+      console.error("Error loading patient details for admin drawer:", err);
+    } finally {
+      setLoadingAppts(false);
     }
-    return null;
-  }, [ledgers, receiptEntryId]);
-
-  const stats = useMemo(() => {
-    const totalCharged = rows.reduce((s, r) => s + r.charged, 0);
-    const totalPaid = rows.reduce((s, r) => s + r.paid, 0);
-    const totalDue = rows.reduce((s, r) => s + Math.max(0, r.balance), 0);
-    const patientsWithDue = rows.filter((r) => r.balance > 0).length;
-    return [
-      {
-        icon: Receipt,
-        label: "Total Charged",
-        value: `NPR ${centsToDisplay(totalCharged)}`,
-      },
-      {
-        icon: Wallet,
-        label: "Total Collected",
-        value: `NPR ${centsToDisplay(totalPaid)}`,
-      },
-      {
-        icon: TrendingDown,
-        label: "Outstanding Dues",
-        value: `NPR ${centsToDisplay(totalDue)}`,
-      },
-      {
-        icon: User,
-        label: "Patients With Dues",
-        value: String(patientsWithDue),
-      },
-    ];
-  }, [rows]);
-
-  function openEntryModal(patientId: string) {
-    setEntryTargetPatientId(patientId);
-    setEntryForm(EMPTY_ENTRY_FORM);
-    setEntryModalOpen(true);
-  }
-
-  function update<K extends keyof EntryFormState>(key: K, value: EntryFormState[K]) {
-    setEntryForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function handleAddEntry(e: React.FormEvent) {
-    e.preventDefault();
-    if (!entryTargetPatientId) return;
-
-    const amountNumber = Number(entryForm.amount) || 0;
-    let amountCents = Math.round(amountNumber * 100);
-
-    // Payments and positive charges are stored as positive amounts.
-    // Adjustments can be negative (discount) or positive (extra fee) —
-    // for this static demo we treat a plain positive input as a discount
-    // reduction by default, matching the most common front-desk use case.
-    if (entryForm.type === "adjustment" && amountCents > 0) {
-      amountCents = -amountCents;
-    }
-
-    const newEntry: LedgerEntry = {
-      id: String(Date.now()),
-      type: entryForm.type,
-      amountCents:
-        Math.abs(amountCents) *
-        (entryForm.type === "adjustment" ? Math.sign(amountCents) || -1 : 1),
-      createdAt: new Date().toISOString(),
-      method: entryForm.type === "payment" ? entryForm.method : undefined,
-      note: entryForm.note || undefined,
-    };
-
-    setLedgers((prev) =>
-      prev.map((l) =>
-        l.patientId === entryTargetPatientId
-          ? { ...l, entries: [...l.entries, newEntry] }
-          : l
-      )
-    );
-
-    setEntryForm(EMPTY_ENTRY_FORM);
-    setEntryModalOpen(false);
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-50">
-      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        <Stethoscope className="absolute -left-8 top-20 h-44 w-44 -rotate-12 text-[#7da3b3]/[0.07]" strokeWidth={1} />
-        <Syringe className="absolute right-6 top-52 h-32 w-32 rotate-12 text-[#7da3b3]/[0.07]" strokeWidth={1} />
-        <HeartPulse className="absolute left-[22%] bottom-32 h-28 w-28 -rotate-6 text-[#7da3b3]/[0.07]" strokeWidth={1} />
-        <Cross className="absolute right-[10%] bottom-20 h-20 w-20 rotate-6 text-[#7da3b3]/[0.07]" strokeWidth={1} />
-        <Pill className="absolute left-[48%] top-8 h-16 w-16 rotate-45 text-[#7da3b3]/[0.07]" strokeWidth={1} />
-        <Activity className="absolute right-[32%] bottom-[6%] h-24 w-24 text-[#7da3b3]/[0.07]" strokeWidth={1} />
+    <div className="relative min-h-screen bg-slate-50">
+      <div className="sticky top-0 z-20 w-full bg-white px-6 py-6 lg:px-10">
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#345263] sm:text-3xl">
+          Patients
+        </h1>
       </div>
 
-      <div className="relative mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
-        {/* Stats */}
-        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mx-auto max-w-[1600px] px-6 pb-10 pt-6 lg:px-10">
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className="rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm"
-            >
+            <div key={stat.label} className="rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between">
                 <p className="text-[0.85rem] font-medium text-slate-500">{stat.label}</p>
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#7da3b3]/15 text-[#3f6274]">
                   <stat.icon className="h-4 w-4" strokeWidth={2} />
                 </div>
               </div>
-              <p className="mt-4 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-                {stat.value}
-              </p>
+              <p className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">{stat.value}</p>
             </div>
           ))}
         </div>
 
-        <div className="mt-10 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+
+        <div className="mt-10 overflow-hidden rounded-2xl border border-slate-900/5 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4 p-6">
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
@@ -465,116 +522,208 @@ export default function BillingPage() {
                     setQuery(e.target.value);
                     setCurrentPage(1);
                   }}
-                  placeholder="Search patient, phone..."
+                  placeholder="Search patients..."
                   className="w-56 rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-4 text-[0.9rem] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#7da3b3]"
                 />
               </div>
 
+
               <div className="relative">
                 <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
                 <select
-                  value={balanceFilter}
+                  value={statusFilter}
                   onChange={(e) => {
-                    setBalanceFilter(e.target.value as "All" | "Due" | "Settled");
+                    setStatusFilter(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="appearance-none rounded-full border border-slate-900/10 bg-white py-2.5 pl-9 pr-8 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
+                  className="appearance-none rounded-full border border-slate-900/10 bg-white pl-9 pr-4 py-2.5 text-[0.9rem] text-slate-900 outline-none focus:border-[#7da3b3]"
                 >
-                  <option value="All">All balances</option>
-                  <option value="Due">Has dues</option>
-                  <option value="Settled">Settled</option>
+                  <option value="All">All statuses</option>
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
+
+            <button
+              onClick={openAddModal}
+              className="inline-flex items-center gap-2 rounded-full bg-[#749fb1] px-5 py-2.5 text-[0.9rem] font-medium text-white shadow-sm transition-colors hover:bg-[#345263]"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              Add Patient
+            </button>
           </div>
 
-          {/* Table */}
-          <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-900/5">
-            <table className="w-full min-w-[960px] border-collapse text-left">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1200px] border-collapse text-left">
               <thead>
-                <tr className="bg-slate-50 text-[0.75rem] font-medium uppercase tracking-wide text-slate-500">
-                  <th className="px-5 py-3 font-medium">Patient</th>
-                  <th className="px-5 py-3 font-medium">Phone</th>
-                  <th className="px-5 py-3 font-medium">Last Activity</th>
-                  <th className="px-5 py-3 font-medium">Charged</th>
-                  <th className="px-5 py-3 font-medium">Paid</th>
-                  <th className="px-5 py-3 font-medium">Balance</th>
-                  <th className="px-5 py-3 text-right font-medium">Actions</th>
+                <tr className="border-y border-slate-900/5 bg-slate-50/60">
+                  <th className="px-6 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Patient
+                  </th>
+                  <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Age
+                  </th>
+                  <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Gender
+                  </th>
+                  <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Phone
+                  </th>
+                  <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Email
+                  </th>
+                  <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Blood Group
+                  </th>
+                  <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Assigned Doctor
+                  </th>
+                  <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Last Visit
+                  </th>
+                  <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Payment
+                  </th>
+                  <th className="px-6 py-3 text-right text-[0.78rem] font-semibold uppercase tracking-wide text-slate-500">
+                    Actions
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-900/5 bg-white">
-                {paginatedRows.map((r, i) => {
-                  const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
-                  const hasDue = r.balance > 0;
-                  return (
-                    <tr
-                      key={r.patientId}
-                      onClick={() => setSelectedPatientId(r.patientId)}
-                      className="cursor-pointer transition-colors hover:bg-[#7da3b3]/[0.06]"
-                    >
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[0.8rem] font-semibold ${color}`}
-                          >
-                            {getInitials(r.patientName)}
-                          </div>
-                          <p className="truncate text-[0.9rem] font-semibold text-slate-900">
-                            {r.patientName}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 text-[0.85rem] text-slate-600">
-                        <p className="flex items-center gap-1.5">
-                          <Phone className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                          {r.phone}
-                        </p>
-                      </td>
-                      <td className="px-5 py-4 text-[0.85rem] text-slate-600">
-                        <p className="flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                          {r.lastActivity ? formatDateTime(r.lastActivity) : "—"}
-                        </p>
-                      </td>
-                      <td className="px-5 py-4 text-[0.85rem] text-slate-700">
-                        NPR {centsToDisplay(r.charged)}
-                      </td>
-                      <td className="px-5 py-4 text-[0.85rem] text-slate-700">
-                        NPR {centsToDisplay(r.paid)}
-                      </td>
-                      <td className="px-5 py-4">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.78rem] font-medium ${
-                            hasDue
-                              ? "bg-rose-100 text-rose-700"
-                              : "bg-emerald-100 text-emerald-700"
-                          }`}
-                        >
-                          NPR {centsToDisplay(Math.abs(r.balance))}
-                          {hasDue ? " due" : r.balance < 0 ? " credit" : " settled"}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEntryModal(r.patientId);
-                            }}
-                            className="inline-flex items-center gap-1.5 rounded-full border border-slate-900/10 px-3 py-1.5 text-[0.78rem] font-medium text-slate-600 transition-colors hover:bg-slate-50"
-                          >
-                            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-                            Add Entry
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {filtered.length === 0 && (
+              <tbody>
+                {loading && (
                   <tr>
-                    <td colSpan={7} className="bg-white py-16 text-center text-slate-500">
+                    <td colSpan={11} className="px-6 py-16 text-center text-slate-500">
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-[#7da3b3]" />
+                        Loading patients...
+                      </span>
+                    </td>
+                  </tr>
+                )}
+
+                {!loading && loadError && (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-16 text-center text-rose-500">
+                      {loadError}
+                    </td>
+                  </tr>
+                )}
+
+                {!loading &&
+                  !loadError &&
+                  paginatedPatients.map((p, i) => {
+                    const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
+                    const isDeleting = deletingId === p.id;
+                    return (
+                      <tr
+                        key={p.id}
+                        onClick={() => openProfile(p)}
+                        className="cursor-pointer border-b border-slate-900/5 transition-colors last:border-b-0 hover:bg-[#7da3b3]/[0.04]"
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            {p.imageUrl ? (
+                              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full">
+                                <Image src={p.imageUrl} alt={p.name} fill unoptimized className="object-cover" />
+                              </div>
+                            ) : (
+                              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[0.75rem] font-semibold ${color}`}>
+                                {initialsOf(p.name)}
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-[0.9rem] font-medium text-slate-900">{p.name}</p>
+
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-600">{p.age}yrs</td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-600">{p.gender}</td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-700">{p.phone}</td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-500">{p.email}</td>
+                        <td className="px-4 py-4">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-[0.75rem] font-medium text-rose-600">
+                            <Droplet className="h-3 w-3" strokeWidth={2} />
+                            {p.bloodGroup}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-600">{p.assignedDoctor}</td>
+                        <td className="px-4 py-4 text-[0.85rem] text-slate-600">
+                          {p.lastVisit
+                            ? new Date(p.lastVisit).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })
+                            : "-"}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span
+                            className={[
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-[0.75rem] font-medium",
+                              p.status === "Active"
+                                ? "bg-emerald-50 text-emerald-600"
+                                : "bg-slate-100 text-slate-500",
+                            ].join(" ")}
+                          >
+                            {p.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-xs whitespace-nowrap">
+                          {p.balanceDueCents === null ? (
+                            <span className="text-slate-400 text-[0.72rem]">No data</span>
+                          ) : p.balanceDueCents > 0 ? (
+                            <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 font-semibold px-2 py-0.5 rounded border border-rose-200/60 text-[0.72rem]">
+                              <Wallet className="h-3 w-3 text-rose-500 shrink-0" />
+                              NPR {centsToDisplay(p.balanceDueCents)} due
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded border border-emerald-200/60 text-[0.72rem]">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                              Settled
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditModal(p);
+                              }}
+                              aria-label="Edit patient"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-slate-100 hover:text-[#3f6274]"
+                            >
+                              <SquarePen className="h-3.5 w-3.5" strokeWidth={2} />
+                            </button>
+                            <button
+                              onClick={(e) => handleDeletePatient(p.id, e)}
+                              disabled={isDeleting}
+                              aria-label="Delete patient"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                            >
+                              {isDeleting ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                {!loading && !loadError && filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-16 text-center text-slate-500">
                       No patients match your filters.
                     </td>
                   </tr>
@@ -584,8 +733,8 @@ export default function BillingPage() {
           </div>
 
           {/* Pagination Controls */}
-          {filtered.length > 0 && (
-            <div className="mt-4 flex items-center justify-between border-t border-slate-100 px-1 pt-4 text-xs">
+          {!loading && !loadError && filtered.length > 0 && (
+            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-6 py-4 text-xs">
               <span className="text-[0.7rem] text-slate-500 font-medium">
                 Showing{" "}
                 <strong className="text-slate-800">{startIndex + 1}</strong>{" "}
@@ -609,11 +758,10 @@ export default function BillingPage() {
                   <button
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
-                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${
-                      currentPage === pageNum
-                        ? "bg-[#7da3b3] text-white shadow-sm"
-                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                    }`}
+                    className={`h-7 w-7 rounded-md text-xs font-semibold transition-colors ${currentPage === pageNum
+                      ? "bg-[#7da3b3] text-white shadow-sm"
+                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      }`}
                   >
                     {pageNum}
                   </button>
@@ -632,487 +780,402 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Ledger detail side panel */}
-      {selectedLedger && (
+
+      {modalOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40">
-          <div
-            onClick={() => setSelectedPatientId(null)}
-            className="absolute inset-0"
-            aria-hidden
-          />
+          <div onClick={() => setModalOpen(false)} className="absolute inset-0" aria-hidden />
           <div className="relative flex h-full w-full max-w-xl flex-col overflow-y-auto bg-slate-50 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-900/5 bg-slate-50 px-6 py-4">
               <button
-                onClick={() => setSelectedPatientId(null)}
+                onClick={() => setModalOpen(false)}
                 className="inline-flex items-center gap-1.5 text-[0.9rem] font-medium text-slate-600 transition-colors hover:text-slate-900"
               >
                 <ChevronLeft className="h-4 w-4" strokeWidth={2} />
                 Back
               </button>
+              <h2 className="text-[0.95rem] font-semibold text-slate-900">
+                {modalMode === "edit" ? "Edit Patient" : "Add Patient"}
+              </h2>
+            </div>
+
+            <div className="px-6 py-6">
+              <form onSubmit={handleSubmit} className="space-y-8">
+
+
+                {FORM_SECTIONS.map((section) => (
+                  <div
+                    key={section.title}
+                    className="overflow-hidden rounded-2xl border border-slate-900/5 bg-white shadow-sm"
+                  >
+                    <p className="border-b border-slate-900/5 px-5 py-3 text-[0.88rem] font-semibold text-slate-900">
+                      <span className="border-l-2 border-[#3f6274] pl-2">{section.title}</span>
+                    </p>
+                    <table className="w-full border-collapse">
+                      <tbody>
+                        {section.fields.map((field, i) => {
+                          const Icon = field.icon;
+                          return (
+                            <tr
+                              key={field.key}
+                              className={i !== section.fields.length - 1 ? "border-b border-slate-900/5" : ""}
+                            >
+                              <td className="w-40 shrink-0 bg-slate-50/60 px-4 py-2.5 align-top sm:w-48">
+                                <span className="flex items-center gap-1.5 text-[0.78rem] font-medium text-slate-600">
+                                  <Icon className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                                  {field.label}
+                                  {"required" in field && field.required && (
+                                    <span className="text-rose-400">*</span>
+                                  )}
+                                </span>
+                              </td>
+                              <td className="px-3 py-1">
+                                {field.type === "select" ? (
+                                  <select
+                                    value={form[field.key]}
+                                    onChange={(e) => update(field.key, e.target.value)}
+                                    className={cellInputClass}
+                                  >
+                                    {field.options.map((opt) => (
+                                      <option key={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                ) : field.type === "textarea" ? (
+                                  <textarea
+                                    rows={2}
+                                    value={form[field.key]}
+                                    onChange={(e) => update(field.key, e.target.value)}
+                                    placeholder={field.placeholder}
+                                    className={cellTextareaClass}
+                                  />
+                                ) : (
+                                  <input
+                                    type={field.type}
+                                    required={"required" in field ? field.required : false}
+                                    value={form[field.key]}
+                                    onChange={(e) => update(field.key, e.target.value)}
+                                    placeholder={field.placeholder}
+                                    className={cellInputClass}
+                                  />
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="submit"
+                    className="rounded-full bg-[#7da3b3] px-6 py-2.5 text-[0.9rem] font-medium text-white transition-colors hover:bg-[#345263]"
+                  >
+                    {modalMode === "edit" ? "Save Changes" : "Add Patient"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalOpen(false)}
+                    className="rounded-full px-5 py-2.5 text-[0.9rem] font-medium text-slate-500 transition-colors hover:text-slate-800"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Patient detail side panel */}
+      {selectedPatient && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40">
+          <div onClick={() => setSelectedPatient(null)} className="absolute inset-0" aria-hidden />
+          <div className="relative flex h-full w-full max-w-xl flex-col overflow-y-auto bg-slate-50 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-900/5 bg-slate-50 px-6 py-4">
               <button
-                onClick={() => openEntryModal(selectedLedger.patientId)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-[#7da3b3] px-4 py-2 text-[0.85rem] font-medium text-white transition-colors hover:bg-[#345263]"
+                onClick={() => setSelectedPatient(null)}
+                className="inline-flex items-center gap-1.5 text-[0.9rem] font-medium text-slate-600 transition-colors hover:text-slate-900"
               >
-                <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-                Add Entry
+                <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+                Back
               </button>
             </div>
 
             <div className="px-6 py-6">
-              {/* Identity */}
               <div className="flex items-start gap-4">
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[#7da3b3]/15 text-[1.3rem] font-semibold text-[#3f6274] ring-4 ring-white">
-                  {getInitials(selectedLedger.patientName)}
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">
-                    {selectedLedger.patientName}
-                  </h2>
-                  <p className="mt-1 flex items-center gap-1.5 text-[0.85rem] text-slate-500">
-                    <Phone className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                    {selectedLedger.phone}
-                  </p>
-
-                  {(() => {
-                    const balance = computeBalance(selectedLedger.entries);
-                    const hasDue = balance > 0;
-                    return (
-                      <span
-                        className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8rem] font-medium ${
-                          hasDue
-                            ? "bg-rose-100 text-rose-700"
-                            : "bg-emerald-100 text-emerald-700"
-                        }`}
-                      >
-                        NPR {centsToDisplay(Math.abs(balance))}
-                        {hasDue ? " due" : balance < 0 ? " credit" : " settled"}
-                      </span>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Summary */}
-              <div className="mt-6 grid grid-cols-2 gap-4">
-                {(() => {
-                  const { charged, paid } = computeTotals(selectedLedger.entries);
-                  return (
-                    <>
-                      <div className="rounded-2xl border border-slate-900/5 bg-white p-4 shadow-sm">
-                        <p className="flex items-center gap-1.5 text-[0.78rem] text-slate-400">
-                          <Receipt className="h-3.5 w-3.5" strokeWidth={2} />
-                          Total Charged
-                        </p>
-                        <p className="mt-1 text-[1.1rem] font-semibold text-slate-800">
-                          NPR {centsToDisplay(charged)}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-900/5 bg-white p-4 shadow-sm">
-                        <p className="flex items-center gap-1.5 text-[0.78rem] text-slate-400">
-                          <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
-                          Total Paid
-                        </p>
-                        <p className="mt-1 text-[1.1rem] font-semibold text-slate-800">
-                          NPR {centsToDisplay(paid)}
-                        </p>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-
-              {/* Ledger history */}
-              <div className="mt-6 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
-                <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
-                  Ledger History
-                </p>
-
-                {selectedLedger.entries.length === 0 ? (
-                  <p className="mt-4 text-[0.85rem] text-slate-500">No entries recorded yet.</p>
+                {selectedPatient.imageUrl ? (
+                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full ring-4 ring-white">
+                    <Image src={selectedPatient.imageUrl} alt={selectedPatient.name} fill unoptimized className="object-cover" />
+                  </div>
                 ) : (
-                  <div className="mt-4 space-y-3">
-                    {[...selectedLedger.entries]
-                      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                      .map((entry) => {
-                        const TypeIcon = ENTRY_TYPE_ICONS[entry.type];
-                        const MethodIcon = entry.method ? METHOD_ICONS[entry.method] : null;
-                        const isNegativeAdjustment =
-                          entry.type === "adjustment" && entry.amountCents < 0;
-                        return (
-                          <div
-                            key={entry.id}
-                            className="flex items-start justify-between gap-3 rounded-xl border border-slate-900/5 p-3"
-                          >
-                            <div className="flex items-start gap-3">
-                              <span
-                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${ENTRY_TYPE_COLORS[entry.type]}`}
-                              >
-                                <TypeIcon className="h-4 w-4" strokeWidth={2} />
-                              </span>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-medium ${ENTRY_TYPE_COLORS[entry.type]}`}
-                                  >
-                                    {ENTRY_TYPE_LABELS[entry.type]}
-                                  </span>
-                                  {entry.method && (
-                                    <span className="inline-flex items-center gap-1 text-[0.75rem] text-slate-500">
-                                      {MethodIcon && (
-                                        <MethodIcon className="h-3 w-3" strokeWidth={2} />
-                                      )}
-                                      {entry.method}
-                                    </span>
-                                  )}
-                                </div>
-                                {entry.treatmentName && (
-                                  <p className="mt-1 text-[0.82rem] text-slate-700">
-                                    {entry.treatmentName}
-                                  </p>
-                                )}
-                                {entry.note && (
-                                  <p className="mt-1 text-[0.8rem] text-slate-500">{entry.note}</p>
-                                )}
-                                <p className="mt-1 flex items-center gap-1 text-[0.75rem] text-slate-400">
-                                  <CalendarDays className="h-3 w-3" strokeWidth={2} />
-                                  {formatDateTime(entry.createdAt)}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="flex shrink-0 flex-col items-end gap-2">
-                              <p
-                                className={`text-[0.9rem] font-semibold ${
-                                  entry.type === "payment" || isNegativeAdjustment
-                                    ? "text-emerald-600"
-                                    : "text-slate-800"
-                                }`}
-                              >
-                                {entry.type === "payment" || isNegativeAdjustment ? "−" : "+"}
-                                NPR {centsToDisplay(Math.abs(entry.amountCents))}
-                              </p>
-                              {entry.type === "payment" && (
-                                <button
-                                  type="button"
-                                  onClick={() => setReceiptEntryId(entry.id)}
-                                  className="inline-flex items-center gap-1 rounded-full border border-slate-900/10 px-2.5 py-1 text-[0.72rem] font-medium text-slate-600 transition-colors hover:bg-slate-50"
-                                >
-                                  <Printer className="h-3 w-3" strokeWidth={2} />
-                                  Receipt
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[#7da3b3]/15 text-[1.3rem] font-semibold text-[#3f6274] ring-4 ring-white">
+                    {initialsOf(selectedPatient.name)}
                   </div>
                 )}
+
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">{selectedPatient.name}</h2>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.85rem] text-slate-500">
+
+                    <span className="text-slate-300"></span>
+                    <span>{selectedPatient.age} yrs, {selectedPatient.gender}</span>
+                    <span className="text-slate-300">|</span>
+                    <span
+                      className={
+                        selectedPatient.status === "Active" ? "text-emerald-600" : "text-slate-500"
+                      }
+                    >
+                      {selectedPatient.status}
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    {selectedPatient.balanceDueCents === null ? (
+                      <span className="text-slate-400">No billing data</span>
+                    ) : selectedPatient.balanceDueCents > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-rose-600">
+                        <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
+                        NPR {centsToDisplay(selectedPatient.balanceDueCents)} due
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-emerald-600">
+                        <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />
+                        Settled
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-3 space-y-1 text-[0.85rem] text-slate-600">
+                    <div className="flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                      {selectedPatient.address ?? "Address not provided"}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Phone className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                      {selectedPatient.phone}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Mail className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+                      {selectedPatient.email}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Add ledger entry modal */}
-      {entryModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 px-4">
-          <div
-            onClick={() => setEntryModalOpen(false)}
-            className="absolute inset-0"
-            aria-hidden
-          />
-          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <h3 className="text-[1.05rem] font-semibold text-slate-900">Add Ledger Entry</h3>
-            <p className="mt-1 text-[0.8rem] text-slate-500">
-              {ledgers.find((l) => l.patientId === entryTargetPatientId)?.patientName}
-            </p>
-
-            <form onSubmit={handleAddEntry} className="mt-4 space-y-4">
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
-                  Entry type
-                </span>
-                <select
-                  value={entryForm.type}
-                  onChange={(e) => update("type", e.target.value as EntryType)}
-                  className={inputClass}
-                >
-                  {ENTRY_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {ENTRY_TYPE_LABELS[t]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <Banknote className="h-3.5 w-3.5" strokeWidth={2} />
-                  Amount (NPR)
-                </span>
-                <input
-                  required
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={entryForm.amount}
-                  onChange={(e) => update("amount", e.target.value)}
-                  placeholder="1500"
-                  className={inputClass}
-                />
-                {entryForm.type === "adjustment" && (
-                  <p className="mt-1.5 text-[0.75rem] text-slate-400">
-                    Treated as a discount (reduces balance). Use a negative-effect note to clarify.
-                  </p>
-                )}
-              </label>
-
-              {entryForm.type === "payment" && (
-                <label className="block">
-                  <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                    <CreditCard className="h-3.5 w-3.5" strokeWidth={2} />
-                    Payment method
-                  </span>
-                  <select
-                    value={entryForm.method}
-                    onChange={(e) => update("method", e.target.value)}
-                    className={inputClass}
+              <div className="mt-6 flex items-center gap-6 border-b border-slate-900/10">
+                {(
+                  [
+                    { key: "detail", label: "Detail Information" },
+                    { key: "medical", label: "Medical History" },
+                    { key: "appointments", label: "Appointment History" },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setProfileTab(tab.key)}
+                    className={`-mb-px border-b-2 px-1 pb-3 text-[0.85rem] font-medium transition-colors ${profileTab === tab.key
+                      ? "border-[#3f6274] text-[#3f6274]"
+                      : "border-transparent text-slate-500 hover:text-slate-700"
+                      }`}
                   >
-                    {PAYMENT_METHODS.map((m) => (
-                      <option key={m}>{m}</option>
-                    ))}
-                  </select>
-                </label>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {profileTab === "detail" && (
+                <div className="mt-5 rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
+                  <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
+                    Patient Information
+                  </p>
+                  <div className="mt-4 grid grid-cols-2 gap-y-4 text-[0.85rem]">
+                    <div>
+                      <p className="flex items-center gap-1.5 text-slate-400">
+                        <IdCard className="h-3.5 w-3.5" strokeWidth={2} />
+                        Patient ID
+                      </p>
+                      <p className="mt-1 font-medium text-slate-800">{selectedPatient.patientId}</p>
+                    </div>
+                    <div>
+                      <p className="flex items-center gap-1.5 text-slate-400">
+                        <Droplet className="h-3.5 w-3.5" strokeWidth={2} />
+                        Blood Group
+                      </p>
+                      <p className="mt-1 font-medium text-slate-800">{selectedPatient.bloodGroup}</p>
+                    </div>
+                    <div>
+                      <p className="flex items-center gap-1.5 text-slate-400">
+                        <VenusAndMars className="h-3.5 w-3.5" strokeWidth={2} />
+                        Gender
+                      </p>
+                      <p className="mt-1 font-medium text-slate-800">{selectedPatient.gender}</p>
+                    </div>
+                    <div>
+                      <p className="flex items-center gap-1.5 text-slate-400">
+                        <Cake className="h-3.5 w-3.5" strokeWidth={2} />
+                        Age
+                      </p>
+                      <p className="mt-1 font-medium text-slate-800">{selectedPatient.age} Years Old</p>
+                    </div>
+                    <div>
+                      <p className="flex items-center gap-1.5 text-slate-400">
+                        <Stethoscope className="h-3.5 w-3.5" strokeWidth={2} />
+                        Assigned Doctor
+                      </p>
+                      <p className="mt-1 font-medium text-slate-800">{selectedPatient.assignedDoctor}</p>
+                    </div>
+                    <div>
+                      <p className="flex items-center gap-1.5 text-slate-400">
+                        <CalendarCheck className="h-3.5 w-3.5" strokeWidth={2} />
+                        Last Visit
+                      </p>
+                      <p className="mt-1 font-medium text-slate-800">
+                        {selectedPatient.lastVisit
+                          ? new Date(selectedPatient.lastVisit).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                          : "-"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
 
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-slate-600">
-                  <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
-                  Note
-                </span>
-                <textarea
-                  rows={2}
-                  value={entryForm.note}
-                  onChange={(e) => update("note", e.target.value)}
-                  placeholder="Optional reference or reason"
-                  className={textareaClass}
-                />
-              </label>
-
-              <div className="flex items-center gap-3 pt-1">
-                <button
-                  type="submit"
-                  className="rounded-full bg-[#7da3b3] px-6 py-2.5 text-[0.9rem] font-medium text-white transition-colors hover:bg-[#345263]"
-                >
-                  Add Entry
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEntryModalOpen(false)}
-                  className="rounded-full px-5 py-2.5 text-[0.9rem] font-medium text-slate-500 transition-colors hover:text-slate-800"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Receipt modal */}
-      {receiptEntryId && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 px-4 print-receipt-overlay">
-          <div
-            onClick={() => setReceiptEntryId(null)}
-            className="absolute inset-0 print-hide"
-            aria-hidden
-          />
-
-          <div className="relative flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl print-receipt-card">
-            {/* Modal chrome — hidden on print */}
-            <div className="print-hide flex items-center justify-between border-b border-slate-900/5 px-5 py-4">
-              <h3 className="text-[0.95rem] font-semibold text-slate-900">Receipt</h3>
-              <div className="flex items-center gap-2">
-                {receiptContext && (
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[#7da3b3] px-4 py-2 text-[0.82rem] font-medium text-white transition-colors hover:bg-[#345263]"
-                  >
-                    <Printer className="h-3.5 w-3.5" strokeWidth={2} />
-                    Print
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setReceiptEntryId(null)}
-                  aria-label="Close receipt"
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                >
-                  <X className="h-4 w-4" strokeWidth={2} />
-                </button>
-              </div>
-            </div>
-
-            {/* Printable receipt content */}
-            <div id="receipt-print-area" className="overflow-y-auto px-6 py-6">
-              {!receiptContext ? (
-                <div className="py-10 text-center text-[0.85rem] text-slate-500">
-                  Couldn't find this payment entry. It may have been removed — close this
-                  and try again from the ledger.
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-[1.05rem] font-semibold text-[#345263]">
-                        Chitwan Dental Home
-                      </p>
-                      <p className="mt-0.5 text-[0.78rem] text-slate-500">
-                        {OUTLETS.find((o) => o.id !== "all")?.name ?? "Chitwan, Nepal"}
-                      </p>
-                    </div>
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#7da3b3]/15 text-[#3f6274]">
-                      <Receipt className="h-5 w-5" strokeWidth={2} />
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex items-center justify-between border-y border-dashed border-slate-300 py-3 text-[0.8rem]">
-                    <span className="text-slate-500">Receipt No.</span>
-                    <span className="font-medium text-slate-800">
-                      {receiptNumberFor(receiptContext.entry.id)}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 space-y-2 text-[0.85rem]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Date</span>
-                      <span className="font-medium text-slate-800">
-                        {formatDateOnly(receiptContext.entry.createdAt)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Patient</span>
-                      <span className="font-medium text-slate-800">
-                        {receiptContext.ledger.patientName}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Phone</span>
-                      <span className="font-medium text-slate-800">
-                        {receiptContext.ledger.phone}
-                      </span>
-                    </div>
-                    {receiptContext.entry.method && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500">Payment Method</span>
-                        <span className="font-medium text-slate-800">
-                          {receiptContext.entry.method}
-                        </span>
-                      </div>
-                    )}
-                    {receiptContext.entry.note && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500">Reference</span>
-                        <span className="font-medium text-slate-800">
-                          {receiptContext.entry.note}
-                        </span>
-                      </div>
+              {profileTab === "medical" && (
+                <div className="mt-5 space-y-4">
+                  <div className="rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
+                    <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
+                      <AlertCircle className="h-3.5 w-3.5" strokeWidth={2} />
+                      Allergies
+                    </p>
+                    {selectedPatient.allergies && selectedPatient.allergies.length > 0 ? (
+                      <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[0.85rem] text-slate-600">
+                        {selectedPatient.allergies.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-[0.85rem] text-slate-500">No known allergies.</p>
                     )}
                   </div>
 
-                  <div className="mt-5 rounded-xl bg-slate-50 p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[0.85rem] text-slate-600">Amount Paid</span>
-                      <span className="text-[1.15rem] font-semibold text-slate-900">
-                        NPR {centsToDisplay(receiptContext.entry.amountCents)}
-                      </span>
-                    </div>
+                  <div className="rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
+                    <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
+                      <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
+                      Medical History
+                    </p>
+                    {selectedPatient.medicalHistory && selectedPatient.medicalHistory.length > 0 ? (
+                      <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[0.85rem] text-slate-600">
+                        {selectedPatient.medicalHistory.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-[0.85rem] text-slate-500">No conditions recorded.</p>
+                    )}
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between text-[0.8rem]">
-                    <span className="text-slate-500">Balance After Payment</span>
+                  <div className="rounded-2xl border border-slate-900/5 bg-white p-6 shadow-sm">
+                    <p className="flex items-center gap-1.5 border-l-2 border-[#3f6274] pl-2 text-[0.9rem] font-semibold text-slate-900">
+                      <Pill className="h-3.5 w-3.5 text-black-600" strokeWidth={2} />
+                      Current Medications & Prescriptions
+                    </p>
                     {(() => {
-                      const bal = balanceAfterEntry(
-                        receiptContext.ledger.entries,
-                        receiptContext.entry.id
-                      );
-                      const due = bal > 0;
+                      const latestPrescriptionAppt = patientAppointments.find((a) => a.prescription || a.prescriptionText);
+                      const medsList = selectedPatient.medications || [];
+                      const hasMeds = medsList.length > 0;
+                      const hasPres = !!latestPrescriptionAppt;
+
+                      if (!hasMeds && !hasPres) {
+                        return <p className="mt-3 text-[0.85rem] text-slate-500">No medications or prescriptions recorded.</p>;
+                      }
+
                       return (
-                        <span className={`font-medium ${due ? "text-rose-600" : "text-emerald-600"}`}>
-                          NPR {centsToDisplay(Math.abs(bal))} {due ? "due" : "settled"}
-                        </span>
+
+                        <div className=" mt-3 list-disc space-y-1.5 pl-5 ">
+
+                          {hasPres && (
+                            <div className="rounded-xl text-xs space-y-1">
+                              <ul className="mt-3 list-disc space-y-1.5  text-[0.85rem] text-slate-600">
+                                <li>{latestPrescriptionAppt.prescription || latestPrescriptionAppt.prescriptionText}</li>
+                              </ul>
+                            </div>
+                          )}
+                          {hasMeds && (
+                            <ul className="list-disc list-inside space-y-1.5 text-[0.85rem] text-slate-600">
+                              {medsList.map((item, idx) => (
+                                <li key={idx}>{item}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       );
                     })()}
                   </div>
+                </div>
+              )}
 
-                  <p className="mt-6 border-t border-dashed border-slate-300 pt-4 text-center text-[0.75rem] text-slate-400">
-                    Thank you for visiting Chitwan Dental Home.
-                  </p>
-                </>
+              {profileTab === "appointments" && (
+                <div className="mt-5 space-y-3">
+                  {loadingAppts ? (
+                    <div className="flex items-center justify-center p-8 text-xs text-slate-400 gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-[#3f6274]" />
+                      <span>Loading appointment history...</span>
+                    </div>
+                  ) : patientAppointments.length > 0 ? (
+                    patientAppointments.map((appt) => (
+                      <div
+                        key={appt.id}
+                        className="rounded-2xl border border-slate-900/5 bg-white p-5 shadow-sm space-y-2"
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                          <span className="font-semibold text-xs text-slate-900 flex items-center gap-1.5">
+                            <Stethoscope className="h-3.5 w-3.5 text-[#3f6274]" />
+                            {appt.treatmentName}
+                          </span>
+                          <span className="text-[0.75rem] font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded">
+                            {appt.startTime ? new Date(appt.startTime).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "-"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-600">
+                          <span className="flex items-center gap-1">
+                            <User className="h-3.5 w-3.5 text-slate-400" /> {appt.providerName || "Unassigned"}
+                          </span>
+                          <span className="rounded-full bg-sky-50 text-sky-700 px-2 py-0.5 text-[0.7rem] font-medium uppercase">
+                            {appt.status}
+                          </span>
+                        </div>
+                        {appt.noteText ? (
+                          <div className="mt-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-700 space-y-1">
+                            <span className="font-semibold text-slate-900 text-[0.7rem] uppercase tracking-wider block">Clinical Note:</span>
+                            <p className="leading-relaxed">{appt.noteText}</p>
+                          </div>
+                        ) : (
+                          <p className="text-[0.75rem] text-slate-400 italic pt-1">No clinical note attached.</p>
+                        )}
+                        {(appt.prescription || appt.prescriptionText) && (
+                          <div className="mt-2 rounded-xl bg-sky-50/80 border border-sky-100 p-3 text-xs text-sky-900 space-y-1">
+                            <span className="font-bold text-sky-900 text-[0.7rem] uppercase tracking-wider block flex items-center gap-1">
+                              <Pill className="h-3.5 w-3.5 text-sky-600" /> Prescription / Instructions:
+                            </span>
+                            <p className="leading-relaxed font-medium">{appt.prescription || appt.prescriptionText}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-900/15 bg-white p-10 text-center text-[0.85rem] text-slate-500 shadow-sm">
+                      No appointment history recorded yet.
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
         </div>
       )}
-
-      {/* Print-only styles: show just the receipt when printing */}
-     <style jsx global>{`
-@media print {
-  body * {
-    visibility: hidden;
-  }
-
-  #receipt-print-area,
-  #receipt-print-area * {
-    visibility: visible;
-  }
-
-  /*
-   * The receipt modal's ancestors (fixed overlay + a max-h/overflow-hidden
-   * card) stay in the render tree even though "visibility: hidden" is set
-   * on them — their box, positioning and clipping still apply to visible
-   * descendants. That was clipping the receipt content and causing the
-   * fixed, full-viewport overlay to paginate oddly (blank / extra page).
-   * Reset them to normal static flow just for print so the receipt can
-   * render like an ordinary block of content on the page.
-   */
-  .print-receipt-overlay {
-    position: static !important;
-    inset: auto !important;
-    background: none !important;
-    padding: 0 !important;
-    display: block !important;
-  }
-
-  .print-receipt-card {
-    position: static !important;
-    max-height: none !important;
-    overflow: visible !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  #receipt-print-area {
-    position: static !important;
-    overflow: visible !important;
-    width: 100%;
-    background: white;
-    padding: 20px;
-  }
-
-  .print-hide {
-    display: none !important;
-  }
-
-  @page {
-    margin: 10mm;
-  }
-}
-`}</style>
     </div>
   );
+
 }
