@@ -534,9 +534,9 @@ export default function DoctorDashboardTab({
                                             No recent patient visits yet.
                                         </div>
                                     ) : (
-                                        recentPatients.map((p) => (
+                                        recentPatients.map((p, idx) => (
                                             <button
-                                                key={p.patientId}
+                                                key={`${p.patientId}-${p.date}-${idx}`}
                                                 onClick={() => onNavigate?.("patients")}
                                                 className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-slate-50/60"
                                             >

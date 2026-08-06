@@ -6,7 +6,7 @@ import axios from "axios";
 
 import { Calendar, Users, Eye, LogOut, Settings, LayoutDashboard, Wallet } from "lucide-react";
 
-export type FrontDeskTabType = "dashboard" | "appointments" | "patients" | "availability" | "billing" |"settings";
+export type FrontDeskTabType = "dashboard" | "appointments" | "patients" | "availability" | "billing" | "settings";
 
 interface FrontDeskHeaderProps {
   activeTab: FrontDeskTabType;
@@ -35,8 +35,7 @@ export default function FrontDeskHeader({
   );
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // Org name is derived from the tenant slug already set as initial state.
-  // (The /api/organization endpoint does not exist — slug formatting is sufficient.)
+
 
 
   const handleLogout = async () => {
@@ -87,11 +86,10 @@ export default function FrontDeskHeader({
       <div className="inline-flex w-full max-w-2xl items-center gap-1 rounded-full bg-slate-100 p-1.5 shadow-md shadow-slate-200/50 border border-slate-200/60">
         <button
           onClick={() => setActiveTab("dashboard")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${
-            activeTab === "dashboard"
+          className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "dashboard"
               ? "bg-[#7da3b3] text-white shadow-sm"
               : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-          }`}
+            }`}
         >
           <LayoutDashboard className="h-3.5 w-3.5" />
           Dashboard
@@ -100,8 +98,8 @@ export default function FrontDeskHeader({
         <button
           onClick={() => setActiveTab("appointments")}
           className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "appointments"
-              ? "bg-[#7da3b3] text-white shadow-sm"
-              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            ? "bg-[#7da3b3] text-white shadow-sm"
+            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
             }`}
         >
           <Calendar className="h-3.5 w-3.5" />
@@ -111,8 +109,8 @@ export default function FrontDeskHeader({
         <button
           onClick={() => setActiveTab("patients")}
           className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "patients"
-              ? "bg-[#7da3b3] text-white shadow-sm"
-              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            ? "bg-[#7da3b3] text-white shadow-sm"
+            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
             }`}
         >
           <Users className="h-3.5 w-3.5" />
@@ -122,8 +120,8 @@ export default function FrontDeskHeader({
         <button
           onClick={() => setActiveTab("availability")}
           className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "availability"
-              ? "bg-[#7da3b3] text-white shadow-sm"
-              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            ? "bg-[#7da3b3] text-white shadow-sm"
+            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
             }`}
         >
           <Eye className="h-3.5 w-3.5" />
@@ -133,8 +131,8 @@ export default function FrontDeskHeader({
         <button
           onClick={() => setActiveTab("billing")}
           className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "billing"
-              ? "bg-[#7da3b3] text-white shadow-sm"
-              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            ? "bg-[#7da3b3] text-white shadow-sm"
+            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
             }`}
         >
           <Wallet className="h-3.5 w-3.5" />
@@ -144,8 +142,8 @@ export default function FrontDeskHeader({
         <button
           onClick={() => setActiveTab("settings")}
           className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === "settings"
-              ? "bg-[#7da3b3] text-white shadow-sm"
-              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+            ? "bg-[#7da3b3] text-white shadow-sm"
+            : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
             }`}
         >
           <Settings className="h-3.5 w-3.5" />

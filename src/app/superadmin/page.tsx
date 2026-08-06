@@ -298,7 +298,7 @@ export default function SuperAdminDashboardPage() {
               <h3 className="text-sm font-bold text-slate-900">Organization Growth </h3>
             </div>
 
-            {/* Year Picker — prev/next arrows + direct select, not limited to years with data */}
+
             <div className="flex items-center gap-1 self-start rounded-xl bg-slate-100 p-1 sm:self-auto">
               <button
                 type="button"
