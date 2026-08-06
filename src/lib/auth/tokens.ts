@@ -20,7 +20,7 @@ const REFRESH_TOKEN_EXPIRY = process.env.JWT_REFRESH_EXPIRES_IN ?? "7d";
 // Kept deliberately small since it's baked into the token for the access token's lifetime.
 export type AccessTokenPayload = {
   userId: string;
-  orgId: string;
+  orgId: string ;
 };
 
 export function signAccessToken(payload: AccessTokenPayload): string {
