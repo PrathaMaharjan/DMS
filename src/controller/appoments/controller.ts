@@ -47,11 +47,11 @@ export type BookAppointmentErrorCode =
 
 export type BookAppointmentResult =
   | {
-    success: true;
-    appointmentId: string;
-    patientId: string;
-    wasNewPatient: boolean;
-  }
+      success: true;
+      appointmentId: string;
+      patientId: string;
+      wasNewPatient: boolean;
+    }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 // Schedule-time check disabled for now, on purpose - every active clinical
@@ -311,18 +311,18 @@ export async function bookAppointment(
 // ---------------get gending appoment --------------------------------
 export type PendingReviewResult =
   | {
-    success: true;
-    appointments: {
-      id: string;
-      patientName: string;
-      patientPhone: string | null;
-      patientEmail: string | null;
-      treatmentName: string;
-      startTime: Date;
-      source: string;
-      notes: string | null;
-    }[];
-  }
+      success: true;
+      appointments: {
+        id: string;
+        patientName: string;
+        patientPhone: string | null;
+        patientEmail: string | null;
+        treatmentName: string;
+        startTime: Date;
+        source: string;
+        notes: string | null;
+      }[];
+    }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 export async function getPendingAppointments(
@@ -389,7 +389,10 @@ async function checkOwnerOrManager(userId: string): Promise<boolean> {
   if (user?.isOwner) return true;
 
   const role = await db.query.userLocationRoles.findFirst({
-    where: and(eq(userLocationRoles.userId, userId), eq(userLocationRoles.role, "manager")),
+    where: and(
+      eq(userLocationRoles.userId, userId),
+      eq(userLocationRoles.role, "manager"),
+    ),
   });
   return !!role;
 }
@@ -489,29 +492,41 @@ async function checkOwnerOrManager(userId: string): Promise<boolean> {
 
 // ---------------------- assign doctor ------------------------------------
 
-
 export const updateStatusSchema = z.object({
-  status: z.enum(["requested", "confirmed", "checked_in", "completed", "cancelled", "no_show"]),
+  status: z.enum([
+    "requested",
+    "confirmed",
+    "checked_in",
+    "completed",
+    "cancelled",
+    "no_show",
+  ]),
   forceComplete: z.boolean().optional(),
 });
 
-
-
 export async function updateAppointmentStatus(
   appointmentId: string,
-  input: unknown
+  input: unknown,
 ): Promise<UpdateStatusResult> {
   try {
     const session = await requireSession();
 
     const parsed = updateStatusSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input.", code: "VALIDATION" };
+      return {
+        success: false,
+        error: parsed.error.issues[0]?.message ?? "Invalid input.",
+        code: "VALIDATION",
+      };
     }
     const { status, forceComplete } = parsed.data;
 
     if (!VALID_STATUSES.includes(status)) {
-      return { success: false, error: "Invalid status value.", code: "VALIDATION" };
+      return {
+        success: false,
+        error: "Invalid status value.",
+        code: "VALIDATION",
+      };
     }
 
     const [existingAppointment] = await db
@@ -529,40 +544,57 @@ export async function updateAppointmentStatus(
       .innerJoin(locations, eq(appointments.locationId, locations.id))
       .innerJoin(patients, eq(appointments.patientId, patients.id))
       .innerJoin(treatments, eq(appointments.treatmentId, treatments.id))
-      .where(and(eq(appointments.id, appointmentId), eq(locations.orgId, session.orgId)))
+      .where(
+        and(
+          eq(appointments.id, appointmentId),
+          eq(locations.orgId, session.orgId),
+        ),
+      )
       .limit(1);
 
     if (!existingAppointment) {
-      return { success: false, error: "Appointment not found.", code: "NOT_FOUND" };
+      return {
+        success: false,
+        error: "Appointment not found.",
+        code: "NOT_FOUND",
+      };
     }
 
-    const isNewCompletion = status === "completed" && existingAppointment.currentStatus !== "completed";
+    const isNewCompletion =
+      status === "completed" &&
+      existingAppointment.currentStatus !== "completed";
 
     if (isNewCompletion) {
-
+      // ADDED - the org-level toggle check. If inventory is off, this
+      // completion behaves exactly as if the treatment had no supply
+      // list at all, regardless of what treatment_supplies actually
+      // contains - "off" genuinely means off everywhere, per what we
+      // agreed a few messages back.
       const inventoryOn = await checkInventoryEnabled(session.orgId);
 
       if (!inventoryOn) {
-        await db.update(appointments).set({ status: "completed" }).where(eq(appointments.id, appointmentId));
+        await db
+          .update(appointments)
+          .set({ status: "completed" })
+          .where(eq(appointments.id, appointmentId));
       } else {
         const supplies = await db
           .select({
             itemId: treatmentSupplies.itemId,
             itemName: inventoryItems.name,
-            itemLocationId: inventoryItems.locationId,
             quantityRequired: treatmentSupplies.quantityRequired,
           })
           .from(treatmentSupplies)
-          .innerJoin(inventoryItems, eq(treatmentSupplies.itemId, inventoryItems.id))
-          .where(eq(treatmentSupplies.treatmentId, existingAppointment.treatmentId));
+          .innerJoin(
+            inventoryItems,
+            eq(treatmentSupplies.itemId, inventoryItems.id),
+          )
+          .where(
+            eq(treatmentSupplies.treatmentId, existingAppointment.treatmentId),
+          );
 
         if (supplies.length > 0) {
           const itemIds = supplies.map((s) => s.itemId);
-          // Sum movements per item WITHOUT filtering by location — the item's
-          // own locationId (set when the item was created) is the source of
-          // truth for stock. The appointment locationId may be a different UUID
-          // even for the same physical clinic, which caused every stock check
-          // to return 0 and falsely report a shortage.
           const stockRows = await db
             .select({
               itemId: inventoryMovements.itemId,
@@ -572,11 +604,16 @@ export async function updateAppointmentStatus(
             .where(inArray(inventoryMovements.itemId, itemIds))
             .groupBy(inventoryMovements.itemId);
 
-          const stockByItem = new Map(stockRows.map((r) => [r.itemId, r.currentStock]));
-          const shortages = supplies.filter((s) => (stockByItem.get(s.itemId) ?? 0) < s.quantityRequired);
+          const stockByItem = new Map(
+            stockRows.map((r) => [r.itemId, r.currentStock]),
+          );
+          const shortages = supplies.filter(
+            (s) => (stockByItem.get(s.itemId) ?? 0) < s.quantityRequired,
+          );
 
           if (shortages.length > 0) {
-            const canOverride = forceComplete && (await checkOwnerOrManager(session.userId));
+            const canOverride =
+              forceComplete && (await checkOwnerOrManager(session.userId));
             if (!canOverride) {
               const shortageList = shortages.map((s) => s.itemName).join(", ");
               return {
@@ -588,26 +625,34 @@ export async function updateAppointmentStatus(
           }
 
           await db.transaction(async (tx) => {
-            await tx.update(appointments).set({ status: "completed" }).where(eq(appointments.id, appointmentId));
+            await tx
+              .update(appointments)
+              .set({ status: "completed" })
+              .where(eq(appointments.id, appointmentId));
             await tx.insert(inventoryMovements).values(
               supplies.map((s) => ({
                 itemId: s.itemId,
-
-                locationId: s.itemLocationId,
+                locationId: existingAppointment.locationId,
                 quantity: -s.quantityRequired,
                 type: "used" as const,
                 note: "Auto-deducted from appointment completion",
                 appointmentId: existingAppointment.id,
                 recordedByUserId: session.userId,
-              }))
+              })),
             );
           });
         } else {
-          await db.update(appointments).set({ status: "completed" }).where(eq(appointments.id, appointmentId));
+          await db
+            .update(appointments)
+            .set({ status: "completed" })
+            .where(eq(appointments.id, appointmentId));
         }
       }
     } else {
-      await db.update(appointments).set({ status: status as any }).where(eq(appointments.id, appointmentId));
+      await db
+        .update(appointments)
+        .set({ status: status as any })
+        .where(eq(appointments.id, appointmentId));
     }
 
     if (existingAppointment.patientEmail) {
@@ -617,18 +662,21 @@ export async function updateAppointmentStatus(
             existingAppointment.patientEmail,
             existingAppointment.patientName,
             existingAppointment.treatmentName,
-            existingAppointment.startTime
+            existingAppointment.startTime,
           );
         } else if (status === "cancelled") {
           await sendAppointmentCancelledEmail(
             existingAppointment.patientEmail,
             existingAppointment.patientName,
             existingAppointment.treatmentName,
-            existingAppointment.startTime
+            existingAppointment.startTime,
           );
         }
       } catch (emailErr) {
-        console.error("Appointment status updated, but email failed to send:", emailErr);
+        console.error(
+          "Appointment status updated, but email failed to send:",
+          emailErr,
+        );
       }
     }
 
@@ -638,19 +686,13 @@ export async function updateAppointmentStatus(
       return { success: false, error: err.message, code: "UNAUTHORIZED" };
     }
     console.error(err);
-    return { success: false, error: "Something went wrong updating the appointment.", code: "SERVER_ERROR" };
+    return {
+      success: false,
+      error: "Something went wrong updating the appointment.",
+      code: "SERVER_ERROR",
+    };
   }
 }
-
-
-
-
-
-
-
-
-
-
 
 export type ReassignResult =
   | { success: true }
@@ -730,22 +772,22 @@ export async function reassignAppointmentDoctor(
 
 export type GetAppointmentsResult =
   | {
-    success: true;
-    appointments: {
-      id: string;
-      patientName: string;
-      patientPhone: string | null;
-      patientEmail: string | null;
-      providerName: string;
-      treatmentName: string;
-      startTime: Date;
-      endTime: Date;
-      status: string;
-      source: string;
-      notes: string | null;
-    }[];
-    pagination: { total: number; limit: number; offset: number };
-  }
+      success: true;
+      appointments: {
+        id: string;
+        patientName: string;
+        patientPhone: string | null;
+        patientEmail: string | null;
+        providerName: string;
+        treatmentName: string;
+        startTime: Date;
+        endTime: Date;
+        status: string;
+        source: string;
+        notes: string | null;
+      }[];
+      pagination: { total: number; limit: number; offset: number };
+    }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 const DEFAULT_LIMIT = 20;
@@ -840,24 +882,24 @@ export async function getAppointments(
 // -----------------------get dingle appoment ----------------------------
 export type GetAppointmentResult =
   | {
-    success: true;
-    appointment: {
-      id: string;
-      patientId: string;
-      patientName: string;
-      patientPhone: string | null;
-      patientEmail: string | null;
-      providerId: string;
-      providerName: string;
-      treatmentId: string;
-      treatmentName: string;
-      startTime: Date;
-      endTime: Date;
-      status: string;
-      source: string;
-      notes: string | null;
-    };
-  }
+      success: true;
+      appointment: {
+        id: string;
+        patientId: string;
+        patientName: string;
+        patientPhone: string | null;
+        patientEmail: string | null;
+        providerId: string;
+        providerName: string;
+        treatmentId: string;
+        treatmentName: string;
+        startTime: Date;
+        endTime: Date;
+        status: string;
+        source: string;
+        notes: string | null;
+      };
+    }
   | { success: false; error: string; code: BookAppointmentErrorCode };
 
 export async function getAppointment(

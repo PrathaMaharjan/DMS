@@ -23,7 +23,10 @@ export const updateItemSchema = z.object({
 
 export const addMovementSchema = z.object({
   itemId: z.string().uuid("Missing item"),
-  quantity: z.number().int().refine((v) => v !== 0, "Quantity cannot be zero"),
+  quantity: z
+    .number()
+    .int()
+    .refine((v) => v !== 0, "Quantity cannot be zero"),
   type: z.enum(["received", "used", "wasted", "adjusted"]),
   note: z.string().optional(),
 });
